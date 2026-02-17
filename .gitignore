@@ -1,0 +1,10 @@
+# Python - Fichiers temporaires
+__pycache__/
+*.py[cod]
+
+# Base de données locale (très important de l'ignorer)
+unitool_data.db
+
+# Environnement virtuel (si tu en crées un plus tard)
+venv/
+.env
