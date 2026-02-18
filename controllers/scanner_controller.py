@@ -1,0 +1,77 @@
+"""ScannerController — gère la recherche et édition de cibles."""
+
+
+class ScannerController:
+    """Contrôleur pour le scanner de cibles.
+
+    Méthodes :
+    - search_targets : recherche par pseudo, org, SID
+    - update_target : met à jour une cible
+    - export_targets : exporte les cibles en CSV
+    """
+
+    def __init__(self, app_controller):
+        """Initialise le contrôleur scanner avec le controller app principal.
+
+        Args:
+            app_controller: instance d'AppController pour accès à la DB
+        """
+        self.app = app_controller
+
+    def search_targets(self, query: str) -> list:
+        """Cherche des cibles par pseudo, org ou SID."""
+        if len(query) <= 1:
+            return []
+        sql = """
+        SELECT pseudo, org, ship, alignment, pvp_lvl, activity, sid, enlisted_date, language 
+        FROM targets 
+        WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?
+        """
+        return self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    def get_target_full(self, pseudo: str) -> list:
+        """Récupère toutes les colonnes d'une cible."""
+        return self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo,))
+
+    def update_target(
+        self,
+        pseudo: str,
+        org: str = None,
+        ship: str = None,
+        alignment: str = None,
+        notes: str = None,
+        sid: str = None,
+        pvp_lvl: str = None,
+        activity: str = None,
+        language: str = None,
+        **kwargs,
+    ) -> None:
+        """Met à jour les infos d'une cible."""
+        updates = []
+        params = []
+
+        fields = {
+            "org": org,
+            "ship": ship,
+            "alignment": alignment,
+            "notes": notes,
+            "sid": sid,
+            "pvp_lvl": pvp_lvl,
+            "activity": activity,
+            "language": language,
+        }
+        fields.update(kwargs)
+
+        for key, value in fields.items():
+            if value is not None:
+                updates.append(f"{key}=?")
+                params.append(value)
+
+        if updates:
+            params.append(pseudo)
+            sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
+            self.app.commit(sql, tuple(params))
+
+    def export_targets_csv(self) -> list:
+        """Récupère tous les targets pour export."""
+        return self.app.query("SELECT * FROM targets")

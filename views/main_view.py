@@ -8,6 +8,7 @@ from views.scanner_frame import ScannerFrame
 from views.logger_frame import LoggerFrame
 from views.contract_frame import ContractFrame
 from views.intelligence_frame import IntelligenceFrame
+from datetime import datetime
 
 # Import du moteur graphique
 from drake_ui.engine import DrakeConfig, DrakeButton
@@ -107,6 +108,26 @@ class MainView(ctk.CTkFrame):
         self.stat_targets = self.create_stat_widget("KNOWN CONTACTS", "0")
         self.stat_threats = self.create_stat_widget("THREAT LEVEL", "0")
 
+        # --- CENTRAL LOG TERMINAL (HUD DROITE) ---
+        ctk.CTkLabel(
+            self.intel_panel,
+            text="SYSTEM LOGS",
+            font=("Orbitron", 10, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(pady=(20, 5), padx=20, anchor="w")
+
+        # Initialisation du terminal global
+        from drake_ui.engine import DrakeTerminal  # Assure-toi de l'import
+
+        self.terminal = DrakeTerminal(
+            self.intel_panel,
+            height=300,  # Ajuste la hauteur selon tes besoins
+            fg_color=DrakeConfig.BG_TERMINAL,
+        )
+        self.terminal.pack(padx=15, pady=5, fill="both", expand=True)
+        self.terminal.log("SYSTEM BOOT: OK")
+        self.terminal.log("UPLINK: ESTABLISHED")
+
         # Petit pied de page version logicielle
         ctk.CTkLabel(
             self.intel_panel,
@@ -173,3 +194,8 @@ class MainView(ctk.CTkFrame):
             self.frames[page_name].refresh()
         # Mise à jour globale du panel intel
         self.refresh_intel()
+
+    def log_message(self, message, source="SYS"):
+        """Méthode centrale pour envoyer des logs vers le panneau de droite"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.terminal.log(f"[{source}] {message}")

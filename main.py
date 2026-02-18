@@ -4,18 +4,17 @@ Ce module initialise la fenêtre principale `App` basée sur
 CustomTkinter et instancie la vue principale `MainView`.
 """
 
-from typing import Optional
-
 import customtkinter as ctk
 
+from controllers import AppController
 from views.main_view import MainView
-from database import Database
 
 
 class App(ctk.CTk):
-    """Application principale.
+    """Application principale — fenêtre root Tkinter.
 
-    Hérite de `ctk.CTk` pour construire la fenêtre principale de l'application.
+    Hérite de `ctk.CTk` pour construire la fenêtre principale.
+    Contient le contrôleur métier et délègue l'affichage à MainView.
     """
 
     def __init__(self) -> None:
@@ -25,15 +24,15 @@ class App(ctk.CTk):
         self.title("UNITOOL - STAR CITIZEN INTEL")
         self.geometry("1400x800")
 
-        # Initialisation de la base de données (objet accessible par le controller)
-        self.db: Optional[Database] = Database()
+        # Initialisation du contrôleur métier (gère la DB et la logique)
+        self.controller = AppController()
 
         # Configuration du grid pour que la vue principale prenne tout l'espace
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # Création et placement de la vue principale
-        self.view = MainView(parent=self, controller=self)
+        self.view = MainView(parent=self, controller=self.controller)
         self.view.grid(row=0, column=0, sticky="nsew")
 
 

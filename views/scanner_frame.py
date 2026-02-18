@@ -113,9 +113,7 @@ class ScannerFrame(ctk.CTkFrame):
         toplevel.grab_set()
 
         # On récupère TOUTES les colonnes pour être sûr
-        row = self.controller.db.query(
-            "SELECT * FROM targets WHERE pseudo=?", (pseudo,)
-        )
+        row = self.controller.scanner.get_target_full(pseudo)
         if not row:
             return
         d = row[0]
@@ -518,13 +516,8 @@ class ScannerFrame(ctk.CTkFrame):
         self.results.delete("0.0", "end")
 
         if len(q) > 1:
-            rows = self.controller.db.query(
-                """
-                SELECT pseudo, org, ship, alignment, pvp_lvl, activity, sid, enlisted_date, language 
-                FROM targets WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?
-            """,
-                (f"%{q}%", f"%{q}%", f"%{q}%"),
-            )
+            # Utiliser le sub-controller scanner pour rechercher
+            rows = self.controller.scanner.search_targets(q)
 
             for row in rows:
                 pseudo, org, ship, align, pvp, activity, sid, enlist, lang = row
@@ -565,7 +558,8 @@ class ScannerFrame(ctk.CTkFrame):
         )
         if filename:
             try:
-                rows = self.controller.db.query("SELECT * FROM targets")
+                # Utiliser le sub-controller scanner pour exporter
+                rows = self.controller.scanner.export_targets_csv()
                 with open(filename, "w", newline="", encoding="utf-8-sig") as f:
                     writer = csv.writer(f, delimiter=";")
                     writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
