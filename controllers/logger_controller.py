@@ -1,6 +1,7 @@
 """LoggerController — gère l'archivage et import/export de dossiers."""
 
 from datetime import datetime
+from models import Target
 
 
 class LoggerController:
@@ -81,6 +82,13 @@ class LoggerController:
     def load_target(self, pseudo: str) -> list:
         """Récupère un dossier complet par pseudo."""
         return self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo.upper(),))
+
+    def load_target_as_model(self, pseudo: str) -> Target:
+        """Récupère un dossier et retourne un objet Target."""
+        row = self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo.upper(),))
+        if row:
+            return Target.from_db_row(row[0])
+        return None
 
     def import_targets_csv(self, rows: list) -> None:
         """Importe une liste de rows CSV dans la DB.

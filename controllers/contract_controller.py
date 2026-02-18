@@ -1,6 +1,7 @@
 """ContractController — gère les contrats et bounty board."""
 
 from datetime import datetime
+from models import Contract, ContractType
 
 
 class ContractController:
@@ -54,11 +55,21 @@ class ContractController:
             "SELECT * FROM contracts WHERE status='OPEN' ORDER BY id DESC"
         )
 
+    def get_active_contracts_as_models(self) -> list:
+        """Retourne tous les contrats actifs sous forme d'objets Contract."""
+        rows = self.get_active_contracts()
+        return [Contract.from_db_row(row) for row in rows]
+
     def get_closed_contracts(self) -> list:
         """Retourne tous les contrats fermés (CLOSED)."""
         return self.app.query(
             "SELECT * FROM contracts WHERE status='CLOSED' ORDER BY id DESC"
         )
+
+    def get_closed_contracts_as_models(self) -> list:
+        """Retourne tous les contrats fermés sous forme d'objets Contract."""
+        rows = self.get_closed_contracts()
+        return [Contract.from_db_row(row) for row in rows]
 
     def complete_contract(self, contract_id: int, target: str) -> None:
         """Marque un contrat comme fermé et incrémente les wins de la cible."""

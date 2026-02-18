@@ -1,5 +1,7 @@
 """ScannerController — gère la recherche et édition de cibles."""
 
+from models import Target
+
 
 class ScannerController:
     """Contrôleur pour le scanner de cibles.
@@ -28,6 +30,14 @@ class ScannerController:
         WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?
         """
         return self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    def search_targets_as_models(self, query: str) -> list:
+        """Cherche des cibles et retourne des objets Target."""
+        if len(query) <= 1:
+            return []
+        sql = "SELECT * FROM targets WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?"
+        rows = self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
+        return [Target.from_db_row(row) for row in rows]
 
     def get_target_full(self, pseudo: str) -> list:
         """Récupère toutes les colonnes d'une cible."""

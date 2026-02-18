@@ -1,5 +1,7 @@
 """IntelligenceController — gère le scraping et l'analyse de renseignements."""
 
+from models import Target
+
 
 class IntelligenceController:
     """Contrôleur pour le module INTELLIGENCE (scraping Selenium, analyse).
