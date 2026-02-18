@@ -25,16 +25,31 @@ class MainView(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color=DrakeConfig.BG_MAIN)
         self.controller = controller
+        # Register this view as a log receiver on the controller (uses callback API)
+        try:
+            if self.controller is not None:
+                # Backwards-compat: keep direct reference
+                try:
+                    self.controller.view = self
+                except Exception:
+                    pass
+                # Preferred: register the log callback
+                if hasattr(self.controller, "register_log_callback"):
+                    self.controller.register_log_callback(self.log_message)
+        except Exception:
+            pass
 
-        # Configuration de la grille (Sidebar | Container | Intel Panel)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure(2, weight=0)
+        # Configuration responsive de la grille (Sidebar | Container | Intel Panel)
+        # Use weights so columns resize proportionally: sidebar 1, container 4, intel 1
+        # This yields center column ~= 2/3 of available width (1:4:1 ratio)
+        self.grid_columnconfigure(0, weight=1, minsize=200)
+        self.grid_columnconfigure(1, weight=4, minsize=600)
+        self.grid_columnconfigure(2, weight=1, minsize=200)
         self.grid_rowconfigure(0, weight=1)
 
         # --- SIDEBAR (Navigation Drake) ---
-        self.sidebar = ctk.CTkFrame(
-            self, width=200, corner_radius=0, fg_color=DrakeConfig.BG_PANEL
-        )
+        # Sidebar will size dynamically according to grid weights
+        self.sidebar = ctk.CTkFrame(self, corner_radius=0, fg_color=DrakeConfig.BG_PANEL)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
 
         # Logo/Titre
@@ -86,9 +101,8 @@ class MainView(ctk.CTkFrame):
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)
 
         # --- BATTLE INTEL PANEL (HUD DROITE) ---
-        self.intel_panel = ctk.CTkFrame(
-            self, width=280, fg_color=DrakeConfig.BG_PANEL, corner_radius=0
-        )
+        # Intel panel will size dynamically according to grid weights
+        self.intel_panel = ctk.CTkFrame(self, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
         self.intel_panel.grid(row=0, column=2, sticky="nsew", padx=0, pady=0)
 
         # Séparateur visuel gauche
@@ -114,24 +128,21 @@ class MainView(ctk.CTkFrame):
             text="SYSTEM LOGS",
             font=("Orbitron", 10, "bold"),
             text_color=DrakeConfig.TEXT_SECONDARY,
-        ).pack(pady=(20, 5), padx=20, anchor="w")
+        ).pack(pady=(20, 5), padx=20, anchor="center")
 
         # Initialisation du terminal global
         from drake_ui.engine import DrakeTerminal  # Assure-toi de l'import
 
-        self.terminal = DrakeTerminal(
-            self.intel_panel,
-            height=300,  # Ajuste la hauteur selon tes besoins
-            fg_color=DrakeConfig.BG_TERMINAL,
-        )
-        self.terminal.pack(padx=15, pady=5, fill="both", expand=True)
+        # Let the terminal expand to fill the intel panel
+        self.terminal = DrakeTerminal(self.intel_panel, height=360, fg_color=DrakeConfig.BG_TERMINAL)
+        self.terminal.pack(padx=8, pady=6, fill="both", expand=True)
         self.terminal.log("SYSTEM BOOT: OK")
         self.terminal.log("UPLINK: ESTABLISHED")
 
         # Petit pied de page version logicielle
         ctk.CTkLabel(
             self.intel_panel,
-            text="VER 3.1.2 - OPS STATUS: NOMINAL",
+            text="VER ALPHA 1.0.0 - OPS STATUS: NOMINAL",
             font=("Consolas", 9),
             text_color="#444",
         ).pack(side="bottom", pady=10)
@@ -198,4 +209,13 @@ class MainView(ctk.CTkFrame):
     def log_message(self, message, source="SYS"):
         """Méthode centrale pour envoyer des logs vers le panneau de droite"""
         timestamp = datetime.now().strftime("%H:%M:%S")
+        # Elevate scanner-related logs visually
+        try:
+            if source == "SCANNER":
+                # Add a clear separator and explicit scanner tag
+                self.terminal.log(f"--- SCANNER: {message} ---")
+                return
+        except Exception:
+            pass
+
         self.terminal.log(f"[{source}] {message}")

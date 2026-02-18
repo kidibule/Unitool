@@ -172,7 +172,8 @@ class ContractFrame(ctk.CTkFrame):
             )
             self.controller.db.conn.commit()
             msg = f"CONTRACT REGISTERED: {target} | PRIO: {self.prio_var.get()}"
-            self.controller.view.log_message(msg, source="DECK")
+            if hasattr(self.controller, "log"):
+                self.controller.log(msg, source="DECK")
             self.refresh()
             self.target_in.delete(0, "end")
             self.client_in.delete(0, "end")
@@ -294,8 +295,8 @@ class ContractFrame(ctk.CTkFrame):
         # --- LOG DANS LE PANNEAU DE DROITE ---
         # On utilise reward_value qu'on a récupéré au début
         msg = f"MISSION ACCOMPLISHED >> {target} | +{reward_value} aUEC"
-        if hasattr(self.controller, "view"):
-            self.controller.view.log_message(msg, source="FINANCE")
+        if hasattr(self.controller, "log"):
+            self.controller.log(msg, source="FINANCE")
 
         # 4. Rafraîchissement de l'UI
         self.refresh()
@@ -308,9 +309,8 @@ class ContractFrame(ctk.CTkFrame):
     def delete_history(self, cid):
         self.controller.db.cursor.execute("DELETE FROM contracts WHERE id=?", (cid,))
         self.controller.db.conn.commit()
-        self.controller.view.log_message(
-            f"TRANSACTION PURGED FROM LOGS (ID: {cid})", source="SYS"
-        )
+        if hasattr(self.controller, "log"):
+            self.controller.log(f"TRANSACTION PURGED FROM LOGS (ID: {cid})", source="SYS")
         self.refresh()
 
     def update_type_menu(self):
@@ -368,18 +368,16 @@ class ContractFrame(ctk.CTkFrame):
                         "INSERT INTO contract_types VALUES (?,?)", (n, r)
                     )
                     msg = f"NEW CONTRACT TYPE REGISTERED: {n} ({r} aUEC)"
-                    if hasattr(self.controller, "view"):
-                        self.controller.view.log_message(msg, source="SYS_CFG")
+                    if hasattr(self.controller, "log"):
+                        self.controller.log(msg, source="SYS_CFG")
                     refresh_list()
                     self.update_type_menu()
                     n_entry.delete(0, "end")
                     r_entry.delete(0, "end")
                 except Exception as e:
                     # Log d'erreur si le type existe déjà par exemple
-                    if hasattr(self.controller, "view"):
-                        self.controller.view.log_message(
-                            f"CONFIG ERROR: TYPE {n} ALREADY EXISTS", source="ERROR"
-                        )
+                    if hasattr(self.controller, "log"):
+                        self.controller.log(f"CONFIG ERROR: TYPE {n} ALREADY EXISTS", source="ERROR")
 
         DrakeButton(f_in, text="+", width=40, command=add).pack(side="left", padx=5)
 
@@ -395,10 +393,8 @@ class ContractFrame(ctk.CTkFrame):
             self.controller.db.commit(
                 "DELETE FROM contract_types WHERE name=?", (name,)
             )
-            if hasattr(self.controller, "view"):
-                self.controller.view.log_message(
-                    f"CONTRACT TYPE DELETED: {name}", source="SYS_CFG"
-                )
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"CONTRACT TYPE DELETED: {name}", source="SYS_CFG")
             refresh_list()
             self.update_type_menu()
 

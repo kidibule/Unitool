@@ -35,6 +35,27 @@ class App(ctk.CTk):
         self.view = MainView(parent=self, controller=self.controller)
         self.view.grid(row=0, column=0, sticky="nsew")
 
+        # Log application start
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log("Application started", source="APP")
+        except Exception:
+            pass
+
+        # Ensure we log on close as well
+        try:
+            def _on_close():
+                try:
+                    if hasattr(self.controller, "log"):
+                        self.controller.log("Application exiting", source="APP")
+                except Exception:
+                    pass
+                self.destroy()
+
+            self.protocol("WM_DELETE_WINDOW", _on_close)
+        except Exception:
+            pass
+
 
 if __name__ == "__main__":
     # Apparence et thème par défaut

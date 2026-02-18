@@ -24,6 +24,12 @@ class IntelligenceController:
     def save_player_intel(self, data: dict) -> None:
         """Enregistre les infos récupérées par le bot Selenium."""
         self.app.upsert_target_intel(data)
+        try:
+            if hasattr(self.app, "log"):
+                handle = data.get("Handle") or data.get("handle") or data.get("Handle")
+                self.app.log(f"Player intel upserted: {handle}", source="INTEL")
+        except Exception:
+            pass
 
     def get_player_intel(self, handle: str) -> dict:
         """Récupère les infos locales d'un joueur pour preview."""
@@ -73,6 +79,7 @@ class IntelligenceController:
             org_sid: SID de l'organisation
             members: list de dict {handle, rank, ...}
         """
+        count = 0
         for member in members:
             handle = member.get("handle", "").upper()
             rank = member.get("rank", "MEMBER")
@@ -88,3 +95,9 @@ class IntelligenceController:
                 """
                 params = (handle, org_sid, rank)
                 self.app.commit(sql, params)
+                count += 1
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Saved {count} members for org {org_sid}", source="INTEL")
+        except Exception:
+            pass

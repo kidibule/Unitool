@@ -48,13 +48,36 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.setup_org_tab()
 
-        # Console de logs système
+        # Console de logs système — local terminal removed to avoid duplicates
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log("UPLINK STATUS: CONNECTED", source="INTEL")
+        except Exception:
+            pass
 
-        self.log_box = DrakeTerminal(self, height=80)
+    def _log(self, message):
+        """Forward intelligence logs to the central controller logger (no local terminal)."""
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(message, source="INTEL")
+        except Exception:
+            pass
 
-        self.log_box.pack(padx=DrakeConfig.PADDING, pady=10, fill="x")
-
-        self.log_box.log("UPLINK STATUS: CONNECTED")
+    def update_bot_status(self, status: str):
+        """Update the visible bot status label in the player tab."""
+        try:
+            color = DrakeConfig.ACCENT_PRIMARY
+            if status.startswith("ERROR") or status.startswith("DRIVER ERROR"):
+                color = DrakeConfig.ACCENT_ERROR
+            elif status.startswith("RUNNING"):
+                color = "#ffd24d"
+            elif status.startswith("IDLE"):
+                color = DrakeConfig.TEXT_SECONDARY
+            # Ensure label exists
+            if hasattr(self, "bot_status_label"):
+                self.bot_status_label.configure(text=f"BOT: {status}", text_color=color)
+        except Exception:
+            pass
 
     def setup_player_tab(self):
 
@@ -64,6 +87,15 @@ class IntelligenceFrame(ctk.CTkFrame):
             font=("Orbitron", 16, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(pady=5)
+
+        # Small bot status label (shows CONNECTED / RUNNING / IDLE / ERROR)
+        self.bot_status_label = ctk.CTkLabel(
+            self.tab_player,
+            text="BOT: IDLE",
+            font=("Consolas", 10),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        )
+        self.bot_status_label.pack(pady=(0, 8))
 
         self.ent_p = ctk.CTkEntry(
             self.tab_player,
@@ -232,11 +264,22 @@ class IntelligenceFrame(ctk.CTkFrame):
                     service=Service(ChromeDriverManager().install()), options=opts
                 )
 
+            # Driver ready
+            try:
+                self.update_bot_status("DRIVER READY")
+            except Exception:
+                pass
+
             return True
+
 
         except Exception as e:
 
-            self.log_box.log(f"driver error: {e}")
+            self._log(f"driver error: {e}")
+            try:
+                self.update_bot_status("DRIVER ERROR")
+            except Exception:
+                pass
 
             return False
 
@@ -272,11 +315,15 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.details_box.delete("1.0", "end")
 
-        self.log_box.log("ORGANIZATION DATA PURGED")
+        self._log("ORGANIZATION DATA PURGED")
 
     def run_bot(self, mode, target):
 
-        self.log_box.log(f"uplink initiated: {target}")
+        self._log(f"uplink initiated: {target}")
+        try:
+            self.update_bot_status(f"RUNNING: {target}")
+        except Exception:
+            pass
 
         try:
 
@@ -301,7 +348,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     # --- ÉTAPE 1 : PAGE PROFIL ---
 
-                    self.log_box.log(f"scanning profile: {target}...")
+                    self._log(f"scanning profile: {target}...")
 
                     self.bot_driver.get(
                         f"https://robertsspaceindustries.com/citizens/{target}"
@@ -331,13 +378,13 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     except Exception as e:
 
-                        self.log_box.log("profile parse warning")
+                        self._log("profile parse warning")
 
                     # --- ÉTAPE 2 : PAGE ORGANIZATIONS (Cible: Le Syndicat) ---
 
                     # --- ÉTAPE 2 : PAGE ORGANIZATIONS (Méthode de recherche par liens) ---
 
-                    self.log_box.log(f"intercepting organization data...")
+                    self._log(f"intercepting organization data...")
 
                     self.bot_driver.get(
                         f"https://robertsspaceindustries.com/citizens/{target}/organizations"
@@ -397,7 +444,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     except Exception as e:
 
-                        self.log_box.log("org scan failed")
+                        self._log("org scan failed")
 
                         d["OrgaNom"] = "ERROR"
 
@@ -423,7 +470,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                         state="normal", fg_color=DrakeConfig.ACCENT_PRIMARY
                     )
 
-                    self.log_box.log(f"intel acquired: {target}")
+                    self._log(f"intel acquired: {target}")
 
                 elif mode == "org":
 
@@ -498,15 +545,20 @@ class IntelligenceFrame(ctk.CTkFrame):
                             f"{'-'*50}\nTOTAL: {v_count+r_count} | VISIBLE: {v_count} | REDACTED: {r_count}\n",
                         )
 
-                        self.log_box.log(f"mapping complete: {sid}")
+                        self._log(f"mapping complete: {sid}")
 
                     else:
 
-                        self.log_box.log("error: no public roster found")
+                        self._log("error: no public roster found")
 
         except Exception as e:
 
-            self.log_box.log(f"uplink failure: {str(e)[:30]}")
+            self._log(f"uplink failure: {str(e)[:30]}")
+        finally:
+            try:
+                self.update_bot_status("IDLE")
+            except Exception:
+                pass
 
     def quick_jump_to_org(self, event):
         """Action au double-clic sur le nom d'orga"""
@@ -576,7 +628,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                 fg_color="#2ecc71", text="ARCHIVÉ ✓", state="disabled"
             )
 
-            self.log_box.log("dossier archived in database")
+            self._log("dossier archived in database")
 
     def save_org_to_csv(self):
 
@@ -590,7 +642,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
             f.write(self.member_list.get("1.0", "end"))
 
-        self.log_box.log(f"export complete: org_{sid}.csv")
+        self._log(f"export complete: org_{sid}.csv")
 
     def preview_member_data(self, event):
         """Affiche les données locales au simple clic"""

@@ -47,7 +47,12 @@ class ContractController:
             priority,
             contract_type,
         )
-        self.app.commit(sql, params)
+        try:
+            self.app.commit(sql, params)
+            if hasattr(self.app, "log"):
+                self.app.log(f"New contract: {target} (prio={priority})", source="CONTRACT")
+        except Exception:
+            pass
 
     def get_active_contracts(self) -> list:
         """Retourne tous les contrats actifs (OPEN)."""
@@ -80,10 +85,20 @@ class ContractController:
         self.app.commit(
             "UPDATE targets SET wins = wins + 1 WHERE pseudo=?", (target.upper(),)
         )
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Contract completed: {contract_id} for {target}", source="CONTRACT")
+        except Exception:
+            pass
 
     def delete_contract(self, contract_id: int) -> None:
         """Supprime un contrat de l'historique."""
-        self.app.commit("DELETE FROM contracts WHERE id=?", (contract_id,))
+        try:
+            self.app.commit("DELETE FROM contracts WHERE id=?", (contract_id,))
+            if hasattr(self.app, "log"):
+                self.app.log(f"Contract deleted: {contract_id}", source="CONTRACT")
+        except Exception:
+            pass
 
     def get_contract_types(self) -> list:
         """Récupère tous les types de contrats."""
@@ -94,10 +109,20 @@ class ContractController:
         self.app.commit(
             "INSERT INTO contract_types VALUES (?, ?)", (name.upper(), reward)
         )
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Contract type added: {name} ({reward})", source="CONTRACT")
+        except Exception:
+            pass
 
     def delete_contract_type(self, name: str) -> None:
         """Supprime un type de contrat."""
-        self.app.commit("DELETE FROM contract_types WHERE name=?", (name.upper(),))
+        try:
+            self.app.commit("DELETE FROM contract_types WHERE name=?", (name.upper(),))
+            if hasattr(self.app, "log"):
+                self.app.log(f"Contract type removed: {name}", source="CONTRACT")
+        except Exception:
+            pass
 
     def get_contract_reward_for_type(self, contract_type: str) -> str:
         """Récupère la récompense d'un type de contrat."""

@@ -78,6 +78,11 @@ class LoggerController:
             losses,
         )
         self.app.commit(sql, params)
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Saved dossier: {pseudo}", source="LOGGER")
+        except Exception:
+            pass
 
     def load_target(self, pseudo: str) -> list:
         """Récupère un dossier complet par pseudo."""
@@ -96,6 +101,7 @@ class LoggerController:
         Args:
             rows: liste de dict avec clés {pseudo, org, ship, threat, notes, alignment}
         """
+        count = 0
         for row in rows:
             sql = """
             INSERT OR REPLACE INTO targets (pseudo, org, ship, threat, notes, alignment)
@@ -110,6 +116,12 @@ class LoggerController:
                 row.get("alignment", "NEUTRE"),
             )
             self.app.commit(sql, params)
+            count += 1
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Imported {count} targets from CSV", source="LOGGER")
+        except Exception:
+            pass
 
     def export_targets_csv(self) -> list:
         """Récupère toutes les targets pour export CSV."""

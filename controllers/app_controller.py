@@ -9,6 +9,8 @@ from .scanner_controller import ScannerController
 from .logger_controller import LoggerController
 from .contract_controller import ContractController
 from .intelligence_controller import IntelligenceController
+import logging
+import os
 
 
 class AppController:
@@ -33,6 +35,88 @@ class AppController:
         self.logger = LoggerController(self)
         self.contract = ContractController(self)
         self.intelligence = IntelligenceController(self)
+
+        # Setup python logger (file + console optional)
+        log_path = os.path.join(os.getcwd(), "unitool.log")
+        self._logger = logging.getLogger("unitool")
+        self._logger.setLevel(logging.INFO)
+        if not self._logger.handlers:
+            fh = logging.FileHandler(log_path, encoding="utf-8")
+            fh.setLevel(logging.INFO)
+            formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+            fh.setFormatter(formatter)
+            self._logger.addHandler(fh)
+        # Callback list for UI forwarding (register via register_log_callback)
+        self._log_callbacks = []
+
+    def register_log_callback(self, fn):
+        """Register a callable to receive (message, source) for UI forwarding."""
+        try:
+            if callable(fn):
+                self._log_callbacks.append(fn)
+        except Exception:
+            pass
+
+    def unregister_log_callback(self, fn):
+        """Unregister a previously registered log callback."""
+        try:
+            if fn in self._log_callbacks:
+                self._log_callbacks.remove(fn)
+        except Exception:
+            pass
+
+    def log(self, message: str, source: str = "APP", level: str = "info") -> None:
+        """Central logging API: writes to file and forwards to main view if present.
+
+        Args:
+            message: texte du log
+            source: étiquette source (ex: INTEL, SCANNER)
+            level: niveau ('info','warning','error')
+        """
+        try:
+            txt = f"[{source}] {message}"
+            if level.lower() == "warning":
+                self._logger.warning(txt)
+            elif level.lower() == "error":
+                self._logger.error(txt)
+            else:
+                self._logger.info(txt)
+        except Exception:
+            pass
+
+        # If logs from certain sources should not appear in the UI, skip forwarding.
+        try:
+            if str(source).upper() == "SCANNER":
+                return
+        except Exception:
+            pass
+
+        # Forward to registered callbacks (UI terminals)
+        try:
+            for cb in list(self._log_callbacks):
+                try:
+                    cb(message, source)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Backwards-compat: also forward to controller.view if present
+        # but avoid double-calling if the view's log handler is already registered
+        try:
+            if hasattr(self, "view") and getattr(self, "view"):
+                try:
+                    v_cb = getattr(self.view, "log_message")
+                    if v_cb not in self._log_callbacks:
+                        self.view.log_message(message, source=source)
+                except Exception:
+                    # If comparison fails for some reason, fall back to safe call
+                    try:
+                        self.view.log_message(message, source=source)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     # --- PROPRIÉTÉS DE COMPATIBILITÉ (accès direct à la DB pour les vues) ---
 

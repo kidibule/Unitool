@@ -24,6 +24,7 @@ class ScannerController:
         """Cherche des cibles par pseudo, org ou SID."""
         if len(query) <= 1:
             return []
+        
         sql = """
         SELECT pseudo, org, ship, alignment, pvp_lvl, activity, sid, enlisted_date, language 
         FROM targets 
@@ -41,7 +42,10 @@ class ScannerController:
 
     def get_target_full(self, pseudo: str) -> list:
         """Récupère toutes les colonnes d'une cible."""
-        return self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo,))
+        sql = ("SELECT pseudo, org, ship, threat, notes, date, wins, losses, alignment, "
+               "pvp_lvl, activity, sid, org_rank, enlisted_date, language "
+               "FROM targets WHERE pseudo=?")
+        return self.app.query(sql, (pseudo,))
 
     def update_target(
         self,
@@ -84,4 +88,10 @@ class ScannerController:
 
     def export_targets_csv(self) -> list:
         """Récupère tous les targets pour export."""
-        return self.app.query("SELECT * FROM targets")
+        rows = self.app.query("SELECT * FROM targets")
+        try:
+            if hasattr(self.app, "log"):
+                self.app.log(f"Exporting {len(rows)} targets to CSV", source="SCANNER")
+        except Exception:
+            pass
+        return rows

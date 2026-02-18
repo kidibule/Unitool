@@ -160,6 +160,11 @@ class LoggerFrame(ctk.CTkFrame):
                  affiliates=excluded.affiliates, alignment=excluded.alignment, ship=excluded.ship, pvp_lvl=excluded.pvp_lvl, 
                  activity=excluded.activity, notes=excluded.notes, date=excluded.date, threat=excluded.threat, wins=excluded.wins, losses=excluded.losses"""
 
+        # Sanitize PvP level: only allow known levels, otherwise set default
+        pvp_val = (self.pvp_in.get() or "").upper()
+        if pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
+            pvp_val = "Inconnu"
+
         params = (
             h,
             self.o_in.get().upper(),
@@ -169,7 +174,7 @@ class LoggerFrame(ctk.CTkFrame):
             self.aff_in.get().upper(),
             self.a_btn.get(),
             self.s_in.get().upper(),
-            self.pvp_in.get().upper(),
+            pvp_val,
             self.act_in.get().upper(),
             self.n_in.get("0.0", "end").strip(),
             datetime.now().strftime("%d/%m/%Y"),
@@ -180,6 +185,11 @@ class LoggerFrame(ctk.CTkFrame):
 
         self.controller.db.commit(sql, params)
         messagebox.showinfo("DRAKE SYSTEMS", f"Dossier {h} synchronisé.")
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Synchronized dossier: {h}", source="LOGGER")
+        except Exception:
+            pass
 
     def load_target(self, event=None):
         pseudo = self.p_in.get().strip().upper()
@@ -201,6 +211,11 @@ class LoggerFrame(ctk.CTkFrame):
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, str(r[7] or 0))
             self.a_btn.set(r[8] or "NEUTRE")
+            try:
+                if hasattr(self.controller, "log"):
+                    self.controller.log(f"Loaded dossier: {pseudo}", source="LOGGER")
+            except Exception:
+                pass
 
     def import_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -222,6 +237,11 @@ class LoggerFrame(ctk.CTkFrame):
                         ),
                     )
             messagebox.showinfo("SUCCESS", "Import terminé.")
+            try:
+                if hasattr(self.controller, "log"):
+                    self.controller.log(f"Imported CSV: {path}", source="LOGGER")
+            except Exception:
+                pass
         except Exception as e:
             messagebox.showerror("ERROR", str(e))
 
@@ -247,6 +267,11 @@ class LoggerFrame(ctk.CTkFrame):
             )
             writer.writerows(data)
         messagebox.showinfo("SUCCESS", "Données exportées.")
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
+        except Exception:
+            pass
 
     def clear_fields(self):
         for e in [
@@ -262,3 +287,8 @@ class LoggerFrame(ctk.CTkFrame):
         ]:
             e.delete(0, "end")
         self.n_in.delete("0.0", "end")
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log("Cleared logger UI fields", source="LOGGER")
+        except Exception:
+            pass
