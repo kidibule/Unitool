@@ -133,6 +133,47 @@ class ScannerFrame(ctk.CTkFrame):
         e_notes.insert("0.0", d[4] if len(d) > 4 and d[4] else "")
         e_notes.pack(fill="x", padx=8, pady=(0, 8))
 
+        ctk.CTkLabel(frame, text="CONTRATS ASSOCIÉS", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(8, 2), padx=8)
+        # Use a scrollable frame for contracts to ensure visibility on small windows
+        contracts_frame = ctk.CTkScrollableFrame(frame, fg_color=DrakeConfig.BG_PANEL, height=120)
+        contracts_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+        try:
+            contracts = []
+            if hasattr(self.controller, "contract"):
+                contracts = self.controller.contract.get_contracts_for_target(pseudo)
+            else:
+                # Try backwards-compat: maybe controller has an attribute 'app' with contract
+                if hasattr(self.controller, "app") and hasattr(self.controller.app, "contract"):
+                    contracts = self.controller.app.contract.get_contracts_for_target(pseudo)
+        except Exception as e:
+            contracts = []
+            try:
+                if hasattr(self.controller, "log"):
+                    self.controller.log(f"Error fetching contracts for {pseudo}: {e}", source="SCANNER")
+            except Exception:
+                pass
+
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Found {len(contracts)} contracts for {pseudo}", source="SCANNER")
+        except Exception:
+            pass
+
+        if not contracts:
+            ctk.CTkLabel(contracts_frame, text="Aucun contrat associé", text_color=DrakeConfig.TEXT_SECONDARY).pack(padx=8, pady=6)
+        else:
+            for c in contracts:
+                cid = c[0] if len(c) > 0 else "?"
+                client = c[2] if len(c) > 2 else ""
+                reward = c[3] if len(c) > 3 else ""
+                status = c[4] if len(c) > 4 else ""
+                date_c = c[5] if len(c) > 5 else ""
+                priority = c[6] if len(c) > 6 else ""
+                ctype = c[7] if len(c) > 7 else ""
+                lbl = f"#{cid} • {status} • {client} • {reward} aUEC • {date_c} {priority} {ctype}"
+                ctk.CTkLabel(contracts_frame, text=lbl, anchor="w", text_color=DrakeConfig.TEXT_MAIN).pack(fill="x", padx=6, pady=2)
+
         def save_all():
             sql = """UPDATE targets SET org=?, sid=?, org_rank=?, ship=?, threat=?, alignment=?, pvp_lvl=?, activity=?, language=?, notes=? WHERE pseudo=?"""
             params = (
@@ -165,16 +206,65 @@ class ScannerFrame(ctk.CTkFrame):
         self.results.delete("0.0", "end")
 
         if len(q) > 1:
-            rows = self.controller.scanner.search_targets(q)
-            if not rows:
+            # Prefer models (richer info) if controller supports it
+            targets = []
+            try:
+                if hasattr(self.controller.scanner, "search_targets_as_models"):
+                    targets = self.controller.scanner.search_targets_as_models(q)
+                else:
+                    rows = self.controller.scanner.search_targets(q)
+                    # fallback: map tuples to simple namespace-like objects
+                    class SimpleTarget:
+                        pass
+                    for r in rows:
+                        t = SimpleTarget()
+                        # expected order: pseudo, org, ship, alignment, pvp_lvl, activity, sid, enlisted_date, language
+                        t.pseudo = r[0]
+                        t.org = r[1] if len(r) > 1 else ""
+                        t.ship = r[2] if len(r) > 2 else ""
+                        t.alignment = r[3] if len(r) > 3 else "NEUTRE"
+                        t.pvp_lvl = r[4] if len(r) > 4 else ""
+                        t.activity = r[5] if len(r) > 5 else ""
+                        t.sid = r[6] if len(r) > 6 else "N/A"
+                        t.enlisted_date = r[7] if len(r) > 7 else ""
+                        t.language = r[8] if len(r) > 8 else ""
+                        # best-effort defaults
+                        t.threat = r[3] if len(r) > 3 else ""
+                        t.notes = ""
+                        t.wins = 0
+                        t.losses = 0
+                        t.org_rank = ""
+                        t.date = ""
+                        t.affiliates = ""
+                        targets.append(t)
+            except Exception:
+                targets = []
+
+            if not targets:
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"No results for: {q}", source="SCANNER")
                 except Exception:
                     pass
 
-            for row in rows:
-                pseudo, org, ship, align, pvp, activity, sid, enlist, lang = row
+            for t in targets:
+                pseudo = getattr(t, "pseudo", "")
+                org = getattr(t, "org", "")
+                ship = getattr(t, "ship", "")
+                align = getattr(t, "alignment", "NEUTRE")
+                pvp = getattr(t, "pvp_lvl", "")
+                activity = getattr(t, "activity", "")
+                sid = getattr(t, "sid", "N/A")
+                enlist = getattr(t, "enlisted_date", "")
+                lang = getattr(t, "language", "")
+                threat = getattr(t, "threat", "")
+                notes = getattr(t, "notes", "")
+                wins = getattr(t, "wins", 0)
+                losses = getattr(t, "losses", 0)
+                org_rank = getattr(t, "org_rank", "")
+                date_t = getattr(t, "date", "")
+                affiliates = getattr(t, "affiliates", "")
+
                 tag_p, tag_o, tag_r = f"tp_{pseudo}", f"to_{pseudo}", f"tr_{pseudo}"
 
                 self.results.insert("end", " ■ ", align)
@@ -187,9 +277,74 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.insert("end", " ")
                 self.results.insert("end", "[RSI]", ("link_rsi", tag_r))
 
-                self.results.insert("end", f"\n   VAISSEAU: {ship}\n   PVP: {pvp} | ACTIVITÉ: {activity}\n")
+                # Detailed info block
+                self.results.insert("end", f"\n   VAISSEAU: {ship} | MENACE: {threat} | W/L: {wins}/{losses}\n")
+                self.results.insert("end", f"   PVP: {pvp} | ACTIVITÉ: {activity} | LANG: {lang} | RANG: {org_rank}\n")
+                if affiliates:
+                    self.results.insert("end", f"   AFFILIATES: {affiliates}\n")
+                if notes:
+                    # trim long notes for terminal preview
+                    note_preview = notes if len(notes) < 200 else notes[:197] + "..."
+                    self.results.insert("end", f"   NOTES: {note_preview}\n")
+
+                # Contracts for this target (display in terminal)
+                try:
+                    if hasattr(self.controller, "contract"):
+                        target_contracts = self.controller.contract.get_contracts_for_target(pseudo)
+                        client_contracts = self.controller.contract.get_contracts_for_client(pseudo)
+                    elif hasattr(self.controller, "app") and hasattr(self.controller.app, "contract"):
+                        target_contracts = self.controller.app.contract.get_contracts_for_target(pseudo)
+                        client_contracts = self.controller.app.contract.get_contracts_for_client(pseudo)
+                    else:
+                        target_contracts = []
+                        client_contracts = []
+                except Exception:
+                    target_contracts = []
+                    client_contracts = []
+
+                # Calculate counters
+                t_open = sum(1 for c in target_contracts if (len(c) > 4 and c[4] != "CLOSED"))
+                t_closed = sum(1 for c in target_contracts if (len(c) > 4 and c[4] == "CLOSED"))
+                c_open = sum(1 for c in client_contracts if (len(c) > 4 and c[4] != "CLOSED"))
+                c_closed = sum(1 for c in client_contracts if (len(c) > 4 and c[4] == "CLOSED"))
+
+                if target_contracts or client_contracts:
+                    # Header with counters
+                    self.results.insert("end", f"   CONTRATS: CIBLE(O:{t_open}/F:{t_closed}) | CLIENT(O:{c_open}/F:{c_closed})\n")
+
+                    if target_contracts:
+                        self.results.insert("end", f"     -> En tant que CIBLE:\n")
+                        for c in target_contracts:
+                            cid = c[0] if len(c) > 0 else "?"
+                            client = c[2] if len(c) > 2 else ""
+                            reward = c[3] if len(c) > 3 else ""
+                            status = c[4] if len(c) > 4 else "OPEN"
+                            date_c = c[5] if len(c) > 5 else ""
+                            priority = c[6] if len(c) > 6 else ""
+                            ctype = c[7] if len(c) > 7 else ""
+                            icon = "✔" if status == "CLOSED" else "○"
+                            tag = "closed_contract" if status == "CLOSED" else "open_contract"
+                            self.results.insert("end", f"       {icon} ")
+                            self.results.insert("end", f"# {status} | {ctype} | {client} | {reward} aUEC | {date_c}\n", (tag,))
+
+                    if client_contracts:
+                        self.results.insert("end", f"     -> En tant que CLIENT:\n")
+                        for c in client_contracts:
+                            cid = c[0] if len(c) > 0 else "?"
+                            target_c = c[1] if len(c) > 1 else ""
+                            reward = c[3] if len(c) > 3 else ""
+                            status = c[4] if len(c) > 4 else "OPEN"
+                            date_c = c[5] if len(c) > 5 else ""
+                            priority = c[6] if len(c) > 6 else ""
+                            ctype = c[7] if len(c) > 7 else ""
+                            icon = "✔" if status == "CLOSED" else "○"
+                            tag = "closed_contract" if status == "CLOSED" else "open_contract"
+                            self.results.insert("end", f"       {icon} ")
+                            self.results.insert("end", f"# {status} | {ctype} | {target_c} | {reward} aUEC | {date_c}\n", (tag,))
+
                 self.results.insert("end", f"{'-'*45}\n")
 
+                # Bindings
                 self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=pseudo: self.edit_target_window(p))
                 if org:
                     self.results.tag_bind(tag_o, "<Button-1>", lambda e, o=org: self.open_org(o))

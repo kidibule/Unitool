@@ -84,12 +84,9 @@ class AppController:
         except Exception:
             pass
 
-        # If logs from certain sources should not appear in the UI, skip forwarding.
-        try:
-            if str(source).upper() == "SCANNER":
-                return
-        except Exception:
-            pass
+        # Previously certain sources (eg. SCANNER) were filtered here which
+        # prevented UI forwarding. Keep forwarding for all sources so the
+        # UI can display scanner logs and other messages.
 
         # Forward to registered callbacks (UI terminals)
         try:

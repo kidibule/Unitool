@@ -130,3 +130,25 @@ class ContractController:
             "SELECT reward FROM contract_types WHERE name=?", (contract_type,)
         )
         return result[0][0] if result else None
+
+    def get_contracts_for_target(self, target: str) -> list:
+        """Retourne tous les contrats (ouverts et fermés) pour une cible donnée."""
+        return self.app.query(
+            "SELECT * FROM contracts WHERE target=? ORDER BY id DESC", (target.upper(),)
+        )
+
+    def get_contracts_for_target_as_models(self, target: str) -> list:
+        """Retourne les contrats d'une cible sous forme d'objets Contract."""
+        rows = self.get_contracts_for_target(target)
+        return [Contract.from_db_row(row) for row in rows]
+
+    def get_contracts_for_client(self, client: str) -> list:
+        """Retourne tous les contrats où le `client` est l'auteur (target may differ)."""
+        return self.app.query(
+            "SELECT * FROM contracts WHERE client=? ORDER BY id DESC", (client.upper(),)
+        )
+
+    def get_contracts_for_client_as_models(self, client: str) -> list:
+        """Retourne les contrats d'un client sous forme d'objets Contract."""
+        rows = self.get_contracts_for_client(client)
+        return [Contract.from_db_row(row) for row in rows]
