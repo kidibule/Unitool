@@ -8,8 +8,8 @@ import customtkinter as ctk
 import webbrowser
 import csv
 
-from tkinter import filedialog, messagebox
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
+from tkinter import filedialog
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
 
 
 # Paramètres d'entrée réutilisables pour les widgets
@@ -133,47 +133,6 @@ class ScannerFrame(ctk.CTkFrame):
         e_notes.insert("0.0", d[4] if len(d) > 4 and d[4] else "")
         e_notes.pack(fill="x", padx=8, pady=(0, 8))
 
-        ctk.CTkLabel(frame, text="CONTRATS ASSOCIÉS", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(8, 2), padx=8)
-        # Use a scrollable frame for contracts to ensure visibility on small windows
-        contracts_frame = ctk.CTkScrollableFrame(frame, fg_color=DrakeConfig.BG_PANEL, height=120)
-        contracts_frame.pack(fill="x", padx=8, pady=(0, 8))
-
-        try:
-            contracts = []
-            if hasattr(self.controller, "contract"):
-                contracts = self.controller.contract.get_contracts_for_target(pseudo)
-            else:
-                # Try backwards-compat: maybe controller has an attribute 'app' with contract
-                if hasattr(self.controller, "app") and hasattr(self.controller.app, "contract"):
-                    contracts = self.controller.app.contract.get_contracts_for_target(pseudo)
-        except Exception as e:
-            contracts = []
-            try:
-                if hasattr(self.controller, "log"):
-                    self.controller.log(f"Error fetching contracts for {pseudo}: {e}", source="SCANNER")
-            except Exception:
-                pass
-
-        try:
-            if hasattr(self.controller, "log"):
-                self.controller.log(f"Found {len(contracts)} contracts for {pseudo}", source="SCANNER")
-        except Exception:
-            pass
-
-        if not contracts:
-            ctk.CTkLabel(contracts_frame, text="Aucun contrat associé", text_color=DrakeConfig.TEXT_SECONDARY).pack(padx=8, pady=6)
-        else:
-            for c in contracts:
-                cid = c[0] if len(c) > 0 else "?"
-                client = c[2] if len(c) > 2 else ""
-                reward = c[3] if len(c) > 3 else ""
-                status = c[4] if len(c) > 4 else ""
-                date_c = c[5] if len(c) > 5 else ""
-                priority = c[6] if len(c) > 6 else ""
-                ctype = c[7] if len(c) > 7 else ""
-                lbl = f"#{cid} • {status} • {client} • {reward} aUEC • {date_c} {priority} {ctype}"
-                ctk.CTkLabel(contracts_frame, text=lbl, anchor="w", text_color=DrakeConfig.TEXT_MAIN).pack(fill="x", padx=6, pady=2)
-
         def save_all():
             sql = """UPDATE targets SET org=?, sid=?, org_rank=?, ship=?, threat=?, alignment=?, pvp_lvl=?, activity=?, language=?, notes=? WHERE pseudo=?"""
             params = (
@@ -192,12 +151,12 @@ class ScannerFrame(ctk.CTkFrame):
             try:
                 self.controller.db.cursor.execute(sql, params)
                 self.controller.db.conn.commit()
-                messagebox.showinfo("DRAKE SYSTEMS", f"Dossier de {pseudo} mis à jour.")
+                DrakePopup.info("DRAKE SYSTEMS", f"Dossier de {pseudo} mis à jour.", parent=self)
                 toplevel.destroy()
                 if hasattr(self, "run_scan"):
                     self.run_scan(None)
             except Exception as e:
-                messagebox.showerror("ERREUR", f"Erreur lors de la sauvegarde : {e}")
+                DrakePopup.error("ERREUR", f"Erreur lors de la sauvegarde : {e}", parent=self)
 
         DrakeButton(toplevel, text="APPLIQUER LES MODIFICATIONS", command=save_all, height=50).pack(pady=12, padx=40, fill="x")
 
@@ -271,15 +230,22 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.insert("end", f"{pseudo}", ("link", tag_p))
 
                 if org:
-                    display_org = f"{org} ({sid})" if sid != "N/A" else org
-                    self.results.insert("end", f" [{display_org}]", ("link_org", tag_o))
+                    self.results.insert("end", " [")
+                    
+                    self.results.insert("end", f"{org}")
+                    self.results.insert("end", "/")
+                    self.results.insert("end", f"{sid}", ("link_org", tag_o))
+                    self.results.insert("end", "]")
 
                 self.results.insert("end", " ")
-                self.results.insert("end", "[RSI]", ("link_rsi", tag_r))
+                self.results.insert("end", "[")
+                self.results.insert("end", "RSI", ("link_rsi", tag_r))
+                self.results.insert("end", "]")
 
                 # Detailed info block
                 self.results.insert("end", f"\n   VAISSEAU: {ship} | MENACE: {threat} | W/L: {wins}/{losses}\n")
                 self.results.insert("end", f"   PVP: {pvp} | ACTIVITÉ: {activity} | LANG: {lang} | RANG: {org_rank}\n")
+                
                 if affiliates:
                     self.results.insert("end", f"   AFFILIATES: {affiliates}\n")
                 if notes:
@@ -359,13 +325,13 @@ class ScannerFrame(ctk.CTkFrame):
                     writer = csv.writer(f, delimiter=";")
                     writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
                     writer.writerows(rows)
-                messagebox.showinfo("DRAKE SYSTEMS", "EXPORTATION TERMINÉE")
+                DrakePopup.info("DRAKE SYSTEMS", "EXPORTATION TERMINÉE", parent=self)
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Exported DB to {filename}", source="SCANNER")
                 except Exception:
                     pass
             except Exception as e:
-                messagebox.showerror("ERREUR", f"ÉCHEC DE L'EXPORT : {e}")
+                DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=self)
         
 

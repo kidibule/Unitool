@@ -14,7 +14,7 @@ from selenium.webdriver.common.by import By
 
 from webdriver_manager.chrome import ChromeDriverManager
 
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
 
 
 class IntelligenceFrame(ctk.CTkFrame):
@@ -620,15 +620,89 @@ class IntelligenceFrame(ctk.CTkFrame):
 
     def save_to_unitool(self):
 
-        if self.last_scanned_data:
+        if not self.last_scanned_data:
+            return
 
+        try:
+            # Normalize handle
+            handle = (
+                self.last_scanned_data.get("Handle")
+                or self.last_scanned_data.get("handle")
+                or ""
+            )
+            handle = str(handle).strip().upper()
+            if not handle:
+                raise ValueError("Missing handle in scanned data")
+
+            # Check existing entry
+            existing = self.controller.db.query(
+                "SELECT org, sid, org_rank, enlisted_date, language, affiliates FROM targets WHERE pseudo = ?",
+                (handle,)
+            )
+
+            # Prepare scanned values for comparison
+            scanned_org = (self.last_scanned_data.get("OrgaNom") or "").strip()
+            scanned_sid = (self.last_scanned_data.get("SID") or "").strip().upper()
+            scanned_rank = (self.last_scanned_data.get("Rang") or "").strip()
+            scanned_date = (self.last_scanned_data.get("Date") or "").strip()
+            scanned_lang = (self.last_scanned_data.get("Language") or "").strip()
+            scanned_aff = (self.last_scanned_data.get("Affiliates") or "").strip()
+
+            if existing:
+                row = existing[0]
+                same = (
+                    ((str(row[0] or "")).upper() == scanned_org.upper()) and
+                    ((str(row[1] or "")).upper() == scanned_sid.upper()) and
+                    ((str(row[2] or "")).upper() == scanned_rank.upper()) and
+                    ((str(row[3] or "")).upper() == scanned_date.upper()) and
+                    ((str(row[4] or "")).upper() == scanned_lang.upper()) and
+                    ((str(row[5] or "")).upper() == scanned_aff.upper())
+                )
+                if same:
+                    DrakePopup.info("DRAKE SYSTEMS", f"Aucune modification détectée pour {handle}. Sauvegarde évitée.", parent=self)
+                    self._log(f"save skipped (no change): {handle}")
+                    # disable button to avoid re-save
+                    try:
+                        self.btn_save_db.configure(state="disabled", fg_color="#333", text="ENREGISTRER CONTACT")
+                    except Exception:
+                        pass
+                    return
+
+                # Build a human-readable diff of changes
+                diffs = []
+                if (str(row[0] or "")).upper() != scanned_org.upper():
+                    diffs.append(f"ORGANIZATION: {row[0] or 'None'}  ->  {scanned_org}")
+                if (str(row[1] or "")).upper() != scanned_sid.upper():
+                    diffs.append(f"SID: {row[1] or 'None'}  ->  {scanned_sid}")
+                if (str(row[2] or "")).upper() != scanned_rank.upper():
+                    diffs.append(f"RANK: {row[2] or 'None'}  ->  {scanned_rank}")
+                if (str(row[3] or "")).upper() != scanned_date.upper():
+                    diffs.append(f"ENLISTED: {row[3] or 'None'}  ->  {scanned_date}")
+                if (str(row[4] or "")).upper() != scanned_lang.upper():
+                    diffs.append(f"LANGUAGE: {row[4] or 'None'}  ->  {scanned_lang}")
+                if (str(row[5] or "")).upper() != scanned_aff.upper():
+                    diffs.append(f"AFFILIATES: {row[5] or 'None'}  ->  {scanned_aff}")
+
+                diff_text = "\n".join(diffs)
+                prompt = f"Le dossier {handle} existe déjà. Changements détectés:\n\n{diff_text}\n\nMettre à jour avec ces nouvelles valeurs ?"
+                confirm = DrakePopup.yesno("CHANGEMENTS DÉTECTÉS", prompt, parent=self)
+                if not confirm:
+                    return
+
+            # Proceed to upsert
+            # Ensure the data uses the handle uppercase as in DB
+            self.last_scanned_data["Handle"] = handle
             self.controller.db.upsert_target_intel(self.last_scanned_data)
 
             self.btn_save_db.configure(
                 fg_color="#2ecc71", text="ARCHIVÉ ✓", state="disabled"
             )
 
-            self._log("dossier archived in database")
+            self._log(f"dossier archived in database: {handle}")
+
+        except Exception as e:
+            DrakePopup.error("ERREUR", f"Erreur lors de l'archivage : {e}", parent=self)
+            self._log(f"error saving to db: {e}")
 
     def save_org_to_csv(self):
 

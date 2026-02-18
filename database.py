@@ -98,3 +98,25 @@ class Database:
                 "Language": row[4],
             }
         return None
+
+    def add_ship(self, pseudo, ship):
+        """Ajoute un ship à un joueur."""
+        if ship and ship.strip():
+            sql = "INSERT OR IGNORE INTO player_ships (pseudo, ship) VALUES (?, ?)"
+            self.commit(sql, (pseudo, ship.upper()))
+
+    def get_ships(self, pseudo):
+        """Récupère tous les ships d'un joueur."""
+        sql = "SELECT ship FROM player_ships WHERE pseudo = ? ORDER BY ship"
+        rows = self.query(sql, (pseudo,))
+        return [row[0] for row in rows]
+
+    def delete_ship(self, pseudo, ship):
+        """Supprime un ship d'un joueur."""
+        sql = "DELETE FROM player_ships WHERE pseudo = ? AND ship = ?"
+        self.commit(sql, (pseudo, ship))
+
+    def delete_all_ships(self, pseudo):
+        """Supprime tous les ships d'un joueur."""
+        sql = "DELETE FROM player_ships WHERE pseudo = ?"
+        self.commit(sql, (pseudo,))

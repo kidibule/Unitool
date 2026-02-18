@@ -108,7 +108,170 @@ class DrakeTerminal(ctk.CTkTextbox):
 
 
 # ==========================================
-# 3. INTERFACE UTILISATEUR (APPLICATION)
+# 3. POPUPS STYLISÉES (DRAKE DESIGN)
+# ==========================================
+
+
+class DrakePopup:
+    """Classe utilitaire pour afficher des popups stylisées en accord avec le design Drake."""
+
+    @staticmethod
+    def info(title: str, message: str, parent=None):
+        """Popup d'information avec bouton OK."""
+        popup = ctk.CTkToplevel(parent)
+        popup.title(title)
+        popup.geometry("500x200")
+        popup.configure(fg_color=DrakeConfig.BG_MAIN)
+        popup.resizable(False, False)
+        if parent:
+            popup.transient(parent)
+            popup.grab_set()
+
+        # Frame principal
+        frame = ctk.CTkFrame(popup, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Titre
+        ctk.CTkLabel(
+            frame,
+            text=title.upper(),
+            font=DrakeConfig.FONT_TITLE,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(0, 10))
+
+        # Message
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=("Segoe UI", 11),
+            text_color=DrakeConfig.TEXT_MAIN,
+            wraplength=450,
+            justify="left",
+        ).pack(pady=10, fill="both", expand=True)
+
+        # Bouton OK
+        def close_popup():
+            popup.destroy()
+
+        DrakeButton(frame, text="OK", command=close_popup, height=40).pack(
+            fill="x", pady=(10, 0)
+        )
+
+    @staticmethod
+    def yesno(title: str, message: str, parent=None):
+        """Popup yes/no avec deux boutons. Retourne True si oui, False si non."""
+        result = {"value": None}
+
+        popup = ctk.CTkToplevel(parent)
+        popup.title(title)
+        popup.geometry("500x220")
+        popup.configure(fg_color=DrakeConfig.BG_MAIN)
+        popup.resizable(False, False)
+        if parent:
+            popup.transient(parent)
+            popup.grab_set()
+
+        # Frame principal
+        frame = ctk.CTkFrame(popup, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Titre
+        ctk.CTkLabel(
+            frame,
+            text=title.upper(),
+            font=DrakeConfig.FONT_TITLE,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(0, 10))
+
+        # Message
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=("Segoe UI", 11),
+            text_color=DrakeConfig.TEXT_MAIN,
+            wraplength=450,
+            justify="left",
+        ).pack(pady=10, fill="both", expand=True)
+
+        # Frame boutons
+        buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        buttons_frame.pack(fill="x", pady=(10, 0))
+
+        def on_yes():
+            result["value"] = True
+            popup.destroy()
+
+        def on_no():
+            result["value"] = False
+            popup.destroy()
+
+        DrakeButton(buttons_frame, text="OUI", command=on_yes, height=40).pack(
+            side="left", fill="x", expand=True, padx=(0, 5)
+        )
+        DrakeButton(
+            buttons_frame,
+            text="NON",
+            fg_color=DrakeConfig.BG_PANEL,
+            hover_color="#444444",
+            text_color=DrakeConfig.TEXT_MAIN,
+            command=on_no,
+            height=40,
+        ).pack(side="left", fill="x", expand=True, padx=(5, 0))
+
+        popup.update()
+        popup.wait_window()
+        return result["value"] if result["value"] is not None else False
+
+    @staticmethod
+    def error(title: str, message: str, parent=None):
+        """Popup erreur avec titre et message en rouge."""
+        popup = ctk.CTkToplevel(parent)
+        popup.title(title)
+        popup.geometry("500x220")
+        popup.configure(fg_color=DrakeConfig.BG_MAIN)
+        popup.resizable(False, False)
+        if parent:
+            popup.transient(parent)
+            popup.grab_set()
+
+        # Frame principal
+        frame = ctk.CTkFrame(popup, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Titre (en rouge pour erreur)
+        ctk.CTkLabel(
+            frame,
+            text=title.upper(),
+            font=DrakeConfig.FONT_TITLE,
+            text_color=DrakeConfig.ACCENT_ERROR,
+        ).pack(pady=(0, 10))
+
+        # Message
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=("Segoe UI", 11),
+            text_color=DrakeConfig.TEXT_MAIN,
+            wraplength=450,
+            justify="left",
+        ).pack(pady=10, fill="both", expand=True)
+
+        # Bouton OK
+        def close_popup():
+            popup.destroy()
+
+        DrakeButton(
+            frame,
+            text="OK",
+            fg_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#cc0000",
+            command=close_popup,
+            height=40,
+        ).pack(fill="x", pady=(10, 0))
+
+
+# ==========================================
+# 4. INTERFACE UTILISATEUR (APPLICATION)
 # ==========================================
 
 

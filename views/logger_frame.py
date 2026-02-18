@@ -3,10 +3,10 @@
 import customtkinter as ctk
 import csv
 from datetime import datetime
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
 # Importation des ressources graphiques
-from drake_ui.engine import DrakeConfig, DrakeButton
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup
 
 
 class LoggerFrame(ctk.CTkFrame):
@@ -153,6 +153,59 @@ class LoggerFrame(ctk.CTkFrame):
         h = self.p_in.get().strip().upper()
         if not h:
             return
+        # Prepare values and sanitize
+        org_val = (self.o_in.get() or "").upper()
+        sid_val = (self.sid_in.get() or "").upper()
+        rank_val = (self.rank_in.get() or "").upper()
+        lang_val = (self.lang_in.get() or "").upper()
+        aff_val = (self.aff_in.get() or "").upper()
+        align_val = self.a_btn.get() or "NEUTRE"
+        ship_val = (self.s_in.get() or "").upper()
+        pvp_val = (self.pvp_in.get() or "").upper()
+        if pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
+            pvp_val = "Inconnu"
+        act_val = (self.act_in.get() or "").upper()
+        notes_val = self.n_in.get("0.0", "end").strip()
+        date_val = datetime.now().strftime("%d/%m/%Y")
+        threat_val = self.threat_in.get()
+        wins_val = self.wins_in.get() or 0
+        losses_val = self.loss_in.get() or 0
+
+        # Check existing record to avoid duplicates
+        existing = self.controller.db.query(
+            "SELECT org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, threat, wins, losses FROM targets WHERE pseudo = ?",
+            (h,)
+        )
+
+        if existing:
+            row = existing[0]
+            same = (
+                ((row[0] or "").upper() == org_val) and
+                ((row[1] or "").upper() == sid_val) and
+                ((row[2] or "").upper() == rank_val) and
+                ((row[3] or "").upper() == lang_val) and
+                ((row[4] or "").upper() == aff_val) and
+                ((row[5] or "").upper() == align_val) and
+                ((row[6] or "").upper() == ship_val) and
+                ((row[7] or "").upper() == pvp_val) and
+                ((row[8] or "").upper() == act_val) and
+                (row[9] == notes_val) and
+                (row[10] == threat_val) and
+                (str(row[11]) == str(wins_val)) and
+                (str(row[12]) == str(losses_val))
+            )
+            if same:
+                DrakePopup.info("DRAKE SYSTEMS", f"Aucune modification trouvée pour {h}. Aucune sauvegarde effectuée.", parent=self)
+                try:
+                    if hasattr(self.controller, "log"):
+                        self.controller.log(f"Save skipped (no change): {h}", source="LOGGER")
+                except Exception:
+                    pass
+                return
+            else:
+                confirm = DrakePopup.yesno("CONFIRMATION", f"Le dossier {h} existe déjà. Écraser les données ?", parent=self)
+                if not confirm:
+                    return
 
         sql = """INSERT INTO targets (pseudo, org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, date, threat, wins, losses)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -160,31 +213,26 @@ class LoggerFrame(ctk.CTkFrame):
                  affiliates=excluded.affiliates, alignment=excluded.alignment, ship=excluded.ship, pvp_lvl=excluded.pvp_lvl, 
                  activity=excluded.activity, notes=excluded.notes, date=excluded.date, threat=excluded.threat, wins=excluded.wins, losses=excluded.losses"""
 
-        # Sanitize PvP level: only allow known levels, otherwise set default
-        pvp_val = (self.pvp_in.get() or "").upper()
-        if pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
-            pvp_val = "Inconnu"
-
         params = (
             h,
-            self.o_in.get().upper(),
-            self.sid_in.get().upper(),
-            self.rank_in.get().upper(),
-            self.lang_in.get().upper(),
-            self.aff_in.get().upper(),
-            self.a_btn.get(),
-            self.s_in.get().upper(),
+            org_val,
+            sid_val,
+            rank_val,
+            lang_val,
+            aff_val,
+            align_val,
+            ship_val,
             pvp_val,
-            self.act_in.get().upper(),
-            self.n_in.get("0.0", "end").strip(),
-            datetime.now().strftime("%d/%m/%Y"),
-            self.threat_in.get(),
-            self.wins_in.get() or 0,
-            self.loss_in.get() or 0,
+            act_val,
+            notes_val,
+            date_val,
+            threat_val,
+            wins_val,
+            losses_val,
         )
 
         self.controller.db.commit(sql, params)
-        messagebox.showinfo("DRAKE SYSTEMS", f"Dossier {h} synchronisé.")
+        DrakePopup.info("DRAKE SYSTEMS", f"Dossier {h} synchronisé.", parent=self)
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Synchronized dossier: {h}", source="LOGGER")
@@ -236,14 +284,14 @@ class LoggerFrame(ctk.CTkFrame):
                             row["alignment"],
                         ),
                     )
-            messagebox.showinfo("SUCCESS", "Import terminé.")
+            DrakePopup.info("SUCCESS", "Import terminé.", parent=self)
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Imported CSV: {path}", source="LOGGER")
             except Exception:
                 pass
         except Exception as e:
-            messagebox.showerror("ERROR", str(e))
+            DrakePopup.error("ERROR", str(e), parent=self)
 
     def export_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -266,7 +314,7 @@ class LoggerFrame(ctk.CTkFrame):
                 ]
             )
             writer.writerows(data)
-        messagebox.showinfo("SUCCESS", "Données exportées.")
+        DrakePopup.info("SUCCESS", "Données exportées.", parent=self)
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
