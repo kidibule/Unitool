@@ -202,12 +202,23 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.insert("end", " ■ ", t.alignment)
                 self.results.insert("end", f"{t.pseudo}", ("link", tag_p))
 
-                if t.org:
-                    self.results.insert("end", " [")
-                    self.results.insert("end", f"{t.org}")
+                # Affiche l'organisation si présente et pertinente, sinon indique [NONE] sans lien
+                org_val = (t.org or "")
+                org_norm = str(org_val).strip().upper().replace("[", "").replace("]", "")
+                is_valid_org = bool(org_norm) and not (
+                    org_norm.startswith("NONE") or org_norm == "INCONNU" or org_norm == "UNKNOWN"
+                )
+
+                if is_valid_org:
+                    self.results.insert("end", " ")
+                    self.results.insert("end", "[")
+                    self.results.insert("end", f"{org_val}")
                     self.results.insert("end", "/")
                     self.results.insert("end", f"{t.sid or 'N/A'}", ("link_org", tag_o))
                     self.results.insert("end", "]")
+                else:
+                    # Aucun lien si pas d'orga publique
+                    self.results.insert("end", " [NONE]")
 
                 self.results.insert("end", " [")
                 self.results.insert("end", "RSI", ("link_rsi", tag_r))
@@ -255,7 +266,7 @@ class ScannerFrame(ctk.CTkFrame):
                 # --- BINDINGS (SÉPARÉS !) ---
                 # On bind les tags créés plus haut pour les rendre cliquables
                 self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=t.pseudo: self.edit_target_window(p))
-                if t.org:
+                if is_valid_org:
                     self.results.tag_bind(tag_o, "<Button-1>", lambda e, o=t.org: self.open_org(o))
                 self.results.tag_bind(tag_r, "<Button-1>", lambda e, p=t.pseudo: self.open_rsi(p))
     def export(self):
