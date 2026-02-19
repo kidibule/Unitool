@@ -1,6 +1,7 @@
 """Frame pour la gestion des contrats / bounty board."""
 
 import customtkinter as ctk
+import tkinter as tk
 from datetime import datetime
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
 from utils import format_int_with_dots
@@ -16,17 +17,16 @@ class ContractFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
 
+        # --- Variables de gestion du popup ---
+        self._suggestion_popup = None
+        self._suggestion_owner = None
+
         # --- TITRE ---
         DrakeConfig.create_title(self, "BOUNTY BOARD")
 
-        # --- FORMULAIRE D'AJOUT ---
-        f_add = ctk.CTkFrame(
-            self,
-            fg_color=DrakeConfig.BG_PANEL,
-            border_width=DrakeConfig.BORDER_WIDTH,
-            border_color=DrakeConfig.BORDER_COLOR,
-            corner_radius=0,
-        )
+       # --- FORMULAIRE D'AJOUT ---
+        f_add = ctk.CTkFrame(self, fg_color=DrakeConfig.BG_PANEL, corner_radius=0, 
+                             border_width=1, border_color=DrakeConfig.BORDER_COLOR)
         f_add.pack(pady=5, padx=20, fill="x")
 
         entry_kwargs = {
@@ -37,20 +37,17 @@ class ContractFrame(ctk.CTkFrame):
             "height": 30,
         }
 
-        self.target_in = ctk.CTkEntry(
-            f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs
-        )
+        # Champ TARGET
+        self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs)
         self.target_in.pack(side="left", padx=10, pady=15)
+        self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
+        self.target_in.bind("<FocusOut>", self._on_focus_out)
 
-        self.client_in = ctk.CTkEntry(
-            f_add, placeholder_text="CLIENT ID", width=150, **entry_kwargs
-        )
+        # Champ CLIENT
+        self.client_in = ctk.CTkEntry(f_add, placeholder_text="CLIENT ID", width=150, **entry_kwargs)
         self.client_in.pack(side="left", padx=10, pady=15)
-
-        self.reward_in = ctk.CTkEntry(
-            f_add, placeholder_text="REWARD aUEC", width=120, **entry_kwargs
-        )
-        self.reward_in.pack(side="left", padx=10, pady=15)
+        self.client_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.client_in))
+        self.client_in.bind("<FocusOut>", self._on_focus_out)
 
         # Menu Type
         self.type_var = ctk.StringVar(value="TYPE")  # Valeur par défaut
@@ -419,3 +416,93 @@ class ContractFrame(ctk.CTkFrame):
                 ).pack(side="right", padx=5)
 
         refresh_list()
+
+
+        # --- LOGIQUE DES SUGGESTIONS ---
+
+    def _get_suggestions(self, text):
+        """Récupère les pseudos correspondants dans la DB."""
+        if not text or len(text) < 1: return []
+        try:
+            # On cherche dans la table 'targets' par pseudo
+            rows = self.controller.db.query(
+                "SELECT pseudo FROM targets WHERE pseudo LIKE ? LIMIT 8", 
+                (text.upper() + '%',)
+            )
+            return [r[0] for r in rows]
+        except:
+            return []
+
+    def _on_key_release(self, event, entry_widget):
+        val = entry_widget.get().strip()
+        
+        # Si le champ est vide, on ferme et on arrête
+        if not val:
+            self._close_popup()
+            return
+
+        # Ignorer les touches de navigation
+        if event.keysym in ("Down", "Up", "Return", "Escape", "Tab"):
+            return
+
+        suggestions = self._get_suggestions(val)
+
+        if suggestions:
+            self._show_popup(entry_widget, suggestions)
+        else:
+            self._close_popup()
+
+    def _show_popup(self, entry_widget, items):
+        # Fermer l'ancien si existant
+        self._close_popup()
+
+        # Créer la fenêtre flottante
+        self._suggestion_popup = tk.Toplevel(self)
+        self._suggestion_popup.wm_overrideredirect(True)
+        self._suggestion_popup.attributes("-topmost", True)
+
+        # Calcul de position
+        x = entry_widget.winfo_rootx()
+        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        w = entry_widget.winfo_width()
+        
+        # Style Drake pour la Listbox
+        lb = tk.Listbox(
+            self._suggestion_popup, 
+            bg=DrakeConfig.BG_PANEL, 
+            fg=DrakeConfig.TEXT_MAIN,
+            font=(DrakeConfig.FONT_LOGS[0], 10),
+            selectbackground=DrakeConfig.ACCENT_PRIMARY,
+            selectforeground=DrakeConfig.BG_MAIN,
+            highlightthickness=1,
+            highlightbackground=DrakeConfig.BORDER_COLOR,
+            bd=0,
+            activestyle="none"
+        )
+        for item in items:
+            lb.insert(tk.END, item)
+        lb.pack(fill="both", expand=True)
+
+        self._suggestion_popup.geometry(f"{w}x{len(items)*22}+{x}+{y}")
+        
+        # Sélection lors du clic
+        lb.bind("<ButtonRelease-1>", lambda e: self._select_item(entry_widget, lb))
+        self._suggestion_owner = entry_widget
+
+    def _select_item(self, entry_widget, listbox):
+        selection = listbox.curselection()
+        if selection:
+            value = listbox.get(selection[0])
+            entry_widget.delete(0, "end")
+            entry_widget.insert(0, value)
+        self._close_popup()
+
+    def _on_focus_out(self, event):
+        # On attend un peu pour voir si le clic va vers la listbox
+        self.after(200, self._close_popup)
+
+    def _close_popup(self):
+        if self._suggestion_popup:
+            self._suggestion_popup.destroy()
+            self._suggestion_popup = None
+            self._suggestion_owner = None

@@ -3,7 +3,6 @@ from views.main_view import MainView
 from controllers import AppController
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
 
-
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
