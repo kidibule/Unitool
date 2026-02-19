@@ -275,5 +275,4 @@ class ScannerFrame(ctk.CTkFrame):
                     pass
             except Exception as e:
                 DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=self)
-        
 

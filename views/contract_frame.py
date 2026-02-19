@@ -9,11 +9,12 @@ class ContractFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller  # C'est l'AppController
+        
 
         # --- Variables de gestion du popup ---
         self._suggestion_popup = None
         self._suggestion_owner = None
-
+        self.winfo_toplevel().bind("<Configure>", self._update_popup_pos, add="+")
         # --- TITRE ---
         DrakeConfig.create_title(self, "BOUNTY BOARD")
 
@@ -95,6 +96,7 @@ class ContractFrame(ctk.CTkFrame):
         # --- INITIALISATION ---
         self.refresh()
         self.update_type_menu()
+        self.winfo_toplevel().bind("<Configure>", self._update_popup_pos, add="+")
 
     def refresh(self):
         """Rafraîchit l'UI via le sub-controller 'contract'."""
@@ -181,15 +183,40 @@ class ContractFrame(ctk.CTkFrame):
 
     def _show_popup(self, entry_widget, items):
         self._close_popup()
+
+        # CRUCIAL : Force Windows à calculer la position réelle du widget
+        self.update_idletasks()
+
         self._suggestion_popup = tk.Toplevel(self)
         self._suggestion_popup.wm_overrideredirect(True)
         self._suggestion_popup.attributes("-topmost", True)
-        x, y = entry_widget.winfo_rootx(), entry_widget.winfo_rooty() + entry_widget.winfo_height()
-        lb = tk.Listbox(self._suggestion_popup, bg=DrakeConfig.BG_PANEL, fg=DrakeConfig.TEXT_MAIN, bd=0)
-        for item in items: lb.insert(tk.END, item)
+
+        # Calcul de position
+        x = entry_widget.winfo_rootx()
+        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        w = entry_widget.winfo_width()
+        
+        lb = tk.Listbox(
+            self._suggestion_popup, 
+            bg=DrakeConfig.BG_PANEL, 
+            fg=DrakeConfig.TEXT_MAIN,
+            font=(DrakeConfig.FONT_LOGS[0], 10),
+            selectbackground=DrakeConfig.ACCENT_PRIMARY,
+            selectforeground=DrakeConfig.BG_MAIN,
+            highlightthickness=1,
+            highlightbackground=DrakeConfig.BORDER_COLOR,
+            bd=0,
+            activestyle="none"
+        )
+        for item in items:
+            lb.insert(tk.END, item)
         lb.pack(fill="both", expand=True)
-        self._suggestion_popup.geometry(f"{entry_widget.winfo_width()}x{len(items)*22}+{x}+{y}")
+
+        # On définit la taille et la position
+        self._suggestion_popup.geometry(f"{w}x{len(items)*22}+{x}+{y}")
+        
         lb.bind("<ButtonRelease-1>", lambda e: self._select_item(entry_widget, lb))
+        self._suggestion_owner = entry_widget
 
     def _select_item(self, entry_widget, listbox):
         selection = listbox.curselection()
@@ -200,8 +227,20 @@ class ContractFrame(ctk.CTkFrame):
 
     def _on_focus_out(self, event):
         self.after(200, self._close_popup)
+    
+    def _update_popup_pos(self, event=None):
+        """Recalcule la position du popup si la fenêtre principale bouge."""
+        if self._suggestion_popup and self._suggestion_owner:
+            # On récupère les nouvelles coordonnées du champ (owner)
+            x = self._suggestion_owner.winfo_rootx()
+            y = self._suggestion_owner.winfo_rooty() + self._suggestion_owner.winfo_height()
+            w = self._suggestion_owner.winfo_width()
+            
+            # On applique la nouvelle géométrie
+            self._suggestion_popup.geometry(f"{w}x{self._suggestion_popup.winfo_height()}+{x}+{y}")
 
     def _close_popup(self):
         if self._suggestion_popup:
             self._suggestion_popup.destroy()
             self._suggestion_popup = None
+            self._suggestion_owner = None
