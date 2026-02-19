@@ -10,6 +10,7 @@ import csv
 
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
+from utils import format_int_with_dots
 
 
 # Paramètres d'entrée réutilisables pour les widgets
@@ -291,7 +292,7 @@ class ScannerFrame(ctk.CTkFrame):
                             icon = "✔" if status == "CLOSED" else "○"
                             tag = "closed_contract" if status == "CLOSED" else "open_contract"
                             self.results.insert("end", f"       {icon} ")
-                            self.results.insert("end", f"# {status} | {ctype} | {client} | {reward} aUEC | {date_c}\n", (tag,))
+                            self.results.insert("end", f"# {status} | {ctype} | {client} | {format_int_with_dots(reward)} aUEC | {date_c}\n", (tag,))
 
                     if client_contracts:
                         self.results.insert("end", f"     -> En tant que CLIENT:\n")
@@ -306,7 +307,7 @@ class ScannerFrame(ctk.CTkFrame):
                             icon = "✔" if status == "CLOSED" else "○"
                             tag = "closed_contract" if status == "CLOSED" else "open_contract"
                             self.results.insert("end", f"       {icon} ")
-                            self.results.insert("end", f"# {status} | {ctype} | {target_c} | {reward} aUEC | {date_c}\n", (tag,))
+                            self.results.insert("end", f"# {status} | {ctype} | {target_c} | {format_int_with_dots(reward)} aUEC | {date_c}\n", (tag,))
 
                 self.results.insert("end", f"{'-'*45}\n")
 

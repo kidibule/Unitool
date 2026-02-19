@@ -3,6 +3,7 @@
 import customtkinter as ctk
 from datetime import datetime
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
+from utils import format_int_with_dots
 
 
 class ContractFrame(ctk.CTkFrame):
@@ -215,7 +216,7 @@ class ContractFrame(ctk.CTkFrame):
 
             ctk.CTkLabel(
                 f,
-                text=f"🎯 {row[1]} | {row[3]} aUEC",
+                text=f"🎯 {row[1]} | {format_int_with_dots(row[3])} aUEC",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_MAIN,
             ).pack(side="left", padx=5)
@@ -237,12 +238,12 @@ class ContractFrame(ctk.CTkFrame):
             f.pack(pady=1, fill="x", padx=5)
 
             try:
-                total_gains += int(str(row[3]).replace(" ", "").replace(",", ""))
+                total_gains += int(str(row[3]).replace(" ", "").replace(".", "").replace(",", ""))
             except:
                 pass
 
             c_type = row[7] if len(row) > 7 and row[7] else "MISC"
-            txt = f">> {row[5]} | COMPLETED: {row[1]} | RECEIVED: {row[3]} aUEC"
+            txt = f">> {row[5]} | COMPLETED: {row[1]} | RECEIVED: {format_int_with_dots(row[3])} aUEC"
             ctk.CTkLabel(
                 f,
                 text=txt,
@@ -262,7 +263,7 @@ class ContractFrame(ctk.CTkFrame):
             ).pack(side="right", padx=5)
 
         self.stats_label.configure(
-            text=f"TOTAL COLLECTED : {total_gains:,} aUEC".replace(",", " ")
+            text=f"TOTAL COLLECTED : {format_int_with_dots(total_gains)} aUEC"
         )
 
     def complete_contract(self, cid, target):
@@ -294,7 +295,7 @@ class ContractFrame(ctk.CTkFrame):
 
         # --- LOG DANS LE PANNEAU DE DROITE ---
         # On utilise reward_value qu'on a récupéré au début
-        msg = f"MISSION ACCOMPLISHED >> {target} | +{reward_value} aUEC"
+        msg = f"MISSION ACCOMPLISHED >> {target} | +{format_int_with_dots(reward_value)} aUEC"
         if hasattr(self.controller, "log"):
             self.controller.log(msg, source="FINANCE")
 
@@ -331,7 +332,7 @@ class ContractFrame(ctk.CTkFrame):
         )
         if row:
             self.reward_in.delete(0, "end")
-            self.reward_in.insert(0, row[0][0])
+            self.reward_in.insert(0, format_int_with_dots(row[0][0]))
 
     def open_type_manager(self):
         toplevel = ctk.CTkToplevel(self)
@@ -405,7 +406,7 @@ class ContractFrame(ctk.CTkFrame):
                 f = ctk.CTkFrame(scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
                 f.pack(fill="x", pady=2)
                 ctk.CTkLabel(
-                    f, text=f"{row[0]} >> {row[1]} aUEC", font=DrakeConfig.FONT_LOGS
+                    f, text=f"{row[0]} >> {format_int_with_dots(row[1])} aUEC", font=DrakeConfig.FONT_LOGS
                 ).pack(side="left", padx=10)
                 ctk.CTkButton(
                     f,

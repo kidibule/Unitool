@@ -120,7 +120,7 @@ class MainView(ctk.CTkFrame):
 
         # Widgets de statistiques
         self.stat_targets = self.create_stat_widget("KNOWN CONTACTS", "0")
-        self.stat_threats = self.create_stat_widget("THREAT LEVEL", "0")
+        self.stat_active_contracts = self.create_stat_widget("ACTIVE CONTRACTS", "0")
 
         # --- CENTRAL LOG TERMINAL (HUD DROITE) ---
         ctk.CTkLabel(
@@ -182,14 +182,22 @@ class MainView(ctk.CTkFrame):
             rows = self.controller.db.query("SELECT alignment, ship FROM targets")
 
             total = len(rows)
-            enemies = sum(1 for r in rows if r[0] == "ENNEMI" or r[0] == "PIRATE")
+
+            # Count open contracts in the system (status not CLOSED)
+            open_contracts = 0
+            try:
+                res = self.controller.db.query("SELECT COUNT(*) FROM contracts WHERE status!='CLOSED'")
+                if res and len(res) > 0:
+                    open_contracts = int(res[0][0])
+            except Exception:
+                open_contracts = 0
 
             self.stat_targets.configure(text=f"{total:03d}")  # Format 001, 002...
-            self.stat_threats.configure(
-                text=f"{enemies:03d}",
+            self.stat_active_contracts.configure(
+                text=f"{open_contracts:03d}",
                 text_color=(
                     DrakeConfig.ACCENT_ERROR
-                    if enemies > 0
+                    if open_contracts > 0
                     else DrakeConfig.ACCENT_PRIMARY
                 ),
             )
