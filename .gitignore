@@ -8,3 +8,4 @@ unitool_data.db
 # Environnement virtuel (si tu en crées un plus tard)
 venv/
 .env
+unitool.log
