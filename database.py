@@ -46,6 +46,80 @@ class Database:
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS contract_types 
             (name TEXT PRIMARY KEY, reward TEXT)""")
 
+        # Table for ships (single registry of known ships)
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS ships (
+                name TEXT PRIMARY KEY,
+                brand TEXT,
+                role TEXT,
+                career TEXT,
+                size TEXT,
+                crew_size INTEGER DEFAULT 0,
+                scm_speed TEXT,
+                scm_boost_forward TEXT,
+                scm_boost_backward TEXT,
+                nav_max_speed TEXT,
+                pitch TEXT,
+                yaw TEXT,
+                roll TEXT,
+                boosted TEXT,
+                power_consumption TEXT,
+                cm_decoy_noise TEXT,
+                hp INTEGER DEFAULT 0,
+                cargo TEXT,
+                dimensions TEXT,
+                mass TEXT,
+                hydrogen_capacity TEXT,
+                qt_fuel_capacity TEXT,
+                expedition_fee TEXT,
+                claim_time TEXT,
+                expedite_time TEXT
+            )"""
+        )
+
+        # Ensure legacy DBs get new ship columns if missing
+        ship_columns = [
+            ("brand", "TEXT"),
+            ("role", "TEXT"),
+            ("career", "TEXT"),
+            ("size", "TEXT"),
+            ("crew_size", "INTEGER DEFAULT 0"),
+            ("scm_speed", "TEXT"),
+            ("scm_boost_forward", "TEXT"),
+            ("scm_boost_backward", "TEXT"),
+            ("nav_max_speed", "TEXT"),
+            ("pitch", "TEXT"),
+            ("yaw", "TEXT"),
+            ("roll", "TEXT"),
+            ("boosted", "TEXT"),
+            ("power_consumption", "TEXT"),
+            ("cm_decoy_noise", "TEXT"),
+            ("hp", "INTEGER DEFAULT 0"),
+            ("cargo", "TEXT"),
+            ("dimensions", "TEXT"),
+            ("mass", "TEXT"),
+            ("hydrogen_capacity", "TEXT"),
+            ("qt_fuel_capacity", "TEXT"),
+            ("expedition_fee", "TEXT"),
+            ("claim_time", "TEXT"),
+            ("expedite_time", "TEXT"),
+        ]
+
+        for col_name, col_type in ship_columns:
+            try:
+                self.cursor.execute(f"ALTER TABLE ships ADD COLUMN {col_name} {col_type}")
+            except Exception:
+                pass
+
+        # Table linking players to multiple ships (used by add_ship/get_ships)
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS player_ships (
+                pseudo TEXT,
+                ship TEXT,
+                PRIMARY KEY (pseudo, ship)
+            )"""
+        )
+
         self.conn.commit()
 
     def query(self, sql, params=()):
