@@ -90,9 +90,25 @@ class Contract(BaseModel):
         return priority_map.get(self.priority, 1)
 
     @classmethod
-    def from_db_row(cls, row: tuple):
-        """Crée une instance à partir d'une row de DB."""
-        return cls.from_tuple(row, cls.COLUMNS)
+    def from_db_row(cls, row):
+        """Transforme une ligne SQL en objet Contract."""
+        if not row:
+            return None
+        
+        # On crée un dictionnaire pour mapper les colonnes
+        # Assure-toi que cls.COLUMNS correspond bien à l'ordre de ta DB
+        data = dict(zip(cls.COLUMNS, row))
+        
+        return cls(
+            id=data.get("id"),
+            target=data.get("target"),
+            client=data.get("client"),
+            reward=data.get("reward"),
+            status=data.get("status"),
+            date=data.get("date"),
+            priority=data.get("priority"),
+            contract_type=data.get("contract_type")
+        )
 
     def to_db_tuple(self) -> tuple:
         """Convertit en tuple pour insertion/update DB."""

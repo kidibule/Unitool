@@ -123,8 +123,32 @@ class Target(BaseModel):
 
     @classmethod
     def from_db_row(cls, row: tuple):
-        """Crée une instance à partir d'une row de DB."""
-        return cls.from_tuple(row, cls.COLUMNS)
+        """Crée une instance à partir d'une row de DB de manière sécurisée."""
+        if not row:
+            return None
+        
+        # Associe les noms de colonnes aux valeurs du tuple
+        data = dict(zip(cls.COLUMNS, row))
+        
+        # Instanciation explicite
+        return cls(
+            pseudo=data.get("pseudo"),
+            org=data.get("org", ""),
+            ship=data.get("ship", ""),
+            threat=data.get("threat", "LOW"),
+            notes=data.get("notes", ""),
+            date=data.get("date"),
+            wins=data.get("wins", 0),
+            losses=data.get("losses", 0),
+            alignment=data.get("alignment", "NEUTRE"),
+            pvp_lvl=data.get("pvp_lvl", "Inconnu"),
+            activity=data.get("activity", "Inconnu"),
+            sid=data.get("sid", "N/A"),
+            org_rank=data.get("org_rank", "N/A"),
+            enlisted_date=data.get("enlisted_date", "N/A"),
+            language=data.get("language", "N/A"),
+            affiliates=data.get("affiliates", "NONE")
+        )
 
     def to_db_tuple(self) -> tuple:
         """Convertit en tuple pour insertion/update DB."""

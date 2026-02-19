@@ -2,20 +2,13 @@
 
 import customtkinter as ctk
 import tkinter as tk
-from datetime import datetime
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal
+from drake_ui.engine import DrakeConfig, DrakeButton
 from utils import format_int_with_dots
 
-
 class ContractFrame(ctk.CTkFrame):
-    """Gestionnaire de contrats (ajout, fermeture, historique).
-
-    Le `controller` doit exposer `db` avec `cursor` et `conn`.
-    """
-
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
-        self.controller = controller
+        self.controller = controller  # C'est l'AppController
 
         # --- Variables de gestion du popup ---
         self._suggestion_popup = None
@@ -24,7 +17,7 @@ class ContractFrame(ctk.CTkFrame):
         # --- TITRE ---
         DrakeConfig.create_title(self, "BOUNTY BOARD")
 
-       # --- FORMULAIRE D'AJOUT ---
+        # --- FORMULAIRE D'AJOUT ---
         f_add = ctk.CTkFrame(self, fg_color=DrakeConfig.BG_PANEL, corner_radius=0, 
                              border_width=1, border_color=DrakeConfig.BORDER_COLOR)
         f_add.pack(pady=5, padx=20, fill="x")
@@ -37,472 +30,178 @@ class ContractFrame(ctk.CTkFrame):
             "height": 30,
         }
 
-        # Champ TARGET
         self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs)
         self.target_in.pack(side="left", padx=10, pady=15)
         self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
         self.target_in.bind("<FocusOut>", self._on_focus_out)
 
-        # Champ CLIENT
         self.client_in = ctk.CTkEntry(f_add, placeholder_text="CLIENT ID", width=150, **entry_kwargs)
         self.client_in.pack(side="left", padx=10, pady=15)
         self.client_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.client_in))
         self.client_in.bind("<FocusOut>", self._on_focus_out)
+        
+        self.reward_in = ctk.CTkEntry(f_add, placeholder_text="REWARD", width=120, **entry_kwargs)
+        self.reward_in.pack(side="left", padx=10, pady=15)
 
-        # Menu Type
-        self.type_var = ctk.StringVar(value="TYPE")  # Valeur par défaut
+        self.type_var = ctk.StringVar(value="TYPE")
         self.type_menu = ctk.CTkOptionMenu(
-            f_add,
-            variable=self.type_var,
-            width=100,
-            fg_color=DrakeConfig.BG_MAIN,
+            f_add, variable=self.type_var, width=100,
+            fg_color=DrakeConfig.BG_MAIN, 
             button_color=DrakeConfig.BORDER_COLOR,
-            button_hover_color=DrakeConfig.ACCENT_HOVER,
-            text_color=DrakeConfig.TEXT_MAIN,
+            button_hover_color=DrakeConfig.ACCENT_PRIMARY,
             dropdown_fg_color=DrakeConfig.BG_PANEL,
+            dropdown_hover_color=DrakeConfig.ACCENT_PRIMARY,
             dropdown_text_color=DrakeConfig.TEXT_MAIN,
-            font=DrakeConfig.FONT_LOGS,
-            corner_radius=0,
-            values=[],  # Sera rempli par update_type_menu sans le mot "TYPE"
-            command=self.apply_type,
+            values=[], command=self.apply_type, corner_radius=0
         )
         self.type_menu.pack(side="left", padx=5)
 
-        # Menu Priorité
         self.prio_var = ctk.StringVar(value="MEDIUM")
         self.prio_menu = ctk.CTkOptionMenu(
-            f_add,
-            variable=self.prio_var,
-            width=100,
+            f_add, variable=self.prio_var, width=100,
             fg_color=DrakeConfig.BG_MAIN,
             button_color=DrakeConfig.BORDER_COLOR,
-            text_color=DrakeConfig.TEXT_MAIN,
-            corner_radius=0,
-            values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+            button_hover_color=DrakeConfig.ACCENT_PRIMARY,
+            dropdown_fg_color=DrakeConfig.BG_PANEL,
+            dropdown_hover_color=DrakeConfig.ACCENT_PRIMARY,
+            dropdown_text_color=DrakeConfig.TEXT_MAIN,
+            values=["LOW", "MEDIUM", "HIGH", "CRITICAL"], corner_radius=0
         )
+
         self.prio_menu.pack(side="left", padx=5)
 
-        # Bouton Accepter (Drake Style)
-        DrakeButton(
-            f_add, text="ACCEPT CONTRACT", width=150, command=self.add_contract
-        ).pack(side="left", padx=15)
+        DrakeButton(f_add, text="ACCEPT CONTRACT", width=150, command=self.add_contract).pack(side="left", padx=15)
 
-        # Gestion des Types (Petit bouton discret)
-        ctk.CTkButton(
-            self,
-            text="EDIT TYPES",
-            command=self.open_type_manager,
-            fg_color="transparent",
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
-            text_color=DrakeConfig.TEXT_SECONDARY,
-            hover_color=DrakeConfig.BG_PANEL,
-            width=80,
-            height=20,
-            font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="ne", padx=20)
-
-        # --- SECTION MISSIONS ACTIVES ---
+        # --- SECTIONS DE LISTES ---
         self.active_scroll = ctk.CTkScrollableFrame(
-            self,
-            label_text="ACTIVE MISSIONS / URGENT TASKS",
-            label_font=DrakeConfig.FONT_UI,
-            label_fg_color=DrakeConfig.BG_PANEL,
-            label_text_color=DrakeConfig.ACCENT_PRIMARY,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            corner_radius=0,
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
+            self, label_text="ACTIVE MISSIONS / URGENT TASKS",
+            label_font=DrakeConfig.FONT_UI, label_fg_color=DrakeConfig.BG_PANEL,
+            label_text_color=DrakeConfig.ACCENT_PRIMARY, fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0, border_width=1, border_color=DrakeConfig.BORDER_COLOR
         )
         self.active_scroll.pack(pady=10, padx=20, fill="both", expand=True)
 
-        # --- STATS & HISTORIQUE ---
-        self.stats_label = ctk.CTkLabel(
-            self,
-            text="TOTAL COLLECTED : 0 aUEC",
-            font=DrakeConfig.FONT_UI,
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-        )
+        self.stats_label = ctk.CTkLabel(self, text="TOTAL COLLECTED : 0 aUEC", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY)
         self.stats_label.pack(pady=(10, 0))
 
         self.history_scroll = ctk.CTkScrollableFrame(
-            self,
-            label_text="TRANSACTION LOGS / COMPLETED",
-            label_font=DrakeConfig.FONT_UI,
-            label_fg_color=DrakeConfig.BG_PANEL,
-            label_text_color=DrakeConfig.TEXT_SECONDARY,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            corner_radius=0,
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
+            self, label_text="TRANSACTION LOGS / COMPLETED",
+            label_font=DrakeConfig.FONT_UI, label_fg_color=DrakeConfig.BG_PANEL,
+            label_text_color=DrakeConfig.TEXT_SECONDARY, fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0, border_width=1, border_color=DrakeConfig.BORDER_COLOR
         )
         self.history_scroll.pack(pady=10, padx=20, fill="both", expand=True)
 
+        # --- INITIALISATION ---
         self.refresh()
         self.update_type_menu()
 
-    def add_contract(self):
-        target = self.target_in.get().strip().upper()
-        if target:
-            reward = self.reward_in.get().strip()
-            if not reward and self.type_var.get() != "TYPE":
-                row = self.controller.db.query(
-                    "SELECT reward FROM contract_types WHERE name=?",
-                    (self.type_var.get(),),
-                )
-                if row:
-                    reward = row[0][0]
-
-            c_type = self.type_var.get()
-            if c_type == "TYPE":
-                c_type = None
-
-            self.controller.db.cursor.execute(
-                "INSERT INTO contracts (target, client, reward, date, status, priority, contract_type) VALUES (?,?,?,?,'OPEN',?,?)",
-                (
-                    target,
-                    self.client_in.get().upper(),
-                    reward,
-                    datetime.now().strftime("%d/%m %H:%M"),
-                    self.prio_var.get(),
-                    c_type,
-                ),
-            )
-            self.controller.db.conn.commit()
-            msg = f"CONTRACT REGISTERED: {target} | PRIO: {self.prio_var.get()}"
-            if hasattr(self.controller, "log"):
-                self.controller.log(msg, source="DECK")
-            self.refresh()
-            self.target_in.delete(0, "end")
-            self.client_in.delete(0, "end")
-            self.reward_in.delete(0, "end")
-
     def refresh(self):
-        for w in self.active_scroll.winfo_children():
-            w.destroy()
-        for w in self.history_scroll.winfo_children():
-            w.destroy()
+        """Rafraîchit l'UI via le sub-controller 'contract'."""
+        for scroll in [self.active_scroll, self.history_scroll]:
+            for w in scroll.winfo_children(): w.destroy()
 
-        total_gains = 0
+        # Accès via self.controller.contract
+        for c in self.controller.contract.get_active_contracts_as_models():
+            self._draw_active_row(c)
 
-        # 1. Missions OPEN
-        self.controller.db.cursor.execute(
-            "SELECT * FROM contracts WHERE status='OPEN' ORDER BY id DESC"
+        for c in self.controller.contract.get_closed_contracts_as_models():
+            self._draw_history_row(c)
+            
+        total = self.controller.contract.get_total_gains()
+        self.stats_label.configure(text=f"TOTAL COLLECTED : {format_int_with_dots(total)} aUEC")
+
+    def _draw_active_row(self, c):
+        f = ctk.CTkFrame(self.active_scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
+        f.pack(pady=2, fill="x", padx=5)
+
+        colors = {"LOW": "#aaaaaa", "MEDIUM": DrakeConfig.ACCENT_PRIMARY, "HIGH": "#ff6600", "CRITICAL": DrakeConfig.ACCENT_ERROR}
+        p_color = colors.get(c.priority, DrakeConfig.TEXT_MAIN)
+
+        ctk.CTkLabel(f, text=f"[{c.priority[:3]}] {c.contract_type or 'TASK'}", 
+                     font=DrakeConfig.FONT_LOGS, text_color=p_color).pack(side="left", padx=10)
+        
+        ctk.CTkLabel(f, text=f"🎯 {c.target} | {format_int_with_dots(c.reward)} aUEC", 
+                     font=DrakeConfig.FONT_LOGS).pack(side="left", padx=5)
+
+        DrakeButton(f, text="CLOSE", width=60, height=24, 
+                    command=lambda: self.complete_contract(c.id, c.target)).pack(side="right", padx=10)
+
+    def _draw_history_row(self, c):
+        f = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
+        f.pack(pady=1, fill="x", padx=5)
+        txt = f">> {c.priority} | COMPLETED: {c.target} | RECEIVED: {format_int_with_dots(c.reward)} aUEC"
+        ctk.CTkLabel(f, text=txt, font=DrakeConfig.FONT_LOGS, text_color=DrakeConfig.TEXT_SECONDARY).pack(side="left", padx=10)
+        ctk.CTkButton(f, text="[DEL]", fg_color="transparent", text_color="#444", hover_color=DrakeConfig.ACCENT_ERROR,
+                      width=20, height=18, command=lambda: self.delete_history(c.id)).pack(side="right", padx=5)
+
+    def add_contract(self):
+        target = self.target_in.get().strip()
+        if not target: return
+        
+        self.controller.contract.add_contract(
+            target=target,
+            client=self.client_in.get().strip(),
+            reward=self.reward_in.get().strip(),
+            priority=self.prio_var.get(),
+            contract_type=None if self.type_var.get() == "TYPE" else self.type_var.get()
         )
-        for row in self.controller.db.cursor.fetchall():
-            f = ctk.CTkFrame(
-                self.active_scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0
-            )
-            f.pack(pady=2, fill="x", padx=5)
-
-            prio = row[6] if len(row) > 6 else "MEDIUM"
-            colors = {
-                "LOW": "#aaaaaa",
-                "MEDIUM": DrakeConfig.ACCENT_PRIMARY,
-                "HIGH": "#ff6600",
-                "CRITICAL": DrakeConfig.ACCENT_ERROR,
-            }
-            p_color = colors.get(prio, DrakeConfig.TEXT_MAIN)
-
-            ctk.CTkLabel(
-                f,
-                text=f"[{prio[:3]}] {row[5] if row[5] else 'TASK'}",
-                font=DrakeConfig.FONT_LOGS,
-                text_color=p_color,
-            ).pack(side="left", padx=10)
-
-            ctk.CTkLabel(
-                f,
-                text=f"🎯 {row[1]} | {format_int_with_dots(row[3])} aUEC",
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_MAIN,
-            ).pack(side="left", padx=5)
-
-            DrakeButton(
-                f,
-                text="CLOSE",
-                width=60,
-                height=24,
-                command=lambda cid=row[0], tgt=row[1]: self.complete_contract(cid, tgt),
-            ).pack(side="right", padx=10)
-
-        # 2. Historique CLOSED
-        self.controller.db.cursor.execute(
-            "SELECT * FROM contracts WHERE status='CLOSED' ORDER BY id DESC"
-        )
-        for row in self.controller.db.cursor.fetchall():
-            f = ctk.CTkFrame(self.history_scroll, fg_color="transparent")
-            f.pack(pady=1, fill="x", padx=5)
-
-            try:
-                total_gains += int(str(row[3]).replace(" ", "").replace(".", "").replace(",", ""))
-            except:
-                pass
-
-            c_type = row[7] if len(row) > 7 and row[7] else "MISC"
-            txt = f">> {row[5]} | COMPLETED: {row[1]} | RECEIVED: {format_int_with_dots(row[3])} aUEC"
-            ctk.CTkLabel(
-                f,
-                text=txt,
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_SECONDARY,
-            ).pack(side="left", padx=10)
-
-            ctk.CTkButton(
-                f,
-                text="[DEL]",
-                fg_color="transparent",
-                text_color="#444",
-                hover_color=DrakeConfig.ACCENT_ERROR,
-                width=20,
-                height=18,
-                command=lambda cid=row[0]: self.delete_history(cid),
-            ).pack(side="right", padx=5)
-
-        self.stats_label.configure(
-            text=f"TOTAL COLLECTED : {format_int_with_dots(total_gains)} aUEC"
-        )
+        self.refresh()
+        for e in [self.target_in, self.client_in, self.reward_in]: e.delete(0, "end")
 
     def complete_contract(self, cid, target):
-        # 1. On récupère d'abord le montant pour le log
-        self.controller.db.cursor.execute(
-            "SELECT reward FROM contracts WHERE id=?", (cid,)
-        )
-        res = self.controller.db.cursor.fetchone()
-        # Si res existe, on prend la valeur, sinon on met "0" par sécurité
-        reward_value = res[0] if res else "0"
-
-        # 2. On met à jour le statut du contrat
-        self.controller.db.cursor.execute(
-            "UPDATE contracts SET status='CLOSED' WHERE id=?", (cid,)
-        )
-
-        # 3. On met à jour les stats de la cible (ton code existant)
-        self.controller.db.cursor.execute(
-            "UPDATE targets SET wins = wins + 1 WHERE pseudo=?", (target,)
-        )
-
-        if self.controller.db.cursor.rowcount == 0:
-            self.controller.db.cursor.execute(
-                "INSERT INTO targets (pseudo, wins, date, alignment) VALUES (?,?,?,'ENNEMI')",
-                (target, 1, datetime.now().strftime("%d/%m/%y")),
-            )
-
-        self.controller.db.conn.commit()
-
-        # --- LOG DANS LE PANNEAU DE DROITE ---
-        # On utilise reward_value qu'on a récupéré au début
-        msg = f"MISSION ACCOMPLISHED >> {target} | +{format_int_with_dots(reward_value)} aUEC"
-        if hasattr(self.controller, "log"):
-            self.controller.log(msg, source="FINANCE")
-
-        # 4. Rafraîchissement de l'UI
+        self.controller.contract.complete_contract(cid, target)
         self.refresh()
-
-        if hasattr(self.controller, "view") and hasattr(
-            self.controller.view, "refresh_intel"
-        ):
+        if hasattr(self.controller, "view") and hasattr(self.controller.view, "refresh_intel"):
             self.controller.view.refresh_intel()
 
     def delete_history(self, cid):
-        self.controller.db.cursor.execute("DELETE FROM contracts WHERE id=?", (cid,))
-        self.controller.db.conn.commit()
-        if hasattr(self.controller, "log"):
-            self.controller.log(f"TRANSACTION PURGED FROM LOGS (ID: {cid})", source="SYS")
+        self.controller.contract.delete_contract(cid)
         self.refresh()
 
     def update_type_menu(self):
-        try:
-            types = self.controller.db.query("SELECT name FROM contract_types")
-            # On ne met QUE les noms des types, pas le mot "TYPE"
-            values = [t[0] for t in types]
-            self.type_menu.configure(values=values)
-            self.type_var.set("TYPE")  # Mais on garde "TYPE" à l'affichage initial
-        except:
-            pass
+        types = self.controller.contract.get_contract_types()
+        self.type_menu.configure(values=[t[0] for t in types])
 
     def apply_type(self, choice):
-        if choice == "TYPE":
-            return
-        row = self.controller.db.query(
-            "SELECT reward FROM contract_types WHERE name=?", (choice,)
-        )
-        if row:
+        if choice == "TYPE": return
+        reward = self.controller.contract.get_contract_reward_for_type(choice)
+        if reward:
             self.reward_in.delete(0, "end")
-            self.reward_in.insert(0, format_int_with_dots(row[0][0]))
-
-    def open_type_manager(self):
-        toplevel = ctk.CTkToplevel(self)
-        toplevel.title("TYPE MANAGER")
-        toplevel.geometry("450x400")
-        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
-        toplevel.transient(self)
-        toplevel.grab_set()
-
-        ctk.CTkLabel(
-            toplevel,
-            text="REGISTER NEW CONTRACT TYPE",
-            font=DrakeConfig.FONT_UI,
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-        ).pack(pady=10)
-
-        f_in = ctk.CTkFrame(toplevel, fg_color="transparent")
-        f_in.pack(pady=5)
-
-        n_entry = ctk.CTkEntry(
-            f_in, placeholder_text="CODE (ex: VHRT)", fg_color=DrakeConfig.BG_TERMINAL
-        )
-        n_entry.pack(side="left", padx=5)
-        r_entry = ctk.CTkEntry(
-            f_in, placeholder_text="REWARD", width=100, fg_color=DrakeConfig.BG_TERMINAL
-        )
-        r_entry.pack(side="left", padx=5)
-
-        def add():
-            n, r = n_entry.get().strip().upper(), r_entry.get().strip()
-            if n and r:
-                try:
-                    self.controller.db.commit(
-                        "INSERT INTO contract_types VALUES (?,?)", (n, r)
-                    )
-                    msg = f"NEW CONTRACT TYPE REGISTERED: {n} ({r} aUEC)"
-                    if hasattr(self.controller, "log"):
-                        self.controller.log(msg, source="SYS_CFG")
-                    refresh_list()
-                    self.update_type_menu()
-                    n_entry.delete(0, "end")
-                    r_entry.delete(0, "end")
-                except Exception as e:
-                    # Log d'erreur si le type existe déjà par exemple
-                    if hasattr(self.controller, "log"):
-                        self.controller.log(f"CONFIG ERROR: TYPE {n} ALREADY EXISTS", source="ERROR")
-
-        DrakeButton(f_in, text="+", width=40, command=add).pack(side="left", padx=5)
-
-        scroll = ctk.CTkScrollableFrame(
-            toplevel,
-            label_text="REGISTERED TYPES",
-            fg_color=DrakeConfig.BG_TERMINAL,
-            label_text_color=DrakeConfig.TEXT_SECONDARY,
-        )
-        scroll.pack(fill="both", expand=True, padx=10, pady=10)
-
-        def delete(name):
-            self.controller.db.commit(
-                "DELETE FROM contract_types WHERE name=?", (name,)
-            )
-            if hasattr(self.controller, "log"):
-                self.controller.log(f"CONTRACT TYPE DELETED: {name}", source="SYS_CFG")
-            refresh_list()
-            self.update_type_menu()
-
-        def refresh_list():
-            for w in scroll.winfo_children():
-                w.destroy()
-            for row in self.controller.db.query("SELECT * FROM contract_types"):
-                f = ctk.CTkFrame(scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
-                f.pack(fill="x", pady=2)
-                ctk.CTkLabel(
-                    f, text=f"{row[0]} >> {format_int_with_dots(row[1])} aUEC", font=DrakeConfig.FONT_LOGS
-                ).pack(side="left", padx=10)
-                ctk.CTkButton(
-                    f,
-                    text="REMOVE",
-                    width=60,
-                    fg_color="transparent",
-                    text_color=DrakeConfig.ACCENT_ERROR,
-                    hover_color="#330000",
-                    command=lambda n=row[0]: delete(n),
-                ).pack(side="right", padx=5)
-
-        refresh_list()
-
-
-        # --- LOGIQUE DES SUGGESTIONS ---
-
-    def _get_suggestions(self, text):
-        """Récupère les pseudos correspondants dans la DB."""
-        if not text or len(text) < 1: return []
-        try:
-            # On cherche dans la table 'targets' par pseudo
-            rows = self.controller.db.query(
-                "SELECT pseudo FROM targets WHERE pseudo LIKE ? LIMIT 8", 
-                (text.upper() + '%',)
-            )
-            return [r[0] for r in rows]
-        except:
-            return []
+            self.reward_in.insert(0, format_int_with_dots(reward))
 
     def _on_key_release(self, event, entry_widget):
         val = entry_widget.get().strip()
-        
-        # Si le champ est vide, on ferme et on arrête
-        if not val:
+        if not val or event.keysym in ("Down", "Up", "Return", "Escape"):
             self._close_popup()
             return
-
-        # Ignorer les touches de navigation
-        if event.keysym in ("Down", "Up", "Return", "Escape", "Tab"):
-            return
-
-        suggestions = self._get_suggestions(val)
-
-        if suggestions:
-            self._show_popup(entry_widget, suggestions)
-        else:
-            self._close_popup()
+        suggestions = self.controller.contract.get_suggestions(val)
+        if suggestions: self._show_popup(entry_widget, suggestions)
+        else: self._close_popup()
 
     def _show_popup(self, entry_widget, items):
-        # Fermer l'ancien si existant
         self._close_popup()
-
-        # Créer la fenêtre flottante
         self._suggestion_popup = tk.Toplevel(self)
         self._suggestion_popup.wm_overrideredirect(True)
         self._suggestion_popup.attributes("-topmost", True)
-
-        # Calcul de position
-        x = entry_widget.winfo_rootx()
-        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
-        w = entry_widget.winfo_width()
-        
-        # Style Drake pour la Listbox
-        lb = tk.Listbox(
-            self._suggestion_popup, 
-            bg=DrakeConfig.BG_PANEL, 
-            fg=DrakeConfig.TEXT_MAIN,
-            font=(DrakeConfig.FONT_LOGS[0], 10),
-            selectbackground=DrakeConfig.ACCENT_PRIMARY,
-            selectforeground=DrakeConfig.BG_MAIN,
-            highlightthickness=1,
-            highlightbackground=DrakeConfig.BORDER_COLOR,
-            bd=0,
-            activestyle="none"
-        )
-        for item in items:
-            lb.insert(tk.END, item)
+        x, y = entry_widget.winfo_rootx(), entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        lb = tk.Listbox(self._suggestion_popup, bg=DrakeConfig.BG_PANEL, fg=DrakeConfig.TEXT_MAIN, bd=0)
+        for item in items: lb.insert(tk.END, item)
         lb.pack(fill="both", expand=True)
-
-        self._suggestion_popup.geometry(f"{w}x{len(items)*22}+{x}+{y}")
-        
-        # Sélection lors du clic
+        self._suggestion_popup.geometry(f"{entry_widget.winfo_width()}x{len(items)*22}+{x}+{y}")
         lb.bind("<ButtonRelease-1>", lambda e: self._select_item(entry_widget, lb))
-        self._suggestion_owner = entry_widget
 
     def _select_item(self, entry_widget, listbox):
         selection = listbox.curselection()
         if selection:
-            value = listbox.get(selection[0])
             entry_widget.delete(0, "end")
-            entry_widget.insert(0, value)
+            entry_widget.insert(0, listbox.get(selection[0]))
         self._close_popup()
 
     def _on_focus_out(self, event):
-        # On attend un peu pour voir si le clic va vers la listbox
         self.after(200, self._close_popup)
 
     def _close_popup(self):
         if self._suggestion_popup:
             self._suggestion_popup.destroy()
             self._suggestion_popup = None
-            self._suggestion_owner = None

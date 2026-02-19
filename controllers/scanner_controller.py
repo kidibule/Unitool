@@ -86,6 +86,15 @@ class ScannerController:
             sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
             self.app.commit(sql, tuple(params))
 
+            set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
+            values = list(kwargs.values())
+            values.append(pseudo.upper()) # Pour le WHERE pseudo = ?
+
+            sql = f"UPDATE targets SET {set_clause} WHERE pseudo = ?"
+    
+    # Utilise self.app.execute ou self.app.query selon ta structure
+        return self.app.query(sql, tuple(values))
+
     def export_targets_csv(self) -> list:
         """Récupère tous les targets pour export."""
         rows = self.app.query("SELECT * FROM targets")
@@ -95,3 +104,4 @@ class ScannerController:
         except Exception:
             pass
         return rows
+
