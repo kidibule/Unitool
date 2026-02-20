@@ -36,7 +36,7 @@ class ScannerFrame(ctk.CTkFrame):
         self.btn_export = DrakeButton(header, text="EXPORT DB", command=self.export, width=100)
         self.btn_export.pack(side="right", pady=5)
 
-        self.title_label = ctk.CTkLabel(header, text="TACTICAL SCANNER", font=("Orbitron", 16, "bold"), text_color="#ff8c00")
+        self.title_label = ctk.CTkLabel(header, text="DATABASE", font=("Orbitron", 16, "bold"), text_color="#ff8c00")
         self.title_label.pack(side="left", expand=True, padx=(100, 0))
 
         self.search_entry = ctk.CTkEntry(self, placeholder_text="ENTREZ UN NOM OU UN TAG (SID)...", height=40, fg_color=DrakeConfig.BG_PANEL, border_color=DrakeConfig.ACCENT_PRIMARY, corner_radius=DrakeConfig.CORNER_RADIUS)

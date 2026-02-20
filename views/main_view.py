@@ -68,11 +68,11 @@ class MainView(ctk.CTkFrame):
         ).pack(pady=(0, 30))
 
         menu_items = [
-            ("ScannerFrame", "SCANNER"),
+            ("ScannerFrame", "DATABASE"),
+            ("ContractFrame", "CONTRATS"),
             ("LoggerFrame", "ARCHIVER"),
             ("IntelligenceFrame", "INTEL"),
-            ("ContractFrame", "CONTRATS"),
-            ("ShipFrame", "SHIPS"),
+            #("ShipFrame", "SHIPS"),
         ]
 
         # Remplacement par des boutons typés Drake

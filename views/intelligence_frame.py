@@ -42,7 +42,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.tab_player = self.tabview.add("TRACK PLAYER")
 
-        self.tab_org = self.tabview.add("RENS. ORGA")
+        self.tab_org = self.tabview.add("TRACK ORG")
 
         self.setup_player_tab()
 
@@ -119,7 +119,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.btn_save_db = DrakeButton(
             btn_f,
-            text="ENREGISTRER CONTACT",
+            text="SAVE CONTACT",
             width=150,
             fg_color="#333",
             state="disabled",
@@ -301,7 +301,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         # Reset du bouton de sauvegarde
 
         self.btn_save_db.configure(
-            state="disabled", fg_color="#333", text="ENREGISTRER CONTACT"
+            state="disabled", fg_color="#333", text="SAVE CONTACT"
         )
 
         self.last_scanned_data = None
@@ -567,7 +567,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
             sid = self.last_scanned_data["SID"]
 
-            self.tabview.set("RENS. ORGA")
+            self.tabview.set("TRACK ORG")
 
             self.ent_o.delete(0, "end")
 
