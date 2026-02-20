@@ -65,9 +65,11 @@ class ScannerFrame(ctk.CTkFrame):
     def open_rsi(self, pseudo):
         webbrowser.open(f"https://robertsspaceindustries.com/citizens/{pseudo}")
 
-    def open_org(self, org):
-        if org and org != "Inconnu":
-            webbrowser.open(f"https://robertsspaceindustries.com/orgs/{org}")
+    def open_org(self, sid):
+        if sid and sid != "N/A":
+            # Nettoyage au cas où (espaces ou crochets)
+            clean_sid = str(sid).strip().replace("[", "").replace("]", "")
+            webbrowser.open(f"https://robertsspaceindustries.com/orgs/{clean_sid}")
 
     def edit_target_window(self, pseudo):
         """Fenêtre d'édition — HANDLE et CREATION en lecture seule."""
@@ -266,9 +268,15 @@ class ScannerFrame(ctk.CTkFrame):
                 # --- BINDINGS (SÉPARÉS !) ---
                 # On bind les tags créés plus haut pour les rendre cliquables
                 self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=t.pseudo: self.edit_target_window(p))
+
+                # On bind le SID pour ouvrir la page RSI de l'Orga
                 if is_valid_org:
-                    self.results.tag_bind(tag_o, "<Button-1>", lambda e, o=t.org: self.open_org(o))
+                    # On passe t.sid ici, car c'est lui qui sert d'identifiant dans l'URL RSI
+                    self.results.tag_bind(tag_o, "<Button-1>", lambda e, s=t.sid: self.open_org(s))
+
+                # On bind le bouton RSI pour ouvrir le profil du citoyen
                 self.results.tag_bind(tag_r, "<Button-1>", lambda e, p=t.pseudo: self.open_rsi(p))
+
     def export(self):
         filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
         if filename:

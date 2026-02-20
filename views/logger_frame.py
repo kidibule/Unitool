@@ -333,8 +333,18 @@ class LoggerFrame(ctk.CTkFrame):
             self.wins_in,
             self.loss_in,
         ]:
+
+
+            self.threat_in.set("LOW")
+            self.pvp_in.set("NOOB")
+            self.a_btn.set("NEUTRE")
+
             e.delete(0, "end")
-        self.n_in.delete("0.0", "end")
+            self.n_in.delete("0.0", "end")
+
+
+            self.focus_set()
+
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log("Cleared logger UI fields", source="LOGGER")
