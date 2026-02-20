@@ -32,7 +32,9 @@ class Ship(BaseModel):
         "pitch",
         "yaw",
         "roll",
-        "boosted",
+        "boosted_pitch",
+        "boosted_yaw",
+        "boosted_roll",
         "power_consumption",
         "cm_decoy_noise",
         "hp",
@@ -63,7 +65,9 @@ class Ship(BaseModel):
         pitch: str = "",
         yaw: str = "",
         roll: str = "",
-        boosted: str = "",
+        boosted_pitch: str = "",
+        boosted_yaw: str = "",
+        boosted_roll: str = "",
         power_consumption: str = "",
         cm_decoy_noise: str = "",
         hp: int = 0,
@@ -89,7 +93,9 @@ class Ship(BaseModel):
         self.pitch = pitch
         self.yaw = yaw
         self.roll = roll
-        self.boosted = boosted
+        self.boosted_pitch = boosted_pitch
+        self.boosted_yaw = boosted_yaw
+        self.boosted_roll = boosted_roll
         self.power_consumption = power_consumption
         self.cm_decoy_noise = cm_decoy_noise
         self.hp = int(hp) if hp else 0
@@ -121,7 +127,9 @@ class Ship(BaseModel):
             pitch=data.get("pitch", ""),
             yaw=data.get("yaw", ""),
             roll=data.get("roll", ""),
-            boosted=data.get("boosted", ""),
+            boosted_pitch=data.get("boosted_pitch", ""),
+            boosted_yaw=data.get("boosted_yaw", ""),
+            boosted_roll=data.get("boosted_roll", ""),
             power_consumption=data.get("power_consumption", ""),
             cm_decoy_noise=data.get("cm_decoy_noise", ""),
             hp=data.get("hp", 0),

@@ -32,7 +32,9 @@ class ShipController:
         pitch: str = "",
         yaw: str = "",
         roll: str = "",
-        boosted: str = "",
+        boosted_pitch: str = "",
+        boosted_yaw: str = "",
+        boosted_roll: str = "",
         power_consumption: str = "",
         cm_decoy_noise: str = "",
         hp: int = 0,
@@ -48,7 +50,7 @@ class ShipController:
         """Insère ou met à jour un ship par `name` unique."""
         sql = """
         INSERT INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward,
-            nav_max_speed, pitch, yaw, roll, boosted, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass,
+            nav_max_speed, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass,
             hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(name) DO UPDATE SET
@@ -64,7 +66,9 @@ class ShipController:
             pitch=excluded.pitch,
             yaw=excluded.yaw,
             roll=excluded.roll,
-            boosted=excluded.boosted,
+            boosted_pitch=excluded.boosted_pitch,
+            boosted_yaw=excluded.boosted_yaw,
+            boosted_roll=excluded.boosted_roll,
             power_consumption=excluded.power_consumption,
             cm_decoy_noise=excluded.cm_decoy_noise,
             hp=excluded.hp,
@@ -91,7 +95,9 @@ class ShipController:
             pitch,
             yaw,
             roll,
-            boosted,
+            boosted_pitch,
+            boosted_yaw,
+            boosted_roll,
             power_consumption,
             cm_decoy_noise,
             int(hp) if hp else 0,
@@ -125,7 +131,7 @@ class ShipController:
         """Import simple depuis une liste de dicts (ex CSV.DictReader)."""
         count = 0
         for r in rows:
-            sql = "INSERT OR REPLACE INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            sql = "INSERT OR REPLACE INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             params = (
                 r.get("name", "").upper(),
                 r.get("brand", ""),
@@ -140,7 +146,9 @@ class ShipController:
                 r.get("pitch", ""),
                 r.get("yaw", ""),
                 r.get("roll", ""),
-                r.get("boosted", ""),
+                r.get("boosted_pitch", ""),
+                r.get("boosted_yaw", ""),
+                r.get("boosted_roll", ""),
                 r.get("power_consumption", ""),
                 r.get("cm_decoy_noise", ""),
                 r.get("hp", 0),

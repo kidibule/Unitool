@@ -171,6 +171,20 @@ class LoggerFrame(ctk.CTkFrame):
         wins_val = self.wins_in.get() or 0
         losses_val = self.loss_in.get() or 0
 
+        try:
+            wins_val = int(self.wins_in.get().strip()) if self.wins_in.get().strip() else 0
+        except ValueError:
+            wins_val = 0
+            self.wins_in.delete(0, "end")
+            self.wins_in.insert(0, "0")
+
+        try:
+            losses_val = int(self.loss_in.get().strip()) if self.loss_in.get().strip() else 0
+        except ValueError:
+            losses_val = 0
+            self.loss_in.delete(0, "end")
+            self.loss_in.insert(0, "0")
+
         # Check existing record to avoid duplicates
         existing = self.controller.db.query(
             "SELECT org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, threat, wins, losses FROM targets WHERE pseudo = ?",

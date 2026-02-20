@@ -82,8 +82,8 @@ class Target(BaseModel):
         self.sid = sid.upper() if sid else "N/A"
         self.org_rank = org_rank.upper() if org_rank else "N/A"
         self.date = date or datetime.now().strftime("%d/%m/%Y")
-        self.wins = int(wins) if wins else 0
-        self.losses = int(losses) if losses else 0
+        self.wins = self._validate_int(wins)
+        self.losses = self._validate_int(losses)
         self.enlisted_date = enlisted_date
         self.language = language
         self.affiliates = affiliates.upper() if affiliates else "NONE"
@@ -153,3 +153,10 @@ class Target(BaseModel):
     def to_db_tuple(self) -> tuple:
         """Convertit en tuple pour insertion/update DB."""
         return self.to_tuple(self.COLUMNS)
+    
+    def _validate_int(self, value) -> int:
+        """Force la conversion en entier, retourne 0 si invalide."""
+        try:
+            return int(value) if value is not None else 0
+        except (ValueError, TypeError):
+            return 0 # Si 'gvygv' arrive, il devient 0

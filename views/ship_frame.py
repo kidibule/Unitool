@@ -72,12 +72,18 @@ class ShipFrame(ctk.CTkFrame):
         self.roll_in = ctk.CTkEntry(f_nav, placeholder_text="ROLL", **entry_kwargs)
         self.roll_in.pack(side="right", fill="x", expand=True, padx=(5,0))
 
+        f_navboost = ctk.CTkFrame(self, fg_color="transparent")
+        f_navboost.pack(pady=5, padx=50, fill="x")
+        self.boosted_pitch_in = ctk.CTkEntry(f_navboost, placeholder_text="BOOSTED PITCH", **entry_kwargs)
+        self.boosted_pitch_in.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.boosted_yaw_in = ctk.CTkEntry(f_navboost, placeholder_text="BOOSTED YAW", **entry_kwargs)
+        self.boosted_yaw_in.pack(side="left", fill="x", expand=True, padx=5)
+        self.boosted_roll_in = ctk.CTkEntry(f_navboost, placeholder_text="BOOSTED ROLL", **entry_kwargs)
+        self.boosted_roll_in.pack(side="right", fill="x", expand=True, padx=(5,0))
+
         # Performance / systems
         f_sys = ctk.CTkFrame(self, fg_color="transparent")
         f_sys.pack(pady=5, padx=50, fill="x")
-        self.boosted_cb = ctk.CTkComboBox(f_sys, values=["","YES","NO"], **entry_kwargs)
-        self.boosted_cb.set("")
-        self.boosted_cb.pack(side="left", fill="x", expand=True, padx=(0,5))
         self.power_in = ctk.CTkEntry(f_sys, placeholder_text="POWER CONSUMPTION", **entry_kwargs)
         self.power_in.pack(side="left", fill="x", expand=True, padx=5)
         self.cm_in = ctk.CTkEntry(f_sys, placeholder_text="CM DECOY/NOISE", **entry_kwargs)
@@ -136,7 +142,9 @@ class ShipFrame(ctk.CTkFrame):
         pitch = (self.pitch_in.get() or "")
         yaw = (self.yaw_in.get() or "")
         roll = (self.roll_in.get() or "")
-        boosted = (self.boosted_cb.get() or "")
+        boosted_pitch = (self.pitch_in.get() or "")
+        boosted_yaw = (self.yaw_in.get() or "")
+        boosted_roll = (self.roll_in.get() or "")   
         power = (self.power_in.get() or "")
         cm = (self.cm_in.get() or "")
         hp = (self.hp_in.get() or 0)
@@ -150,18 +158,19 @@ class ShipFrame(ctk.CTkFrame):
         expedite_time = (self.expedite_time_in.get() or "")
 
         sql = """INSERT INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward,
-                 nav_max_speed, pitch, yaw, roll, boosted, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass,
+                 nav_max_speed, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass,
                  hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(name) DO UPDATE SET brand=excluded.brand, role=excluded.role, career=excluded.career, size=excluded.size,
                  crew_size=excluded.crew_size, scm_speed=excluded.scm_speed, scm_boost_forward=excluded.scm_boost_forward, scm_boost_backward=excluded.scm_boost_backward,
-                 nav_max_speed=excluded.nav_max_speed, pitch=excluded.pitch, yaw=excluded.yaw, roll=excluded.roll, boosted=excluded.boosted,
+                 nav_max_speed=excluded.nav_max_speed, pitch=excluded.pitch, yaw=excluded.yaw, roll=excluded.roll, boosted_pitch=excluded.boosted_pitch,
+                 boosted_yaw=excluded.boosted_yaw, boosted_roll=excluded.boosted_roll,
                  power_consumption=excluded.power_consumption, cm_decoy_noise=excluded.cm_decoy_noise, hp=excluded.hp, cargo=excluded.cargo, dimensions=excluded.dimensions, mass=excluded.mass,
                  hydrogen_capacity=excluded.hydrogen_capacity, qt_fuel_capacity=excluded.qt_fuel_capacity, expedition_fee=excluded.expedition_fee, claim_time=excluded.claim_time, expedite_time=excluded.expedite_time"""
 
         params = (
             name, brand, role, career, size, crew, scm, scm_bf, scm_bb,
-            nav, pitch, yaw, roll, boosted, power, cm, hp, cargo, dimensions, mass,
+            nav, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power, cm, hp, cargo, dimensions, mass,
             h2, qt, expedition, claim_time, expedite_time
         )
         try:
@@ -198,18 +207,20 @@ class ShipFrame(ctk.CTkFrame):
         self.pitch_in.delete(0, "end"); self.pitch_in.insert(0, r[10] or "")
         self.yaw_in.delete(0, "end"); self.yaw_in.insert(0, r[11] or "")
         self.roll_in.delete(0, "end"); self.roll_in.insert(0, r[12] or "")
-        self.boosted_cb.set(r[13] or "")
-        self.power_in.delete(0, "end"); self.power_in.insert(0, r[14] or "")
-        self.cm_in.delete(0, "end"); self.cm_in.insert(0, r[15] or "")
-        self.hp_in.delete(0, "end"); self.hp_in.insert(0, str(r[16] or 0))
-        self.cargo_in.delete(0, "end"); self.cargo_in.insert(0, r[17] or "")
-        self.dim_in.delete(0, "end"); self.dim_in.insert(0, r[18] or "")
-        self.mass_in.delete(0, "end"); self.mass_in.insert(0, r[19] or "")
-        self.h2_in.delete(0, "end"); self.h2_in.insert(0, r[20] or "")
-        self.qt_in.delete(0, "end"); self.qt_in.insert(0, r[21] or "")
-        self.expedition_in.delete(0, "end"); self.expedition_in.insert(0, r[22] or "")
-        self.claim_time_in.delete(0, "end"); self.claim_time_in.insert(0, r[23] or "")
-        self.expedite_time_in.delete(0, "end"); self.expedite_time_in.insert(0, r[24] or "")
+        self.boosted_pitch_in.delete(0, "end"); self.boosted_pitch_in.insert(0, r[13] or "")
+        self.boosted_yaw_in.delete(0, "end"); self.boosted_yaw_in.insert(0, r[14] or "")
+        self.boosted_roll_in.delete(0, "end"); self.boosted_roll_in.insert(0, r[15] or "")
+        self.power_in.delete(0, "end"); self.power_in.insert(0, r[16] or "")
+        self.cm_in.delete(0, "end"); self.cm_in.insert(0, r[17] or "")
+        self.hp_in.delete(0, "end"); self.hp_in.insert(0, str(r[18] or 0))
+        self.cargo_in.delete(0, "end"); self.cargo_in.insert(0, r[19] or "")
+        self.dim_in.delete(0, "end"); self.dim_in.insert(0, r[20] or "")
+        self.mass_in.delete(0, "end"); self.mass_in.insert(0, r[21] or "")
+        self.h2_in.delete(0, "end"); self.h2_in.insert(0, r[22] or "")
+        self.qt_in.delete(0, "end"); self.qt_in.insert(0, r[23] or "")
+        self.expedition_in.delete(0, "end"); self.expedition_in.insert(0, r[24] or "")
+        self.claim_time_in.delete(0, "end"); self.claim_time_in.insert(0, r[25] or "")
+        self.expedite_time_in.delete(0, "end"); self.expedite_time_in.insert(0, r[26] or "")
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Loaded ship: {name}", source="SHIP")
@@ -225,7 +236,7 @@ class ShipFrame(ctk.CTkFrame):
                 reader = csv.DictReader(f, delimiter=";")
                 for row in reader:
                     self.controller.db.commit(
-                        "INSERT OR REPLACE INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT OR REPLACE INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             row.get("name", "").upper(),
                             row.get("brand", ""),
@@ -240,7 +251,9 @@ class ShipFrame(ctk.CTkFrame):
                             row.get("pitch", ""),
                             row.get("yaw", ""),
                             row.get("roll", ""),
-                            row.get("boosted", ""),
+                            row.get("boosted_pitch", ""),
+                            row.get("boosted_yaw", ""),
+                            row.get("boosted_roll", ""),
                             row.get("power_consumption", ""),
                             row.get("cm_decoy_noise", ""),
                             row.get("hp", 0),
@@ -265,11 +278,11 @@ class ShipFrame(ctk.CTkFrame):
         data = self.controller.db.query("SELECT * FROM ships")
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
-            writer.writerow(["name","brand","role","career","size","crew_size","scm_speed","scm_boost_forward","scm_boost_backward","nav_max_speed","pitch","yaw","roll","boosted","power_consumption","cm_decoy_noise","hp","cargo","dimensions","mass","hydrogen_capacity","qt_fuel_capacity","expedition_fee","claim_time","expedite_time"])
+            writer.writerow(["name","brand","role","career","size","crew_size","scm_speed","scm_boost_forward","scm_boost_backward","nav_max_speed","pitch","yaw","roll","boosted_pitch","boosted_yaw","boosted_roll","power_consumption","cm_decoy_noise","hp","cargo","dimensions","mass","hydrogen_capacity","qt_fuel_capacity","expedition_fee","claim_time","expedite_time"])
             writer.writerows(data)
         DrakePopup.info("SUCCESS", "Données exportées.", parent=self)
 
     def clear_fields(self):
-        for e in [self.name_in, self.brand_in, self.role_in, self.career_in, self.size_in, self.crew_in, self.scm_in, self.scm_bf_in, self.scm_bb_in, self.nav_in, self.pitch_in, self.yaw_in, self.roll_in, self.power_in, self.cm_in, self.hp_in, self.cargo_in, self.dim_in, self.mass_in, self.h2_in, self.qt_in, self.expedition_in, self.claim_time_in, self.expedite_time_in]:
+        for e in [self.name_in, self.brand_in, self.role_in, self.career_in, self.size_in, self.crew_in, self.scm_in, self.scm_bf_in, self.scm_bb_in, self.nav_in, self.pitch_in, self.yaw_in, self.roll_in, self.power_in, self.cm_in, self.hp_in, self.cargo_in, self.dim_in, self.mass_in, self.h2_in, self.qt_in, self.expedition_in, self.claim_time_in, self.expedite_time_in, self.boosted_pitch_in, self.boosted_yaw_in, self.boosted_roll_in]:
             e.delete(0, "end")
         self.boosted_cb.set("")

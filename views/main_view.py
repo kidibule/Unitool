@@ -72,7 +72,7 @@ class MainView(ctk.CTkFrame):
             ("ContractFrame", "CONTRATS"),
             ("LoggerFrame", "ARCHIVER"),
             ("IntelligenceFrame", "INTEL"),
-            #("ShipFrame", "SHIPS"),
+            ("ShipFrame", "SHIPS"),
         ]
 
         # Remplacement par des boutons typés Drake

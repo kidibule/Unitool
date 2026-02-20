@@ -105,3 +105,28 @@ class ScannerController:
             pass
         return rows
 
+def update_target(self, pseudo: str, **kwargs) -> None:
+        """Met à jour les infos d'une cible avec validation des types."""
+        
+        # LISTE DES CHAMPS NUMÉRIQUES À PROTÉGER
+        numeric_fields = ['wins', 'losses']
+        
+        cleaned_kwargs = {}
+        for key, value in kwargs.items():
+            if key in numeric_fields:
+                try:
+                    # On tente de convertir. Si ça échoue, on ignore ou on met 0
+                    cleaned_kwargs[key] = int(value)
+                except (ValueError, TypeError):
+                    cleaned_kwargs[key] = 0
+            else:
+                cleaned_kwargs[key] = value
+
+        # Utilisation des données nettoyées pour la suite du SQL
+        if cleaned_kwargs:
+            updates = [f"{key}=?" for key in cleaned_kwargs.keys()]
+            params = list(cleaned_kwargs.values())
+            params.append(pseudo.upper()) # Pour le WHERE
+
+            sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
+            self.app.commit(sql, tuple(params))
