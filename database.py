@@ -9,7 +9,7 @@ class Database:
         self.setup()
 
     def setup(self):
-        # Table Targets avec les nouveaux champs Intel
+        # --- TABLE TARGETS ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS targets 
             (pseudo TEXT PRIMARY KEY, org TEXT, ship TEXT, threat TEXT, notes TEXT, 
              date TEXT, wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0, alignment TEXT DEFAULT 'NEUTRE',
@@ -17,7 +17,7 @@ class Database:
              sid TEXT DEFAULT 'N/A', org_rank TEXT DEFAULT 'N/A', 
              enlisted_date TEXT DEFAULT 'N/A', language TEXT DEFAULT 'N/A')""")
 
-        # --- MIGRATIONS AUTOMATIQUES ---
+        # Migrations pour Targets
         new_columns = [
             ("pvp_lvl", "TEXT DEFAULT 'Inconnu'"),
             ("activity", "TEXT DEFAULT 'Inconnu'"),
@@ -27,14 +27,39 @@ class Database:
             ("language", "TEXT DEFAULT 'N/A'"),
             ("affiliates", "TEXT DEFAULT 'NONE'"),
         ]
-
         for col_name, col_type in new_columns:
-            try:
-                self.cursor.execute(
-                    f"ALTER TABLE targets ADD COLUMN {col_name} {col_type}"
-                )
-            except:
-                pass
+            try: self.cursor.execute(f"ALTER TABLE targets ADD COLUMN {col_name} {col_type}")
+            except: pass
+
+        # --- TABLE ORGANIZATIONS (Celle qui manquait) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS organizations (
+            sid TEXT PRIMARY KEY,
+            name TEXT,
+            tag TEXT,
+            description TEXT,
+            member_count INTEGER DEFAULT 0,
+            visible_members TEXT DEFAULT '[]',
+            redacted_members TEXT DEFAULT '[]',
+            ranks TEXT DEFAULT '{}',
+            org_type TEXT DEFAULT 'ORGANIZATION',
+            specialization TEXT DEFAULT 'GENERAL',
+            allies TEXT DEFAULT '',
+            enemies TEXT DEFAULT '',
+            neutrals TEXT DEFAULT '',
+            updated_at TEXT
+        )""")
+
+        # Migration pour Organizations (au cas où tu ajoutes des colonnes plus tard)
+        org_columns = [
+            ("org_type", "TEXT DEFAULT 'ORGANIZATION'"),
+            ("specialization", "TEXT DEFAULT 'GENERAL'"),
+            ("allies", "TEXT DEFAULT ''"),
+            ("enemies", "TEXT DEFAULT ''"),
+            ("neutrals", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_type in org_columns:
+            try: self.cursor.execute(f"ALTER TABLE organizations ADD COLUMN {col_name} {col_type}")
+            except: pass
 
         # Table Contracts
         self.cursor.execute(
@@ -62,7 +87,9 @@ class Database:
                 pitch TEXT,
                 yaw TEXT,
                 roll TEXT,
-                boosted TEXT,
+                boosted_pitch TEXT,
+                boosted_yaw TEXT,
+                boosted_roll TEXT,
                 power_consumption TEXT,
                 cm_decoy_noise TEXT,
                 hp INTEGER DEFAULT 0,
@@ -91,7 +118,9 @@ class Database:
             ("pitch", "TEXT"),
             ("yaw", "TEXT"),
             ("roll", "TEXT"),
-            ("boosted", "TEXT"),
+            ("boosted_pitch", "TEXT"),
+            ("boosted_yaw", "TEXT"),
+            ("boosted_roll", "TEXT"),
             ("power_consumption", "TEXT"),
             ("cm_decoy_noise", "TEXT"),
             ("hp", "INTEGER DEFAULT 0"),

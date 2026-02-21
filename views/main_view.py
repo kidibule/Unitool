@@ -122,7 +122,9 @@ class MainView(ctk.CTkFrame):
 
         # Widgets de statistiques
         self.stat_targets = self.create_stat_widget("KNOWN CONTACTS", "0")
+        self.stat_orgs = self.create_stat_widget("KNOWN ORGANIZATIONS", "0")
         self.stat_active_contracts = self.create_stat_widget("ACTIVE CONTRACTS", "0")
+        
 
         # --- CENTRAL LOG TERMINAL (HUD DROITE) ---
         ctk.CTkLabel(
@@ -193,6 +195,14 @@ class MainView(ctk.CTkFrame):
                     open_contracts = int(res[0][0])
             except Exception:
                 open_contracts = 0
+            known_orgs = 0
+            try:
+                # On interroge la nouvelle table organizations
+                res_org = self.controller.db.query("SELECT COUNT(*) FROM organizations")
+                if res_org:
+                    known_orgs = int(res_org[0][0])
+            except Exception:
+                known_orgs = 0
 
             self.stat_targets.configure(text=f"{total:03d}")  # Format 001, 002...
             self.stat_active_contracts.configure(
@@ -203,6 +213,7 @@ class MainView(ctk.CTkFrame):
                     else DrakeConfig.ACCENT_PRIMARY
                 ),
             )
+            self.stat_orgs.configure(text=f"{known_orgs:03d}")
 
         except Exception as e:
             print(f"Intel Error: {e}")

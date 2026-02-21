@@ -208,6 +208,16 @@ class IntelligenceFrame(ctk.CTkFrame):
             btns_org, text="EXTRAIRE MEMBRES", command=lambda: self.start_work("org")
         ).pack(side="left", padx=5)
 
+        self.btn_save_org_db = DrakeButton(
+                btns_org, 
+                text="SAVE ORGANIZATION", 
+                width=180, 
+                fg_color="#333", 
+                state="disabled", # Désactivé par défaut
+                command=self.save_org_to_unitool
+            )
+        self.btn_save_org_db.pack(side="left", padx=5)
+        
         self.btn_save_org = DrakeButton(
             btns_org, text="EXPORTER CSV", fg_color="#333", command=self.save_org_to_csv
         )
@@ -546,6 +556,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                         )
 
                         self._log(f"mapping complete: {sid}")
+                        self.btn_save_org_db.configure(state="normal", fg_color=DrakeConfig.ACCENT_PRIMARY)
 
                     else:
 
@@ -766,3 +777,42 @@ class IntelligenceFrame(ctk.CTkFrame):
         except Exception as e:
 
             pass
+
+    def save_org_to_unitool(self):
+        """Enregistre l'organisation scannée dans la base de données Unitool."""
+        sid = self.ent_o.get().strip().upper()
+        
+        if not sid:
+            return
+
+        try:
+            # On récupère les infos de base (le nom est souvent dans les logs ou le terminal)
+            # Pour faire simple, on utilise le SID comme nom si on n'a pas extrait le nom complet
+            name = sid 
+            
+            # Préparation de la requête SQL (Upsert)
+            sql = """
+                INSERT INTO organizations (sid, name, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(sid) DO UPDATE SET 
+                    updated_at=excluded.updated_at
+            """
+            date_now = datetime.now().strftime("%d/%m/%Y")
+            
+            self.controller.db.commit(sql, (sid, name, date_now))
+            
+            # Feedback visuel (Style Drake)
+            self.btn_save_org_db.configure(
+                fg_color="#2ecc71", text="ORG ARCHIVÉE ✓", state="disabled"
+            )
+            
+            DrakePopup.info("DRAKE SYSTEMS", f"L'organisation {sid} a été ajoutée aux archives.")
+            self._log(f"organization archived: {sid}")
+
+            # Mise à jour des compteurs sur le HUD principal
+            if hasattr(self.controller, "view") and hasattr(self.controller.view, "refresh_intel"):
+                self.controller.view.refresh_intel()
+
+        except Exception as e:
+            DrakePopup.error("ERREUR DB", f"Impossible d'archiver l'organisation : {e}")
+            self._log(f"error saving org: {e}")

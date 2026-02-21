@@ -20,8 +20,92 @@ class LoggerFrame(ctk.CTkFrame):
         self.controller = controller
 
         # --- TITRE ---
-        DrakeConfig.create_title(self, "INTEL ARCHIVE SYSTEM - ADVANCED ENCODING")
+        DrakeConfig.create_title(self, "INTEL ARCHIVE SYSTEM ")
 
+        # --- SYSTÈME D'ONGLETS ---
+        self.tabview = ctk.CTkTabview(
+            self, 
+            fg_color=DrakeConfig.BG_PANEL,
+            segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
+            segmented_button_unselected_hover_color=DrakeConfig.ACCENT_HOVER,
+            text_color=DrakeConfig.TEXT_MAIN,
+            corner_radius=0,
+        )
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
+
+        self.tab_targets = self.tabview.add("PLAYERS")
+        self.tab_orgs = self.tabview.add("ORGANIZATIONS")
+
+        self.tab_orgs.grid_columnconfigure((0, 1), weight=1)
+
+        self.setup_targets_tab()
+        self.setup_orgs_tab()
+
+
+    def setup_orgs_tab(self):
+        """Formulaire de création d'organisation"""
+        entry_kwargs = {
+            "font": DrakeConfig.FONT_LOGS,
+            "fg_color": DrakeConfig.BG_TERMINAL,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "corner_radius": 0,
+            "height": 35,
+        }
+
+        # Ligne 1 : Nom et Tag
+        self.org_name = ctk.CTkEntry(self.tab_orgs, placeholder_text="ORGANIZATION NAME", **entry_kwargs)
+        self.org_name.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        
+        self.org_tag = ctk.CTkEntry(self.tab_orgs, placeholder_text="TAG (ex: UEE)", **entry_kwargs)
+        self.org_tag.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+
+        # Ligne 2 : SID (ID RSI) et Type
+        self.org_sid = ctk.CTkEntry(self.tab_orgs, placeholder_text="SID (RSI URL ID)", **entry_kwargs)
+        self.org_sid.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+
+        self.org_type = ctk.CTkComboBox(self.tab_orgs, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"], **entry_kwargs)
+        self.org_type.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        self.org_type.set("ORGANIZATION")
+
+        # Ligne 3 : Description longue
+        self.org_desc = ctk.CTkTextbox(self.tab_orgs, height=100, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        self.org_desc.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+
+        # Bouton de sauvegarde dédié
+        btn_save_org = DrakeButton(self.tab_orgs, text="REGISTER ORGANIZATION", command=self.save_org, height=40)
+        btn_save_org.grid(row=3, column=0, columnspan=2, padx=10, pady=20, sticky="ew")
+
+    def save_org(self):
+        """Sauvegarde les données de l'onglet Organisation"""
+        name = self.org_name.get().strip()
+        sid = self.org_sid.get().strip().upper()
+        
+        if not sid or not name:
+            DrakePopup.error("ERROR", "Name and SID are required.")
+            return
+
+        sql = """INSERT INTO organizations (sid, name, tag, description, org_type, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(sid) DO UPDATE SET 
+                 name=excluded.name, tag=excluded.tag, description=excluded.description, 
+                 org_type=excluded.org_type, updated_at=excluded.updated_at"""
+        
+        params = (
+            sid, name, self.org_tag.get().upper(),
+            self.org_desc.get("0.0", "end").strip(),
+            self.org_type.get(),
+            datetime.now().strftime("%d/%m/%Y")
+        )
+
+        try:
+            self.controller.db.commit(sql, params)
+            DrakePopup.info("DRAKE SYSTEMS", f"Organization {name} synchronized.")
+            self.controller.log(f"Org saved: {sid}", source="LOGGER")
+        except Exception as e:
+            DrakePopup.error("DB ERROR", str(e))
+
+    def setup_targets_tab(self):
+        # On définit entry_kwargs localement ou on utilise self.entry_kwargs si défini dans __init__
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
@@ -31,12 +115,11 @@ class LoggerFrame(ctk.CTkFrame):
         }
 
         # --- 1. IDENTITÉ & MENACE ---
-        f_top = ctk.CTkFrame(self, fg_color="transparent")
-        f_top.pack(pady=(0, 10), padx=50, fill="x")
+        # PARENT CHANGÉ : self -> self.tab_targets
+        f_top = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_top.pack(pady=(20, 10), padx=50, fill="x")
 
-        self.p_in = ctk.CTkEntry(
-            f_top, placeholder_text="TARGET HANDLE", **entry_kwargs
-        )
+        self.p_in = ctk.CTkEntry(f_top, placeholder_text="TARGET HANDLE", **entry_kwargs)
         self.p_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.p_in.bind("<Return>", self.load_target)
 
@@ -53,7 +136,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.threat_in.set("LOW")
 
         # --- 2. DONNÉES RSI (ORG, SID, RANK) ---
-        f_rsi = ctk.CTkFrame(self, fg_color="transparent")
+        f_rsi = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_rsi.pack(pady=5, padx=50, fill="x")
         self.o_in = ctk.CTkEntry(f_rsi, placeholder_text="ORGANIZATION", **entry_kwargs)
         self.o_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -63,17 +146,15 @@ class LoggerFrame(ctk.CTkFrame):
         self.rank_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 3. INFOS COMPLÉMENTAIRES ---
-        f_info = ctk.CTkFrame(self, fg_color="transparent")
+        f_info = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_info.pack(pady=5, padx=50, fill="x")
         self.lang_in = ctk.CTkEntry(f_info, placeholder_text="LANGUAGE", **entry_kwargs)
         self.lang_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.aff_in = ctk.CTkEntry(
-            f_info, placeholder_text="AFFILIATES", **entry_kwargs
-        )
+        self.aff_in = ctk.CTkEntry(f_info, placeholder_text="AFFILIATES", **entry_kwargs)
         self.aff_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 4. COMBAT STATS (WINS / LOSSES) ---
-        f_stats = ctk.CTkFrame(self, fg_color="transparent")
+        f_stats = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_stats.pack(pady=5, padx=50, fill="x")
         self.wins_in = ctk.CTkEntry(f_stats, placeholder_text="WINS", **entry_kwargs)
         self.wins_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -82,7 +163,7 @@ class LoggerFrame(ctk.CTkFrame):
 
         # --- 5. ALIGNEMENT & PROFIL ---
         self.a_btn = ctk.CTkSegmentedButton(
-            self,
+            self.tab_targets,
             values=["AMI", "NEUTRE", "ENNEMI"],
             font=DrakeConfig.FONT_UI,
             selected_color=DrakeConfig.ACCENT_PRIMARY,
@@ -91,11 +172,9 @@ class LoggerFrame(ctk.CTkFrame):
         )
         self.a_btn.pack(pady=10)
 
-        f_combat = ctk.CTkFrame(self, fg_color="transparent")
+        f_combat = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_combat.pack(pady=5, padx=50, fill="x")
-        self.pvp_in = ctk.CTkComboBox(
-            f_combat, values=["NOOB", "ROOKIE", "VETERAN", "ACE"], **entry_kwargs
-        )
+        self.pvp_in = ctk.CTkComboBox(f_combat, values=["NOOB", "ROOKIE", "VETERAN", "ACE"], **entry_kwargs)
         self.pvp_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.act_in = ctk.CTkComboBox(
             f_combat,
@@ -104,12 +183,12 @@ class LoggerFrame(ctk.CTkFrame):
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-        self.s_in = ctk.CTkEntry(self, placeholder_text="CURRENT SHIP", **entry_kwargs)
+        self.s_in = ctk.CTkEntry(self.tab_targets, placeholder_text="CURRENT SHIP", **entry_kwargs)
         self.s_in.pack(pady=5, padx=50, fill="x")
 
         # --- 6. NOTES ---
         self.n_in = ctk.CTkTextbox(
-            self,
+            self.tab_targets,
             height=80,
             font=DrakeConfig.FONT_LOGS,
             fg_color=DrakeConfig.BG_TERMINAL,
@@ -120,34 +199,15 @@ class LoggerFrame(ctk.CTkFrame):
         self.n_in.pack(pady=10, padx=50, fill="x")
 
         # --- BOUTONS ---
-        self.btn_save = DrakeButton(
-            self, text="SYNCHRONIZE DATABASE", command=self.save, height=45
-        )
+        self.btn_save = DrakeButton(self.tab_targets, text="SYNCHRONIZE DATABASE", command=self.save, height=45)
         self.btn_save.pack(pady=10, padx=50, fill="x")
 
-        f_btns = ctk.CTkFrame(self, fg_color="transparent")
-        f_btns.pack(fill="x", padx=50)
-        ctk.CTkButton(
-            f_btns,
-            text="IMPORT CSV",
-            command=self.import_csv,
-            fg_color="#222",
-            corner_radius=0,
-        ).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(
-            f_btns,
-            text="EXPORT CSV",
-            command=self.export_csv,
-            fg_color="#222",
-            corner_radius=0,
-        ).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(
-            f_btns,
-            text="CLEAR",
-            command=self.clear_fields,
-            fg_color="#441111",
-            corner_radius=0,
-        ).pack(side="left", expand=True, padx=2)
+        f_btns = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_btns.pack(fill="x", padx=50, pady=(0, 20))
+        
+        ctk.CTkButton(f_btns, text="IMPORT CSV", command=self.import_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_btns, text="EXPORT CSV", command=self.export_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_btns, text="CLEAR", command=self.clear_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
 
     def save(self):
         h = self.p_in.get().strip().upper()

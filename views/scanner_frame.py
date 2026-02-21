@@ -39,14 +39,70 @@ class ScannerFrame(ctk.CTkFrame):
         self.title_label = ctk.CTkLabel(header, text="DATABASE", font=("Orbitron", 16, "bold"), text_color="#ff8c00")
         self.title_label.pack(side="left", expand=True, padx=(100, 0))
 
-        self.search_entry = ctk.CTkEntry(self, placeholder_text="ENTREZ UN NOM OU UN TAG (SID)...", height=40, fg_color=DrakeConfig.BG_PANEL, border_color=DrakeConfig.ACCENT_PRIMARY, corner_radius=DrakeConfig.CORNER_RADIUS)
-        self.search_entry.pack(pady=(0, 5), padx=50, fill="x")
+        self.tabview = ctk.CTkTabview(
+            self, 
+            fg_color=DrakeConfig.BG_PANEL, 
+            segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
+            segmented_button_selected_hover_color="#e67e22",
+            text_color="white"
+        )
+        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+
+        self.tab_targets = self.tabview.add("TARGETS")
+        self.tab_orgs = self.tabview.add("ORGANIZATIONS")
+
+        self.setup_targets_tab()
+        self.setup_orgs_tab()
+        self.setup_tags()
+
+    def setup_targets_tab(self):
+        """Configure l'onglet de recherche de joueurs."""
+        self.search_entry = ctk.CTkEntry(
+            self.tab_targets, placeholder_text="ENTREZ UN PSEUDO OU UN SID...", 
+            height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
+        )
+        self.search_entry.pack(pady=10, padx=20, fill="x")
         self.search_entry.bind("<KeyRelease>", self.run_scan)
 
-        self.results = DrakeTerminal(self)
-        self.results.pack(pady=10, padx=20, fill="both", expand=True)
+        self.results = DrakeTerminal(self.tab_targets)
+        self.results.pack(pady=5, padx=10, fill="both", expand=True)
 
-        self.setup_tags()
+   
+    def setup_orgs_tab(self):
+        """Configure l'onglet de recherche d'organisations."""
+        self.org_search_entry = ctk.CTkEntry(
+            self.tab_orgs, placeholder_text="RECHERCHER UNE ORGA (NOM OU SID)...", 
+            height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
+        )
+        self.org_search_entry.pack(pady=10, padx=20, fill="x")
+        self.org_search_entry.bind("<KeyRelease>", self.run_org_scan)
+
+        self.org_results = DrakeTerminal(self.tab_orgs)
+        self.org_results.pack(pady=5, padx=10, fill="both", expand=True)
+
+    def run_org_scan(self, event):
+        """Moteur de recherche dédié aux organisations."""
+        q = self.org_search_entry.get().strip().upper()
+        self.org_results.delete("0.0", "end")
+
+        if len(q) > 1:
+            # Appel au nouveau contrôleur d'orgas
+            orgs = self.controller.org.search_orgs(q) 
+
+            for o in orgs:
+                # o est ici un tuple (sid, name, tag, member_count, type, spec)
+                sid, name, tag, count, o_type, spec = o
+                tag_link = f"link_org_{sid}"
+
+                self.org_results.insert("end", " 🏢 ")
+                self.org_results.insert("end", f"{name} ", "NEUTRE")
+                self.org_results.insert("end", f"[{sid}]", (tag_link, "link_rsi"))
+                self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec}\n")
+                self.org_results.insert("end", f"   EFFECTIFS: {count} membres\n")
+                self.org_results.insert("end", f"{'-'*40}\n")
+
+                # Binding pour ouvrir RSI
+                self.org_results.tag_bind(tag_link, "<Button-1>", lambda e, s=sid: self.open_org(s))
 
     def setup_tags(self):
         self.results.tag_config("link", foreground=DrakeConfig.ACCENT_PRIMARY, underline=True)
