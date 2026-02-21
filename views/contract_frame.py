@@ -72,6 +72,22 @@ class ContractFrame(ctk.CTkFrame):
         self.prio_menu.pack(side="left", padx=5)
 
         DrakeButton(f_add, text="ACCEPT CONTRACT", width=150, command=self.add_contract).pack(side="left", padx=15)
+        
+          # Gestion des Types (Petit bouton discret)
+        ctk.CTkButton(
+            self,
+            text="EDIT TYPES",
+            command=self.open_type_manager, # On pointe vers la nouvelle méthode
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=80,
+            height=20,
+            font=("Segoe UI", 9, "bold"),
+            corner_radius=0 # Pour garder le look industriel angulaire
+        ).pack(anchor="ne", padx=20, pady=(0, 5))
 
         # --- SECTIONS DE LISTES ---
         self.active_scroll = ctk.CTkScrollableFrame(
@@ -244,3 +260,86 @@ class ContractFrame(ctk.CTkFrame):
             self._suggestion_popup.destroy()
             self._suggestion_popup = None
             self._suggestion_owner = None
+
+    def open_type_manager(self):
+        """Ouvre la fenêtre de configuration des types de contrats."""
+        toplevel = ctk.CTkToplevel(self)
+        toplevel.title("DRAKE - TYPE CONFIGURATION")
+        toplevel.geometry("500x450")
+        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
+        toplevel.attributes("-topmost", True)
+        
+        # Titre interne à la popup
+        ctk.CTkLabel(toplevel, text="CONTRACT TYPES DATABASE", 
+                     font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=10)
+
+        # --- Formulaire d'ajout ---
+        f_in = ctk.CTkFrame(toplevel, fg_color=DrakeConfig.BG_PANEL, corner_radius=0, 
+                           border_width=1, border_color=DrakeConfig.BORDER_COLOR)
+        f_in.pack(fill="x", padx=20, pady=10)
+
+        n_entry = ctk.CTkEntry(f_in, placeholder_text="TYPE NAME", font=DrakeConfig.FONT_LOGS, 
+                               fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        n_entry.pack(side="left", padx=10, pady=15, expand=True, fill="x")
+        
+        r_entry = ctk.CTkEntry(f_in, placeholder_text="REWARD (aUEC)", font=DrakeConfig.FONT_LOGS,
+                               fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        r_entry.pack(side="left", padx=5, pady=15)
+
+        def add():
+            n, r = n_entry.get().strip().upper(), r_entry.get().strip()
+            if n and r:
+                try:
+                    # Conversion en int pour être sûr de la donnée
+                    reward_val = int(r.replace(".", "").replace(" ", ""))
+                    self.controller.db.commit(
+                        "INSERT INTO contract_types (name, reward) VALUES (?,?)", (n, reward_val)
+                    )
+                    if hasattr(self.controller, "log"):
+                        self.controller.log(f"TYPE REGISTERED: {n}", source="SYS_CFG")
+                    
+                    refresh_list()
+                    self.update_type_menu() # Met à jour le menu déroulant sur la frame principale
+                    n_entry.delete(0, "end")
+                    r_entry.delete(0, "end")
+                except ValueError:
+                    if hasattr(self.controller, "log"):
+                        self.controller.log("CONFIG ERROR: INVALID REWARD NUMBER", source="ERROR")
+                except Exception:
+                    if hasattr(self.controller, "log"):
+                        self.controller.log(f"CONFIG ERROR: {n} ALREADY EXISTS", source="ERROR")
+
+        DrakeButton(f_in, text="+", width=40, command=add).pack(side="left", padx=10)
+
+        # --- Liste Scrollable ---
+        scroll = ctk.CTkScrollableFrame(
+            toplevel, label_text="REGISTERED MISSION PROFILES",
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text_color=DrakeConfig.TEXT_SECONDARY,
+            corner_radius=0, border_width=1, border_color=DrakeConfig.BORDER_COLOR
+        )
+        scroll.pack(fill="both", expand=True, padx=20, pady=10)
+
+        def delete(name):
+            self.controller.db.commit("DELETE FROM contract_types WHERE name=?", (name,))
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"TYPE DELETED: {name}", source="SYS_CFG")
+            refresh_list()
+            self.update_type_menu()
+
+        def refresh_list():
+            for w in scroll.winfo_children(): w.destroy()
+            rows = self.controller.db.query("SELECT * FROM contract_types")
+            for row in rows:
+                f = ctk.CTkFrame(scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
+                f.pack(fill="x", pady=2, padx=5)
+                
+                ctk.CTkLabel(f, text=f"{row[0]}", font=DrakeConfig.FONT_LOGS, width=150, anchor="w").pack(side="left", padx=10)
+                ctk.CTkLabel(f, text=f"{format_int_with_dots(row[1])} aUEC", font=DrakeConfig.FONT_LOGS, text_color=DrakeConfig.TEXT_SECONDARY).pack(side="left", padx=5)
+                
+                ctk.CTkButton(f, text="[ DELETE ]", width=70, height=20, 
+                              fg_color="transparent", text_color=DrakeConfig.ACCENT_ERROR,
+                              hover_color="#330000", font=("Segoe UI", 8, "bold"),
+                              command=lambda n=row[0]: delete(n)).pack(side="right", padx=5)
+
+        refresh_list()
