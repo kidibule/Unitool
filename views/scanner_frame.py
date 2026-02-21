@@ -7,7 +7,7 @@ stockées dans la base via le `controller`.
 import customtkinter as ctk
 import webbrowser
 import csv
-
+import json
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
 from utils import format_int_with_dots
@@ -81,53 +81,56 @@ class ScannerFrame(ctk.CTkFrame):
         self.org_results.pack(pady=5, padx=10, fill="both", expand=True)
 
     def run_org_scan(self, event):
-        """Moteur de recherche avec Roster aligné et footer unique (Drake Style)."""
+        """Moteur de recherche Orga - Format Dossier de Renseignement."""
         import json
         q = self.org_search_entry.get().strip().upper()
         
-        # 1. On vide impérativement avant de commencer
         self.org_results.delete("0.0", "end")
 
         if len(q) > 1:
             orgs = self.controller.org.search_orgs(q) 
+            # On filtre les résultats vides ou trop courts
             orgs = [o for o in orgs if o[0] and len(str(o[0])) > 2]
 
             for o in orgs:
-                sid, name, tag, count, o_type, spec = o
+                # On adapte la déballage pour correspondre au retour du controller (8 colonnes maintenant)
+                sid, name, tag, count, o_type, spec, alignment, updated_at = o
                 tag_name_click = f"edit_name_{sid}"
                 tag_link = f"link_org_{sid}"
+                
+                # Récupération du modèle complet pour les champs étendus
+                org_model = self.controller.org.get_org_model(sid)
 
-                # --- ENTÊTE ORGA ---
-                self.org_results.insert("end", " 🏢 ")
+                # --- [BLOC 1 : IDENTITÉ & TYPE] ---
+                # AJOUT DU CARRÉ DE COULEUR (Alignement)
+                self.org_results.insert("end", " ■ ", alignment) 
+                
                 self.org_results.insert("end", f"{name} ", (tag_name_click, "NEUTRE"))
                 self.org_results.insert("end", f"[{sid}]", (tag_link, "link_rsi"))
-                self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec}\n")
-                self.org_results.insert("end", f"   EFFECTIFS: {count} membres\n")
-
-                # Bindings
-                self.org_results.tag_bind(tag_name_click, "<Double-Button-1>", lambda e, s=sid: self.edit_org_window(s))   
                 
-                # --- SECTION ROSTER ---
-                org_model = self.controller.org.get_org_model(sid)
+                # Ligne de spécialisation
+                self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec} | TAG: {tag or 'N/A'}\n")
+                self.org_results.insert("end", f"   DERNIÈRE MAJ: {org_model.updated_at if org_model else 'INCONNUE'}\n")
+
+                # --- [BLOC 2 : ROSTER & EFFECTIFS] ---
+                self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
                 
                 if org_model and org_model.visible_members:
                     try:
                         members = json.loads(org_model.visible_members)
                         if members:
-                            # Titres
-                            self.org_results.insert("end", f"\n   {'HANDLE':<25} | {'RANK':<20}\n", "ACCENT")
+                            # En-tête du tableau de membres
+                            self.org_results.insert("end", f"   {'HANDLE':<25} | {'RANK':<20}\n", "ACCENT")
                             self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
                             
-                            # Affichage des membres
-                            for m in members:
+                            # On affiche les 15 premiers membres
+                            for m in members[:15]:
                                 h = str(m.get('h', '???')).upper()
                                 r = str(m.get('r', '???')).upper()
                                 self.org_results.insert("end", f"   {h:<25} | {r:<20}\n", "ACCENT")
+
+                            self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
                             
-                            # --- LE FOOTER UNIQUE (C'est ici qu'on corrige le doublon) ---
-                            self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
-                            
-                            # On récupère la valeur REDACTED proprement
                             r_val = 0
                             if org_model.redacted_members:
                                 try:
@@ -135,17 +138,38 @@ class ScannerFrame(ctk.CTkFrame):
                                         r_val = str(org_model.redacted_members).split(":")[-1].strip()
                                     else:
                                         r_val = int(org_model.redacted_members)
-                                except: r_val = 0
-
-                            # UNE SEULE LIGNE DE RÉSUMÉ
-                            summary = f"   TOTAL: {count:<4} | VISIBLE: {len(members):<4} | REDACTED: {r_val}\n"
-                            self.org_results.insert("end", summary, "ACCENT")
-                            
+                                except: r_val = "???"
+                                
+                            # Résumé des effectifs
+                            summary = f"\n   TOTAL: {count:<4} | VISIBLE: {len(members):<4} | REDACTED: {r_val}\n"
+                            self.org_results.insert("end", summary, "bold")
                     except Exception as e:
-                        self.org_results.insert("end", f"   [!] Erreur Roster: {e}\n", "ACCENT")
+                        self.org_results.insert("end", f"   [!] Erreur Roster: {e}\n", "warning")
+                
+                # --- [BLOC 3 : DIPLOMATIE & MANIFESTE] ---
+                self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
+                
+                if org_model:
+                    # Diplomatie
+                    self.org_results.insert("end", "   ALLIÉS : ", "info_label")
+                    self.org_results.insert("end", f"{org_model.allies or 'AUCUN'}\n")
+                    
+                    self.org_results.insert("end", "   ENNEMIS : ", "warning_label")
+                    self.org_results.insert("end", f"{org_model.enemies or 'AUCUN'}\n")
 
-                # Séparateur de fin de fiche
-                self.org_results.insert("end", f"\n{'-'*60}\n")
+                    # Description / Manifeste
+                    if org_model.description and org_model.description.strip():
+                        self.org_results.insert("end", "\n   MANIFESTE / NOTES :\n", "notes_label")
+                        desc = org_model.description[:200] + "..." if len(org_model.description) > 200 else org_model.description
+                        self.org_results.insert("end", f"   {desc}\n", "notes_text")
+                
+                self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
+
+                # --- SÉPARATEUR FINAL ENTRE LES ORGAS ---
+                self.org_results.insert("end", f"{'='*60}\n\n")
+
+                # --- BINDINGS ---
+                self.org_results.tag_bind(tag_name_click, "<Double-Button-1>", lambda e, s=sid: self.edit_org_window(s))   
                 self.org_results.tag_bind(tag_link, "<Button-1>", lambda e, s=sid: self.open_org(s))
 
     def setup_tags(self):
@@ -161,6 +185,7 @@ class ScannerFrame(ctk.CTkFrame):
         self.org_results.tag_config("ACCENT", foreground="#ff8c00") # L'orange Drake
         self.org_results.tag_config("NEUTRE", foreground="white")
         self.org_results.tag_config("ENNEMI", foreground="#ff4444")
+        self.org_results.tag_config("AMI", foreground="#00FF00")
 
         for k in ["link", "link_org", "link_rsi"]:
             self.results.tag_bind(k, "<Enter>", lambda e: self.results.configure(cursor="hand2"))
@@ -310,11 +335,10 @@ class ScannerFrame(ctk.CTkFrame):
                 # Tags pour les liens cliquables
                 tag_p, tag_o, tag_r = f"tp_{t.pseudo}", f"to_{t.pseudo}", f"tr_{t.pseudo}"
 
-                # Ligne principale : Pseudo et Orga
+                # --- [BLOC 1 : ENTÊTE IDENTITÉ] ---
                 self.results.insert("end", " ■ ", t.alignment)
                 self.results.insert("end", f"{t.pseudo}", ("link", tag_p))
 
-                # Affiche l'organisation si présente et pertinente, sinon indique [NONE] sans lien
                 org_val = (t.org or "")
                 org_norm = str(org_val).strip().upper().replace("[", "").replace("]", "")
                 is_valid_org = bool(org_norm) and not (
@@ -322,25 +346,29 @@ class ScannerFrame(ctk.CTkFrame):
                 )
 
                 if is_valid_org:
-                    self.results.insert("end", " ")
-                    self.results.insert("end", "[")
-                    self.results.insert("end", f"{org_val}")
-                    self.results.insert("end", "/")
-                    self.results.insert("end", f"{t.sid or 'N/A'}", ("link_org", tag_o))
-                    self.results.insert("end", "]")
+                    self.results.insert("end", f" [{org_val}/{t.sid or 'N/A'}]", ("link_org", tag_o))
                 else:
-                    # Aucun lien si pas d'orga publique
-                    self.results.insert("end", " [NONE]")
+                    self.results.insert("end", " [SANS ORG]")
 
                 self.results.insert("end", " [")
                 self.results.insert("end", "RSI", ("link_rsi", tag_r))
                 self.results.insert("end", "]\n")
                 
-                # --- BLOC INFOS (DÉTAILS) ---
-                self.results.insert("end", f"   VAISSEAU: {t.ship or 'INC'} | MENACE: {t.threat or '0'} | W/L: {t.wins}/{t.losses}\n")
-                self.results.insert("end", f"   PVP: {t.pvp_lvl or 'N/A'} | ACTIVITÉ: {t.activity or 'N/A'} | LANG: {t.language or '??'}\n")
+                # --- [BLOC 2 : INFOS TECHNIQUES] ---
+                ratio = f"{t.pvp_ratio():.2f}"
+                self.results.insert("end", f"   VAISSEAU: {t.ship or 'INC'} | MENACE: {t.threat} | W/L: {t.wins}/{t.losses} ({ratio})\n")
+                self.results.insert("end", f"   PVP: {t.pvp_lvl} | ACTIVITÉ: {t.activity} | LANG: {t.language}\n")
 
-               # --- BLOC CONTRATS ---
+                # --- [BLOC 3 : NOTES / RENSEIGNEMENTS] ---
+                self.results.insert("end", "   " + "-"*45 + "\n", "separator")
+                if t.notes and t.notes.strip():
+                    self.results.insert("end", f"   RENSEIGNEMENTS ({t.date}):\n", "notes_label")
+                    self.results.insert("end", f"   {t.notes}\n", "notes_text")
+                else:
+                    self.results.insert("end", "   RENSEIGNEMENTS: Aucune donnée.\n", "small_info")
+                self.results.insert("end", "   " + "-"*45 + "\n", "separator")
+
+                # --- [BLOC 4 : CONTRATS (DÉTAILLÉ)] ---
                 try:
                     target_contracts = self.controller.contract.get_contracts_for_target(t.pseudo)
                     client_contracts = self.controller.contract.get_contracts_for_client(t.pseudo)
@@ -349,42 +377,38 @@ class ScannerFrame(ctk.CTkFrame):
                         t_open = sum(1 for c in target_contracts if c[4] != "CLOSED")
                         c_open = sum(1 for c in client_contracts if c[4] != "CLOSED")
                         
-                        self.results.insert("end", f"   CONTRATS: CIBLE(O:{t_open}) | CLIENT(O:{c_open})\n")
+                        self.results.insert("end", f"   HISTORIQUE CONTRATS : CIBLE(O:{t_open}) | CLIENT(O:{c_open})\n")
 
-                        # --- SECTION : JOUEUR EST LA CIBLE ---
+                        # Section : Joueur est la Cible
                         if target_contracts:
-                            self.results.insert("end", "    -> En tant que CIBLE:\n")
+                            self.results.insert("end", "      -> En tant que CIBLE:\n")
                             for c in target_contracts:
                                 status, reward, ctype, client = c[4], format_int_with_dots(c[3]), c[7], c[2]
                                 icon = "✔" if status == "CLOSED" else "○"
                                 tag = "closed_contract" if status == "CLOSED" else "open_contract"
-                                self.results.insert("end", f"       {icon} # {status} | {ctype} | Client: {client} | {reward} aUEC\n", (tag,))
+                                self.results.insert("end", f"         {icon} # {status} | {ctype} | Client: {client} | {reward} aUEC\n", (tag,))
 
-                        # --- SECTION : JOUEUR EST LE COMMANDITAIRE (CLIENT) ---
+                        # Section : Joueur est le Client
                         if client_contracts:
-                            self.results.insert("end", "    -> En tant que CLIENT:\n")
+                            self.results.insert("end", "      -> En tant que CLIENT:\n")
                             for c in client_contracts:
-                                # Index : 1 = target_c, 3 = reward, 4 = status, 7 = ctype
                                 target_c, reward, status, ctype = c[1], format_int_with_dots(c[3]), c[4], c[7]
                                 icon = "✔" if status == "CLOSED" else "○"
                                 tag = "closed_contract" if status == "CLOSED" else "open_contract"
-                                self.results.insert("end", f"       {icon} # {status} | {ctype} | Cible: {target_c} | {reward} aUEC\n", (tag,))
-                
+                                self.results.insert("end", f"         {icon} # {status} | {ctype} | Cible: {target_c} | {reward} aUEC\n", (tag,))
+                    else:
+                        self.results.insert("end", "   CONTRATS : Aucun historique détecté.\n", "small_info")
+
                 except Exception as e:
                     print(f"Erreur affichage contrats scan: {e}")
 
-                self.results.insert("end", f"{'-'*60}\n")
+                # Séparateur final de cible
+                self.results.insert("end", f"{'='*60}\n")
 
-                # --- BINDINGS (SÉPARÉS !) ---
-                # On bind les tags créés plus haut pour les rendre cliquables
+                # --- BINDINGS ---
                 self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=t.pseudo: self.edit_target_window(p))
-
-                # On bind le SID pour ouvrir la page RSI de l'Orga
                 if is_valid_org:
-                    # On passe t.sid ici, car c'est lui qui sert d'identifiant dans l'URL RSI
                     self.results.tag_bind(tag_o, "<Button-1>", lambda e, s=t.sid: self.open_org(s))
-
-                # On bind le bouton RSI pour ouvrir le profil du citoyen
                 self.results.tag_bind(tag_r, "<Button-1>", lambda e, p=t.pseudo: self.open_rsi(p))
 
     def export(self):
@@ -408,99 +432,106 @@ class ScannerFrame(ctk.CTkFrame):
                 DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=main_win)
 
     def edit_org_window(self, sid):
-        """Ouvre la console Drake d'édition pour une organisation."""
+        """Fenêtre d'édition Orga — Structure calquée sur le dossier Target."""
         toplevel = ctk.CTkToplevel(self)
-        toplevel.title(f"CORPORATE DOSSIER: {sid}")
-        toplevel.geometry("750x850")
+        toplevel.title(f"MODIFICATION DOSSIER CORPORATE : {sid}")
+        toplevel.geometry("700x800")
         toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
         toplevel.transient(self)
         toplevel.grab_set()
 
-        # Récupération via ton OrgController
+        # Récupération du modèle via le controller
         org = self.controller.org.get_org_model(sid)
         if not org:
             return
 
-        # Header stylisé
-        ctk.CTkLabel(
-            toplevel, text=f"DATABASE ACCESS : {org.name} [{sid}]", 
-            font=("Orbitron", 14, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY
-        ).pack(pady=15)
+        # --- [HEADER] ---
+        ctk.CTkLabel(toplevel, text=f"ÉDITION DES DONNÉES CORPORATE : {sid}", 
+                    font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=12)
 
-        container = ctk.CTkScrollableFrame(toplevel, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=15, pady=5)
+        frame = ctk.CTkScrollableFrame(toplevel, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=12, pady=8)
 
-        # --- FONCTION INTERNE POUR CRÉER LES LIGNES ---
-        def create_field(parent, label, current_value, is_numeric=False):
-            f = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL, corner_radius=2)
-            f.pack(fill="x", pady=3)
-            ctk.CTkLabel(f, text=label.upper(), font=("Segoe UI", 10, "bold"), 
-                         text_color=DrakeConfig.TEXT_SECONDARY, width=160, anchor="w").pack(side="left", padx=10)
-            
-            entry = ctk.CTkEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, 
-                                 border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
-            entry.insert(0, str(current_value) if current_value not in [None, "NONE"] else "")
-            entry.pack(side="right", fill="x", expand=True, padx=10, pady=8)
-            return entry
-
-        # --- CHAMPS DATA RSI ---
-        e_name = create_field(container, "Nom Corp", org.name)
-        e_tag  = create_field(container, "Tag RSI", org.tag)
-        e_type = create_field(container, "Type Orga", org.org_type)
-        e_spec = create_field(container, "Spécialisation", org.specialization)
-        e_count = create_field(container, "Membres", org.member_count)
-
-        # --- SECTION DIPLOMATIE (CHARTRE ORANGE) ---
-        ctk.CTkLabel(container, text="DIPLOMATIC CHANNELS", font=("Orbitron", 11), 
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(20, 5), padx=5)
+        # --- [SECTION 1 : META DATA - LECTURE SEULE] ---
+        meta = ctk.CTkFrame(frame, fg_color="transparent")
+        meta.pack(fill="x", pady=6)
         
-        e_allies = create_field(container, "Alliés", org.allies)
-        e_enemies = create_field(container, "Ennemis", org.enemies)
+        ctk.CTkLabel(meta, text="SID", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
+        sid_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        sid_entry.insert(0, str(sid).upper())
+        sid_entry.configure(state="disabled")
+        sid_entry.pack(side="left", fill="x", expand=True, padx=6)
 
-        # --- NOTES LIBRES ---
-        ctk.CTkLabel(container, text="INTEL NOTES", font=("Orbitron", 11), 
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(20, 5), padx=5)
+        ctk.CTkLabel(meta, text="DERNIÈRE MAJ", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
+        update_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        update_entry.insert(0, org.updated_at if org.updated_at else "INCONNUE")
+        update_entry.configure(state="disabled")
+        update_entry.pack(side="left", fill="x", expand=True, padx=6)
+
+        # --- [SECTION 2 : CHAMPS ÉDITABLES] ---
+        def field(parent, label, value):
+            f = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
+            f.pack(fill="x", pady=4)
+            ctk.CTkLabel(f, text=label.upper(), font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
+            e = ctk.CTkEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+            e.insert(0, str(value) if value not in [None, "None", "NONE"] else "")
+            e.pack(side="right", fill="x", expand=True, padx=8, pady=6)
+            return e
+
+        e_name = field(frame, "Nom Orga", org.name)
+        e_tag  = field(frame, "Tag RSI", org.tag)
+        e_type = field(frame, "Type Orga", org.org_type)
+        e_spec = field(frame, "Spécialisation", org.specialization)
+        e_count = field(frame, "Membres", org.member_count)
+
+        # --- [SECTION 3 : ALIGNEMENT & DIPLOMATIE] ---
+        # On reprend exactement le même sélecteur d'alignement que pour les Targets
+        align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
+        align_f.pack(fill="x", pady=4)
+        ctk.CTkLabel(align_f, text="ALIGNEMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         
-        e_notes = ctk.CTkTextbox(container, height=180, fg_color=DrakeConfig.BG_TERMINAL, 
-                                 border_color=DrakeConfig.BORDER_COLOR, border_width=1)
-        # On utilise le champ 'neutrals' comme stockage de notes si tu n'as pas de colonne 'notes'
-        e_notes.insert("0.0", org.neutrals if org.neutrals and org.neutrals != "NONE" else "")
-        e_notes.pack(fill="x", padx=5, pady=5)
+        e_align = ctk.CTkOptionMenu(align_f, values=["NEUTRE", "AMI", "ENNEMI"], 
+                                    fg_color=DrakeConfig.BG_MAIN, button_color=DrakeConfig.ACCENT_PRIMARY, 
+                                    text_color="black", corner_radius=0)
+        e_align.set(org.alignment if hasattr(org, 'alignment') else "NEUTRE")
+        e_align.pack(side="right", fill="x", expand=True, padx=8)
 
-        # --- LOGIQUE DE SAUVEGARDE ---
-        def save_action():
+        e_allies = field(frame, "Alliés", org.allies)
+        e_enemies = field(frame, "Ennemis", org.enemies)
+
+        # --- [SECTION 4 : NOTES / MANIFESTE] ---
+        ctk.CTkLabel(frame, text="MANIFESTE & NOTES DE RENSEIGNEMENT", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=8)
+        e_notes = ctk.CTkTextbox(frame, height=150, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, border_width=1)
+        e_notes.insert("0.0", org.description if org.description and org.description != "NONE" else "")
+        e_notes.pack(fill="x", padx=8, pady=(0, 8))
+
+        # --- [SECTION 5 : SAUVEGARDE] ---
+        def save_changes():
             try:
-                # Préparation du dictionnaire pour kwargs de update_org
                 payload = {
                     "name": e_name.get().strip(),
                     "tag": e_tag.get().strip().upper(),
                     "org_type": e_type.get().strip().upper(),
                     "specialization": e_spec.get().strip().upper(),
                     "member_count": e_count.get().strip(),
-                    "allies": e_allies.get().strip(),
-                    "enemies": e_enemies.get().strip(),
-                    "neutrals": e_notes.get("0.0", "end").strip() # Stocké dans neutrals
+                    "alignment": e_align.get(),
+                    "allies": e_allies.get().strip().upper(),
+                    "enemies": e_enemies.get().strip().upper(),
+                    "description": e_notes.get("0.0", "end").strip()
                 }
                 
-                # Appel à la méthode de ton OrgController
                 self.controller.org.update_org(sid, **payload)
-                
-                # Feedback et fermeture
-                self.run_org_scan(None) # Rafraîchir la liste en arrière-plan
-                main_win = self.winfo_toplevel()
-                main_win.attributes("-topmost", True)
-
-                DrakePopup.info("SYSTEMS", f"Dossier {sid} synchronisé avec succès.", parent=main_win)
+                self.run_org_scan(None) # Rafraîchissement auto
+                toplevel.destroy()
+                DrakePopup.info("SYSTEMS", f"Dossier Corporate {sid} mis à jour.")
                 
             except Exception as ex:
-                DrakePopup.error("SYNC FAILURE", f"Erreur de communication : {ex}", parent=main_win)
+                DrakePopup.error("SYNC ERROR", f"Échec : {ex}")
 
-        btn_abort = ctk.CTkButton(toplevel, text="CANCEL", fg_color="transparent", border_width=1,
-                                  border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
-        btn_abort.pack(side="bottom", fill="x", padx=20, pady=(0,20))
+        # Boutons d'action
+        btn_save = DrakeButton(toplevel, text="SYNCHRONISER LA DATABASE", command=save_changes, height=45)
+        btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 20))
 
-        # --- BOUTON DE VALIDATION ---
-        btn_save = DrakeButton(toplevel, text="UPDATE DATABASE", command=save_action, height=45)
-        btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 5))
-        
-
+        btn_cancel = ctk.CTkButton(toplevel, text="ABANDONNER", fg_color="transparent", border_width=1, 
+                                border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
+        btn_cancel.pack(side="bottom", fill="x", padx=20, pady=0)

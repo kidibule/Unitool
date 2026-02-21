@@ -663,7 +663,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                     ((str(row[5] or "")).upper() == scanned_aff.upper())
                 )
                 if same:
-                    DrakePopup.info("DRAKE SYSTEMS", f"Aucune modification détectée pour {handle}. Sauvegarde évitée.", parent=self)
+                    DrakePopup.info("SYSTEMS", f"Aucune modification détectée pour {handle}. Sauvegarde évitée.", parent=self)
                     self._log(f"save skipped (no change): {handle}")
                     # disable button to avoid re-save
                     try:

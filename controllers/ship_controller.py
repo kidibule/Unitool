@@ -122,8 +122,9 @@ class ShipController:
         return self.app.query("SELECT * FROM ships WHERE name=?", (name.upper(),))
 
     def load_ship_as_model(self, name: str) -> Ship:
-        rows = self.load_ship(name)
+        rows = self.app.query("SELECT * FROM ships WHERE name=?", (name.upper(),))
         if rows:
+            # Utilise la méthode de classe que tu as définie
             return Ship.from_db_row(rows[0])
         return None
 

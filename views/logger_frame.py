@@ -4,46 +4,45 @@ import customtkinter as ctk
 import csv
 from datetime import datetime
 from tkinter import filedialog
-
-# Importation des ressources graphiques
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup
+from controllers.ship_controller import ShipController
 
 
 class LoggerFrame(ctk.CTkFrame):
-    """Permet de créer/mettre à jour des dossiers, importer/exporter CSV.
-
-    Le `controller` doit exposer `db` avec les méthodes `commit` et `query`.
-    """
-
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        self.ship_controller = ShipController(self.controller)
 
         # --- TITRE ---
-        DrakeConfig.create_title(self, "INTEL ARCHIVE SYSTEM ")
+        DrakeConfig.create_title(self, "INTEL ARCHIVE SYSTEM")
 
         # --- SYSTÈME D'ONGLETS ---
         self.tabview = ctk.CTkTabview(
             self, 
-            fg_color=DrakeConfig.BG_PANEL,
+            fg_color=DrakeConfig.BG_PANEL, 
             segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
-            segmented_button_unselected_hover_color=DrakeConfig.ACCENT_HOVER,
-            text_color=DrakeConfig.TEXT_MAIN,
-            corner_radius=0,
+            segmented_button_selected_hover_color="#e67e22",
+            text_color="white"
         )
-        self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
+        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
 
-        self.tab_targets = self.tabview.add("PLAYERS")
-        self.tab_orgs = self.tabview.add("ORGANIZATIONS")
+        self.tabview.add("PLAYERS")
+        self.tabview.add("ORGANIZATIONS")
+        self.tabview.add("SHIPS") # <-- Ajoute ceci
 
-        self.tab_orgs.grid_columnconfigure((0, 1), weight=1)
+        self.tab_targets = self.tabview.tab("PLAYERS")
+        self.tab_orgs = self.tabview.tab("ORGANIZATIONS")
+        self.tab_ships = self.tabview.tab("SHIPS") # <-- Définis la référence
 
+        # Appels des setups
         self.setup_targets_tab()
         self.setup_orgs_tab()
+        self.setup_ships_tab()
 
 
     def setup_orgs_tab(self):
-        """Formulaire de création d'organisation"""
+        """Formulaire Orga avec marges augmentées et titre de section pour les notes"""
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
@@ -52,57 +51,146 @@ class LoggerFrame(ctk.CTkFrame):
             "height": 35,
         }
 
-        # Ligne 1 : Nom et Tag
-        self.org_name = ctk.CTkEntry(self.tab_orgs, placeholder_text="ORGANIZATION NAME", **entry_kwargs)
-        self.org_name.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        # --- SECTION 1 : IDENTITÉ (Marge 50 comme Target) ---
+        f_top = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
+        f_top.pack(pady=(20, 5), padx=50, fill="x")
+
+        self.org_sid = ctk.CTkEntry(f_top, placeholder_text="SID (RSI URL ID)", **entry_kwargs)
+        self.org_sid.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        self.org_tag = ctk.CTkEntry(self.tab_orgs, placeholder_text="TAG (ex: UEE)", **entry_kwargs)
-        self.org_tag.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        self.org_tag = ctk.CTkEntry(f_top, placeholder_text="TAG (ex: UEE)", width=120, **entry_kwargs)
+        self.org_tag.pack(side="right")
 
-        # Ligne 2 : SID (ID RSI) et Type
-        self.org_sid = ctk.CTkEntry(self.tab_orgs, placeholder_text="SID (RSI URL ID)", **entry_kwargs)
-        self.org_sid.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+        self.org_name = ctk.CTkEntry(self.tab_orgs, placeholder_text="ORGANIZATION NAME", **entry_kwargs)
+        self.org_name.pack(pady=5, padx=50, fill="x")
 
-        self.org_type = ctk.CTkComboBox(self.tab_orgs, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"], **entry_kwargs)
-        self.org_type.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        # --- SECTION 2 : TYPE & ALIGNEMENT ---
+        f_type_align = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
+        f_type_align.pack(pady=5, padx=50, fill="x")
+
+        self.org_type = ctk.CTkComboBox(f_type_align, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"], **entry_kwargs)
+        self.org_type.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.org_type.set("ORGANIZATION")
 
-        # Ligne 3 : Description longue
-        self.org_desc = ctk.CTkTextbox(self.tab_orgs, height=100, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
-        self.org_desc.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+        self.org_align = ctk.CTkComboBox(f_type_align, values=["NEUTRE", "AMI", "ENNEMI"],
+                                        button_color=DrakeConfig.ACCENT_PRIMARY, **entry_kwargs)
+        self.org_align.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        self.org_align.set("NEUTRE")
 
-        # Bouton de sauvegarde dédié
-        btn_save_org = DrakeButton(self.tab_orgs, text="REGISTER ORGANIZATION", command=self.save_org, height=40)
-        btn_save_org.grid(row=3, column=0, columnspan=2, padx=10, pady=20, sticky="ew")
+        # --- SECTION 3 : SPÉCIALISATION & DIPLOMATIE ---
+        self.org_spec = ctk.CTkEntry(self.tab_orgs, placeholder_text="SPECIALIZATION", **entry_kwargs)
+        self.org_spec.pack(pady=5, padx=50, fill="x")
+
+        f_diplomacy = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
+        f_diplomacy.pack(pady=5, padx=50, fill="x")
+
+        self.org_allies = ctk.CTkEntry(f_diplomacy, placeholder_text="ALLIES (TAGS)", **entry_kwargs)
+        self.org_allies.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        self.org_enemies = ctk.CTkEntry(f_diplomacy, placeholder_text="ENEMIES (TAGS)", **entry_kwargs)
+        self.org_enemies.pack(side="right", fill="x", expand=True, padx=(5, 0))
+
+        # --- SECTION 4 : NOTES (Avec titre de section) ---
+        ctk.CTkLabel(self.tab_orgs, text="MANIFEST & INTELLIGENCE NOTES", 
+                     font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=50)
+        
+        self.org_desc = ctk.CTkTextbox(self.tab_orgs, height=120, fg_color=DrakeConfig.BG_TERMINAL, 
+                                       border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        self.org_desc.pack(pady=(0, 10), padx=50, fill="x")
+
+        # --- BOUTONS D'ACTION ---
+        self.btn_save_org = DrakeButton(self.tab_orgs, text="REGISTER ORGANIZATION", command=self.save_org, height=45)
+        self.btn_save_org.pack(pady=10, padx=50, fill="x")
+
+        f_utils = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
+        f_utils.pack(fill="x", padx=50, pady=(0, 20))
+        
+        ctk.CTkButton(f_utils, text="IMPORT CSV", command=self.import_orgs_csv, 
+                      fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_utils, text="EXPORT CSV", command=self.export_orgs_csv, 
+                      fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_utils, text="CLEAR", command=self.clear_org_fields, 
+                      fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+
+    # --- LOGIQUE DE SAUVEGARDE ET UTILITAIRES POUR LES ORGAS ---
 
     def save_org(self):
         """Sauvegarde les données de l'onglet Organisation"""
-        name = self.org_name.get().strip()
         sid = self.org_sid.get().strip().upper()
+        name = self.org_name.get().strip()
         
         if not sid or not name:
-            DrakePopup.error("ERROR", "Name and SID are required.")
+            DrakePopup.error("ERROR", "SID and Name are mandatory for registration.")
             return
 
-        sql = """INSERT INTO organizations (sid, name, tag, description, org_type, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?)
+        # On prépare la requête SQL (assure-toi que ta table a bien ces colonnes)
+        sql = """INSERT INTO organizations (sid, name, tag, description, org_type, specialization, allies, enemies, alignment, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(sid) DO UPDATE SET 
                  name=excluded.name, tag=excluded.tag, description=excluded.description, 
-                 org_type=excluded.org_type, updated_at=excluded.updated_at"""
+                 org_type=excluded.org_type, specialization=excluded.specialization,
+                 allies=excluded.allies, enemies=excluded.enemies,
+                 alignment=excluded.alignment, updated_at=excluded.updated_at"""
         
         params = (
-            sid, name, self.org_tag.get().upper(),
+            sid, 
+            name, 
+            self.org_tag.get().upper(),
             self.org_desc.get("0.0", "end").strip(),
             self.org_type.get(),
+            self.org_spec.get().upper() or "GENERAL",
+            self.org_allies.get().upper(),
+            self.org_enemies.get().upper(),
+            self.org_align.get(),
             datetime.now().strftime("%d/%m/%Y")
         )
 
         try:
             self.controller.db.commit(sql, params)
-            DrakePopup.info("DRAKE SYSTEMS", f"Organization {name} synchronized.")
-            self.controller.log(f"Org saved: {sid}", source="LOGGER")
+            DrakePopup.info("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Org registered: {sid}", source="LOGGER")
+            self.clear_org_fields() # On vide après succès
         except Exception as e:
-            DrakePopup.error("DB ERROR", str(e))
+            DrakePopup.error("DB ERROR", f"Failed to save organization: {e}")
+
+    def import_orgs_csv(self):
+        """Importation CSV pour les organisations"""
+        path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if not path: return
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                for row in reader:
+                    sql = "INSERT OR REPLACE INTO organizations (sid, name, tag, alignment) VALUES (?,?,?,?)"
+                    self.controller.db.commit(sql, (row["sid"].upper(), row["name"], row["tag"].upper(), row["alignment"]))
+            DrakePopup.info("SUCCESS", "Import des organisations terminé.")
+        except Exception as e:
+            DrakePopup.error("IMPORT ERROR", str(e))
+
+    def export_orgs_csv(self):
+        """Exportation CSV pour les organisations"""
+        path = filedialog.asksaveasfilename(defaultextension=".csv")
+        if not path: return
+        data = self.controller.db.query("SELECT sid, name, tag, alignment FROM organizations")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f, delimiter=";")
+            writer.writerow(["sid", "name", "tag", "alignment"])
+            writer.writerows(data)
+        DrakePopup.info("SUCCESS", f"Base organisations exportée vers {path}")
+
+    def clear_org_fields(self):
+        """Réinitialise tous les champs de l'onglet Organisation"""
+        self.org_sid.delete(0, "end")
+        self.org_name.delete(0, "end")
+        self.org_tag.delete(0, "end")
+        self.org_spec.delete(0, "end")
+        self.org_allies.delete(0, "end")
+        self.org_enemies.delete(0, "end")
+        self.org_desc.delete("0.0", "end")
+        self.org_type.set("ORGANIZATION")
+        self.org_align.set("NEUTRE")
+        self.focus_set()
 
     def setup_targets_tab(self):
         # On définit entry_kwargs localement ou on utilise self.entry_kwargs si défini dans __init__
@@ -161,16 +249,22 @@ class LoggerFrame(ctk.CTkFrame):
         self.loss_in = ctk.CTkEntry(f_stats, placeholder_text="LOSSES", **entry_kwargs)
         self.loss_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        # --- 5. ALIGNEMENT & PROFIL ---
-        self.a_btn = ctk.CTkSegmentedButton(
+        #--- 5. ALIGNEMENT & PROFIL ---
+        self.a_btn = ctk.CTkComboBox(
             self.tab_targets,
             values=["AMI", "NEUTRE", "ENNEMI"],
-            font=DrakeConfig.FONT_UI,
-            selected_color=DrakeConfig.ACCENT_PRIMARY,
-            unselected_color=DrakeConfig.BG_PANEL,
+            font=DrakeConfig.FONT_UI,             
+            fg_color=DrakeConfig.BG_TERMINAL,    
+            button_color=DrakeConfig.ACCENT_PRIMARY, 
+            button_hover_color=DrakeConfig.ACCENT_HOVER,
+            border_color=DrakeConfig.BORDER_COLOR,
+            dropdown_fg_color=DrakeConfig.BG_TERMINAL, 
             corner_radius=0,
+            width=200
         )
-        self.a_btn.pack(pady=10)
+        # Utilisation de pack cohérente avec le reste du dossier Target
+        self.a_btn.pack(pady=(5, 10), padx=50, fill="x")
+        self.a_btn.set("NEUTRE")
 
         f_combat = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_combat.pack(pady=5, padx=50, fill="x")
@@ -269,7 +363,7 @@ class LoggerFrame(ctk.CTkFrame):
                 (str(row[12]) == str(losses_val))
             )
             if same:
-                DrakePopup.info("DRAKE SYSTEMS", f"Aucune modification trouvée pour {h}. Aucune sauvegarde effectuée.", parent=self)
+                DrakePopup.info("SYSTEMS", f"Aucune modification trouvée pour {h}. Aucune sauvegarde effectuée.", parent=self)
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Save skipped (no change): {h}", source="LOGGER")
@@ -306,7 +400,7 @@ class LoggerFrame(ctk.CTkFrame):
         )
 
         self.controller.db.commit(sql, params)
-        DrakePopup.info("DRAKE SYSTEMS", f"Dossier {h} synchronisé.", parent=self)
+        DrakePopup.info("SYSTEMS", f"Dossier {h} synchronisé.", parent=self)
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Synchronized dossier: {h}", source="LOGGER")
@@ -424,3 +518,212 @@ class LoggerFrame(ctk.CTkFrame):
                 self.controller.log("Cleared logger UI fields", source="LOGGER")
         except Exception:
             pass
+
+    def setup_ships_tab(self):
+        """Configuration complète de l'onglet SHIP MANAGEMENT (27 paramètres)"""
+        entry_kwargs = {
+            "font": DrakeConfig.FONT_LOGS,
+            "fg_color": DrakeConfig.BG_TERMINAL,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "corner_radius": 0,
+            "height": 30,
+        }
+
+        # --- HEADER & IDENTITY ---
+        f_identity = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_identity.pack(pady=(20, 5), padx=50, fill="x")
+
+        self.ship_name = ctk.CTkEntry(f_identity, placeholder_text="SHIP NAME (Press Enter to Load)", **entry_kwargs)
+        self.ship_name.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.ship_name.bind("<Return>", self.load_ship)
+
+        self.ship_brand = ctk.CTkEntry(f_identity, placeholder_text="BRAND / MANUFACTURER", **entry_kwargs)
+        self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
+
+        # --- ROLE & SPECS ---
+        f_role = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_role.pack(pady=5, padx=50, fill="x")
+        
+        self.ship_role = ctk.CTkEntry(f_role, placeholder_text="ROLE", **entry_kwargs)
+        self.ship_role.pack(side="left", fill="x", expand=True, padx=(0,5))
+        
+        self.ship_career = ctk.CTkEntry(f_role, placeholder_text="CAREER", **entry_kwargs)
+        self.ship_career.pack(side="left", fill="x", expand=True, padx=5)
+        
+        self.ship_size = ctk.CTkEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
+        self.ship_size.pack(side="left", padx=5)
+        
+        self.ship_crew = ctk.CTkEntry(f_role, placeholder_text="CREW", width=80, **entry_kwargs)
+        self.ship_crew.pack(side="right", padx=(5,0))
+
+        # --- SECTION : PROPULSION & SPEED ---
+        self._add_section_title(self.tab_ships, "PROPULSION & NAVIGATION")
+        
+        f_prop = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_prop.pack(pady=5, padx=50, fill="x")
+        self.ship_scm = ctk.CTkEntry(f_prop, placeholder_text="SCM SPEED", **entry_kwargs)
+        self.ship_scm.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.ship_scm_bf = ctk.CTkEntry(f_prop, placeholder_text="BOOST FWD", **entry_kwargs)
+        self.ship_scm_bf.pack(side="left", fill="x", expand=True, padx=5)
+        self.ship_scm_bb = ctk.CTkEntry(f_prop, placeholder_text="BOOST BWD", **entry_kwargs)
+        self.ship_scm_bb.pack(side="right", fill="x", expand=True, padx=(5,0))
+
+        f_nav = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_nav.pack(pady=5, padx=50, fill="x")
+        self.ship_nav = ctk.CTkEntry(f_nav, placeholder_text="NAV MAX SPEED", **entry_kwargs)
+        self.ship_nav.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.ship_h2 = ctk.CTkEntry(f_nav, placeholder_text="HYDROGEN CAP", **entry_kwargs)
+        self.ship_h2.pack(side="left", fill="x", expand=True, padx=5)
+        self.ship_qt = ctk.CTkEntry(f_nav, placeholder_text="QT FUEL CAP", **entry_kwargs)
+        self.ship_qt.pack(side="right", fill="x", expand=True, padx=(5,0))
+
+        # --- SECTION : MANEUVERABILITY (Standard vs Boosted) ---
+        self._add_section_title(self.tab_ships, "FLIGHT DYNAMICS (PITCH / YAW / ROLL)")
+        
+        f_dyn = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_dyn.pack(pady=5, padx=50, fill="x")
+        self.ship_pitch = ctk.CTkEntry(f_dyn, placeholder_text="PITCH", **entry_kwargs)
+        self.ship_pitch.pack(side="left", fill="x", expand=True, padx=(0,2))
+        self.ship_yaw = ctk.CTkEntry(f_dyn, placeholder_text="YAW", **entry_kwargs)
+        self.ship_yaw.pack(side="left", fill="x", expand=True, padx=2)
+        self.ship_roll = ctk.CTkEntry(f_dyn, placeholder_text="ROLL", **entry_kwargs)
+        self.ship_roll.pack(side="right", fill="x", expand=True, padx=(2,0))
+
+        f_dyn_b = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_dyn_b.pack(pady=5, padx=50, fill="x")
+        self.ship_b_pitch = ctk.CTkEntry(f_dyn_b, placeholder_text="B. PITCH", **entry_kwargs)
+        self.ship_b_pitch.pack(side="left", fill="x", expand=True, padx=(0,2))
+        self.ship_b_yaw = ctk.CTkEntry(f_dyn_b, placeholder_text="B. YAW", **entry_kwargs)
+        self.ship_b_yaw.pack(side="left", fill="x", expand=True, padx=2)
+        self.ship_b_roll = ctk.CTkEntry(f_dyn_b, placeholder_text="B. ROLL", **entry_kwargs)
+        self.ship_b_roll.pack(side="right", fill="x", expand=True, padx=(2,0))
+
+        # --- SECTION : SURVIVABILITY & LOGISTICS ---
+        self._add_section_title(self.tab_ships, "SURVIVABILITY & LOGISTICS")
+        
+        f_surv = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_surv.pack(pady=5, padx=50, fill="x")
+        self.ship_hp = ctk.CTkEntry(f_surv, placeholder_text="TOTAL HP", **entry_kwargs)
+        self.ship_hp.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.ship_power = ctk.CTkEntry(f_surv, placeholder_text="POWER CONS.", **entry_kwargs)
+        self.ship_power.pack(side="left", fill="x", expand=True, padx=5)
+        self.ship_cm = ctk.CTkEntry(f_surv, placeholder_text="CM (DECOY/NOISE)", **entry_kwargs)
+        self.ship_cm.pack(side="right", fill="x", expand=True, padx=(5,0))
+
+        f_log = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_log.pack(pady=5, padx=50, fill="x")
+        self.ship_cargo = ctk.CTkEntry(f_log, placeholder_text="CARGO (SCU)", **entry_kwargs)
+        self.ship_cargo.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.ship_mass = ctk.CTkEntry(f_log, placeholder_text="MASS", **entry_kwargs)
+        self.ship_mass.pack(side="left", fill="x", expand=True, padx=5)
+        self.ship_dim = ctk.CTkEntry(f_log, placeholder_text="DIMENSIONS", **entry_kwargs)
+        self.ship_dim.pack(side="right", fill="x", expand=True, padx=(5,0))
+
+        # --- SECTION : ECONOMY ---
+        f_econ = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_econ.pack(pady=5, padx=50, fill="x")
+        self.ship_fee = ctk.CTkEntry(f_econ, placeholder_text="EXPEDITION FEE", **entry_kwargs)
+        self.ship_fee.pack(side="left", fill="x", expand=True, padx=(0,5))
+        self.ship_claim = ctk.CTkEntry(f_econ, placeholder_text="CLAIM TIME", **entry_kwargs)
+        self.ship_claim.pack(side="left", fill="x", expand=True, padx=5)
+        self.ship_expedite = ctk.CTkEntry(f_econ, placeholder_text="EXPEDITE TIME", **entry_kwargs)
+        self.ship_expedite.pack(side="right", fill="x", expand=True, padx=(5,0))
+
+        # --- ACTIONS ---
+        self.btn_save_ship = DrakeButton(self.tab_ships, text="SYNC SHIP TO DATABASE", command=self.save_ship, height=45)
+        self.btn_save_ship.pack(pady=15, padx=50, fill="x")
+
+        # --- UTILS ---
+        f_utils = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_utils.pack(fill="x", padx=50, pady=(0, 20))
+        ctk.CTkButton(f_utils, text="IMPORT", command=self.import_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_utils, text="EXPORT", command=self.export_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        ctk.CTkButton(f_utils, text="CLEAR", command=self.clear_ship_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+
+    def _add_section_title(self, parent, title):
+        """Petit utilitaire pour ajouter des titres de section Drake"""
+        ctk.CTkLabel(parent, text=title, font=DrakeConfig.FONT_UI, 
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=50)
+        
+    def save_ship(self):
+        """Appelle le contrôleur pour sauvegarder les données"""
+        name = self.ship_name.get().strip()
+        if not name:
+            DrakePopup.error("ERROR", "Ship Name is mandatory.")
+            return
+
+        try:
+            # On passe tous les champs au contrôleur
+            self.ship_controller.save_ship(
+                name=name,
+                brand=self.ship_brand.get(),
+                role=self.ship_role.get(),
+                career=self.ship_career.get(),
+                scm_speed=self.ship_scm.get(),
+                nav_max_speed=self.ship_nav.get(),
+                hp=self.ship_hp.get() or 0,
+                cargo=self.ship_cargo.get(),
+                crew_size=self.ship_crew.get() or 0
+                # ... ajoute les autres champs si tu as créé les entrées correspondantes
+            )
+            DrakePopup.info("SUCCESS", f"Ship {name.upper()} data synchronized.")
+        except Exception as e:
+            DrakePopup.error("DATABASE ERROR", str(e))
+
+    def load_ship(self, event=None):
+        name = self.ship_name.get().strip()
+        if not name: return
+
+        # On demande au contrôleur de nous donner un objet Ship
+        ship = self.ship_controller.load_ship_as_model(name)
+        
+        if not ship:
+            DrakePopup.info("NOT FOUND", f"No record for {name}")
+            return
+
+        # Remplissage automatique via les attributs du modèle
+        self.ship_brand.delete(0, "end"); self.ship_brand.insert(0, ship.brand)
+        self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
+        self.ship_career.delete(0, "end"); self.ship_career.insert(0, ship.career)
+        self.ship_scm.delete(0, "end"); self.ship_scm.insert(0, ship.scm_speed)
+        self.ship_hp.delete(0, "end"); self.ship_hp.insert(0, str(ship.hp))
+        self.ship_cargo.delete(0, "end"); self.ship_cargo.insert(0, str(ship.cargo))
+        self.ship_crew.delete(0, "end"); self.ship_crew.insert(0, str(ship.crew_size))
+        self.ship_nav.delete(0, "end"); self.ship_nav.insert(0, ship.nav_max_speed)
+        self.ship_name.delete(0, "end"); self.ship_name.insert(0, ship.name)
+        self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
+        
+        DrakePopup.info("FLEET", f"Specs for {ship.name} loaded.")
+    
+    def import_ships_csv(self):
+        path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if not path: return
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                # On envoie directement la liste de dicts au contrôleur
+                self.ship_controller.import_ships_csv(list(reader))
+            DrakePopup.info("SUCCESS", "Fleet import successful.")
+        except Exception as e:
+            DrakePopup.error("IMPORT ERROR", str(e))
+
+    def export_ships_csv(self):
+        path = filedialog.asksaveasfilename(defaultextension=".csv")
+        if not path: return
+        try:
+            data = self.ship_controller.export_ships_csv()
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=";")
+                # Headers basés sur ton SQL
+                writer.writerow(["name", "brand", "role", "career", "size", "crew_size", "scm_speed"]) 
+                writer.writerows(data)
+            DrakePopup.info("SUCCESS", f"Fleet exported to {path}")
+        except Exception as e:
+            DrakePopup.error("EXPORT ERROR", str(e))
+
+    def clear_ship_fields(self):
+        for attr in [self.ship_name, self.ship_brand, self.ship_role, 
+                     self.ship_career, self.ship_scm, self.ship_nav, 
+                     self.ship_hp, self.ship_cargo, self.ship_crew]:
+            attr.delete(0, "end")
+        

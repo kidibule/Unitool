@@ -31,7 +31,7 @@ class Database:
             try: self.cursor.execute(f"ALTER TABLE targets ADD COLUMN {col_name} {col_type}")
             except: pass
 
-        # --- TABLE ORGANIZATIONS (Celle qui manquait) ---
+        # --- TABLE ORGANIZATIONS ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS organizations (
             sid TEXT PRIMARY KEY,
             name TEXT,
@@ -47,15 +47,18 @@ class Database:
             enemies TEXT DEFAULT '',
             neutrals TEXT DEFAULT '',
             updated_at TEXT
+            alignment TEXT DEFAULT 'NEUTRE'
         )""")
 
-        # Migration pour Organizations (au cas où tu ajoutes des colonnes plus tard)
+        # Migration pour Organizations
         org_columns = [
             ("org_type", "TEXT DEFAULT 'ORGANIZATION'"),
             ("specialization", "TEXT DEFAULT 'GENERAL'"),
             ("allies", "TEXT DEFAULT ''"),
             ("enemies", "TEXT DEFAULT ''"),
             ("neutrals", "TEXT DEFAULT ''"),
+            ("alignment", "TEXT DEFAULT 'NEUTRE'"),
+            ("updated_at", "TEXT"),
         ]
         for col_name, col_type in org_columns:
             try: self.cursor.execute(f"ALTER TABLE organizations ADD COLUMN {col_name} {col_type}")
@@ -71,7 +74,7 @@ class Database:
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS contract_types 
             (name TEXT PRIMARY KEY, reward TEXT)""")
 
-        # Table for ships (single registry of known ships)
+        # Table for ships 
         self.cursor.execute(
             """CREATE TABLE IF NOT EXISTS ships (
                 name TEXT PRIMARY KEY,

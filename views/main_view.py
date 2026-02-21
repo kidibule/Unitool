@@ -8,7 +8,6 @@ from views.scanner_frame import ScannerFrame
 from views.logger_frame import LoggerFrame
 from views.contract_frame import ContractFrame
 from views.intelligence_frame import IntelligenceFrame
-from views.ship_frame import ShipFrame
 from datetime import datetime
 
 # Import du moteur graphique
@@ -72,7 +71,6 @@ class MainView(ctk.CTkFrame):
             ("ContractFrame", "CONTRATS"),
             ("LoggerFrame", "ARCHIVER"),
             ("IntelligenceFrame", "INTEL"),
-            ("ShipFrame", "SHIPS"),
         ]
 
         # Remplacement par des boutons typés Drake
@@ -97,7 +95,7 @@ class MainView(ctk.CTkFrame):
         self.container.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
         self.frames = {}
-        for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame, ShipFrame):
+        for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame):
             frame = F(self.container, self.controller)
             self.frames[F.__name__] = frame
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)

@@ -31,7 +31,7 @@ class Organization(BaseModel):
         "sid", "name", "tag", "description", "member_count", 
         "visible_members", "redacted_members", "ranks", 
         "org_type", "specialization", "allies", "enemies", 
-        "neutrals", "updated_at"
+        "neutrals", "updated_at","alignment"
     ]
 
     def __init__(
@@ -50,6 +50,7 @@ class Organization(BaseModel):
         enemies: str = "",
         neutrals: str = "",
         updated_at: str = None,
+        alignment: str = "NEUTRE"
     ):
         # Identifiants
         self.sid = sid.upper() if sid else ""
@@ -75,6 +76,8 @@ class Organization(BaseModel):
         # Metadata
         self.updated_at = updated_at or datetime.now().strftime("%d/%m/%Y")
 
+        self.alignment = alignment.upper() if alignment else "NEUTRE"
+
     def is_large(self) -> bool:
         """Retourne True si l'org a plus de 100 membres."""
         return self.member_count > 100
@@ -91,3 +94,9 @@ class Organization(BaseModel):
     def to_db_tuple(self) -> tuple:
         """Convertit en tuple pour insertion/update DB."""
         return self.to_tuple(self.COLUMNS)
+
+    def is_enemy(self) -> bool:
+        return self.alignment in ["ENNEMI", "PIRATE", "HOSTILE"]
+
+    def is_friendly(self) -> bool:
+        return self.alignment == "AMI"
