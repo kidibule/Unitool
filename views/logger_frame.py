@@ -120,7 +120,7 @@ class LoggerFrame(ctk.CTkFrame):
         name = self.org_name.get().strip()
         
         if not sid or not name:
-            DrakePopup.error("ERROR", "SID and Name are mandatory for registration.")
+            self.controller.log("ERROR", "SID and Name are mandatory for registration.")
             return
 
         # On prépare la requête SQL (assure-toi que ta table a bien ces colonnes)
@@ -147,12 +147,12 @@ class LoggerFrame(ctk.CTkFrame):
 
         try:
             self.controller.db.commit(sql, params)
-            DrakePopup.info("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
+            self.controller.log("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="LOGGER")
             self.clear_org_fields() # On vide après succès
         except Exception as e:
-            DrakePopup.error("DB ERROR", f"Failed to save organization: {e}")
+            self.controller.log("DB ERROR", f"Failed to save organization: {e}")
 
     def import_orgs_csv(self):
         """Importation CSV pour les organisations"""
@@ -164,9 +164,9 @@ class LoggerFrame(ctk.CTkFrame):
                 for row in reader:
                     sql = "INSERT OR REPLACE INTO organizations (sid, name, tag, alignment) VALUES (?,?,?,?)"
                     self.controller.db.commit(sql, (row["sid"].upper(), row["name"], row["tag"].upper(), row["alignment"]))
-            DrakePopup.info("SUCCESS", "Import des organisations terminé.")
+            self.controller.log("SUCCESS", "Import des organisations terminé.")
         except Exception as e:
-            DrakePopup.error("IMPORT ERROR", str(e))
+            self.controller.log("IMPORT ERROR", str(e))
 
     def export_orgs_csv(self):
         """Exportation CSV pour les organisations"""
@@ -177,7 +177,7 @@ class LoggerFrame(ctk.CTkFrame):
             writer = csv.writer(f, delimiter=";")
             writer.writerow(["sid", "name", "tag", "alignment"])
             writer.writerows(data)
-        DrakePopup.info("SUCCESS", f"Base organisations exportée vers {path}")
+        self.controller.log("SUCCESS", f"Base organisations exportée vers {path}")
 
     def clear_org_fields(self):
         """Réinitialise tous les champs de l'onglet Organisation"""
@@ -452,14 +452,14 @@ class LoggerFrame(ctk.CTkFrame):
                             row["alignment"],
                         ),
                     )
-            DrakePopup.info("SUCCESS", "Import terminé.", parent=self)
+                self.controller.log("SUCCESS", "Import terminé.", parent=self)
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Imported CSV: {path}", source="LOGGER")
             except Exception:
                 pass
         except Exception as e:
-            DrakePopup.error("ERROR", str(e), parent=self)
+            self.controller.log("ERROR", str(e), parent=self)
 
     def export_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -482,7 +482,7 @@ class LoggerFrame(ctk.CTkFrame):
                 ]
             )
             writer.writerows(data)
-        DrakePopup.info("SUCCESS", "Données exportées.", parent=self)
+        self.controller.log("SUCCESS", "Données exportées.", parent=self)
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
@@ -646,29 +646,74 @@ class LoggerFrame(ctk.CTkFrame):
                      text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=50)
         
     def save_ship(self):
-        """Appelle le contrôleur pour sauvegarder les données"""
+        """Sauvegarde sécurisée : bloque l'exécution si les données sont invalides."""
+        
+        # 1. Récupération des données
         name = self.ship_name.get().strip()
+        
+        # 2. Sécurité : Nom obligatoire
         if not name:
-            DrakePopup.error("ERROR", "Ship Name is mandatory.")
+            self.controller.log("LOCK ERROR", "SHIP NAME REQUIRED TO SYNC.")
+            self.ship_name.focus_set()
             return
 
+        # 3. Sécurité : Vérification des types numériques
+        # On définit les champs qui DOIVENT être des nombres
+        numeric_fields = {
+            "CREW": self.ship_crew.get(),
+            "SCM SPEED": self.ship_scm.get(),
+            "BODY HP": self.ship_hp.get(),
+            "CARGO": self.ship_cargo.get(),
+            "PITCH": self.ship_pitch.get(),
+            "YAW": self.ship_yaw.get(),
+            "ROLL": self.ship_roll.get()
+        }
+
+        for label, value in numeric_fields.items():
+            if value: # On ne vérifie que si le champ n'est pas vide
+                try:
+                    float(value) # Test de conversion
+                except ValueError:
+                    self.controller.log("DATA CORRUPTION", f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.")
+                    return # ON ARRÊTE TOUT ICI
+
+        # 4. Si on arrive ici, tout est OK, on prépare le dictionnaire pour le controller
+        data = {
+            "name": name,
+            "brand": self.ship_brand.get(),
+            "role": self.ship_role.get(),
+            "career": self.ship_career.get(),
+            "size": self.ship_size.get(),
+            "crew_size": self.ship_crew.get(),
+            "scm_speed": self.ship_scm.get(),
+            "scm_boost_forward": self.ship_scm_bf.get(),
+            "scm_boost_backward": self.ship_scm_bb.get(),
+            "nav_max_speed": self.ship_nav.get(),
+            "pitch": self.ship_pitch.get(),
+            "yaw": self.ship_yaw.get(),
+            "roll": self.ship_roll.get(),
+            "boosted_pitch": self.ship_b_pitch.get(),
+            "boosted_yaw": self.ship_b_yaw.get(),
+            "boosted_roll": self.ship_b_roll.get(),
+            "power_consumption": self.ship_power.get(),
+            "cm_decoy_noise": self.ship_cm.get(),
+            "hp": self.ship_hp.get(),
+            "cargo": self.ship_cargo.get(),
+            "dimensions": self.ship_dim.get(),
+            "mass": self.ship_mass.get(),
+            "hydrogen_capacity": self.ship_h2.get(),
+            "qt_fuel_capacity": self.ship_qt.get(),
+            "expedition_fee": self.ship_fee.get(),
+            "claim_time": self.ship_claim.get(),
+            "expedite_time": self.ship_expedite.get()
+        }
+
+        # 5. Appel au contrôleur (enfin sécurisé)
         try:
-            # On passe tous les champs au contrôleur
-            self.ship_controller.save_ship(
-                name=name,
-                brand=self.ship_brand.get(),
-                role=self.ship_role.get(),
-                career=self.ship_career.get(),
-                scm_speed=self.ship_scm.get(),
-                nav_max_speed=self.ship_nav.get(),
-                hp=self.ship_hp.get() or 0,
-                cargo=self.ship_cargo.get(),
-                crew_size=self.ship_crew.get() or 0
-                # ... ajoute les autres champs si tu as créé les entrées correspondantes
-            )
-            DrakePopup.info("SUCCESS", f"Ship {name.upper()} data synchronized.")
+            self.ship_controller.save_ship(data)
+            self.controller.log("DATABASE", f"SHIP {name.upper()} DATA SYNCED.")
         except Exception as e:
-            DrakePopup.error("DATABASE ERROR", str(e))
+            self.controller.log("ERROR", f"SYNC ERROR: {str(e)}")
 
     def load_ship(self, event=None):
         name = self.ship_name.get().strip()
@@ -678,7 +723,7 @@ class LoggerFrame(ctk.CTkFrame):
         ship = self.ship_controller.load_ship_as_model(name)
         
         if not ship:
-            DrakePopup.info("NOT FOUND", f"No record for {name}")
+            self.controller.log("NOT FOUND", f"No record for {name}")
             return
 
         # Remplissage automatique via les attributs du modèle
@@ -693,7 +738,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_name.delete(0, "end"); self.ship_name.insert(0, ship.name)
         self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
         
-        DrakePopup.info("FLEET", f"Specs for {ship.name} loaded.")
+        self.controller.log("FLEET", f"Specs for {ship.name} loaded.")
     
     def import_ships_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -703,9 +748,9 @@ class LoggerFrame(ctk.CTkFrame):
                 reader = csv.DictReader(f, delimiter=";")
                 # On envoie directement la liste de dicts au contrôleur
                 self.ship_controller.import_ships_csv(list(reader))
-            DrakePopup.info("SUCCESS", "Fleet import successful.")
+            self.controller.log("SUCCESS", "Fleet import successful.")
         except Exception as e:
-            DrakePopup.error("IMPORT ERROR", str(e))
+            self.controller.log("IMPORT ERROR", str(e))
 
     def export_ships_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -717,13 +762,18 @@ class LoggerFrame(ctk.CTkFrame):
                 # Headers basés sur ton SQL
                 writer.writerow(["name", "brand", "role", "career", "size", "crew_size", "scm_speed"]) 
                 writer.writerows(data)
-            DrakePopup.info("SUCCESS", f"Fleet exported to {path}")
+            self.controller.log("SUCCESS", f"Fleet exported to {path}")
         except Exception as e:
-            DrakePopup.error("EXPORT ERROR", str(e))
+            self.controller.log("EXPORT ERROR", str(e))
 
     def clear_ship_fields(self):
         for attr in [self.ship_name, self.ship_brand, self.ship_role, 
                      self.ship_career, self.ship_scm, self.ship_nav, 
                      self.ship_hp, self.ship_cargo, self.ship_crew]:
             attr.delete(0, "end")
-        
+
+    def validate_numbers(self, P):
+        """Vérifie si la saisie est un nombre (utilisé par register_command)"""
+        if P == "" or P.isdigit():
+            return True
+        return False

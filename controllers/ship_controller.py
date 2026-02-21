@@ -17,105 +17,74 @@ class ShipController:
     def __init__(self, app_controller):
         self.app = app_controller
 
-    def save_ship(
-        self,
-        name: str,
-        brand: str = "",
-        role: str = "",
-        career: str = "",
-        size: str = "",
-        crew_size: int = 0,
-        scm_speed: str = "",
-        scm_boost_forward: str = "",
-        scm_boost_backward: str = "",
-        nav_max_speed: str = "",
-        pitch: str = "",
-        yaw: str = "",
-        roll: str = "",
-        boosted_pitch: str = "",
-        boosted_yaw: str = "",
-        boosted_roll: str = "",
-        power_consumption: str = "",
-        cm_decoy_noise: str = "",
-        hp: int = 0,
-        cargo: str = "",
-        dimensions: str = "",
-        mass: str = "",
-        hydrogen_capacity: str = "",
-        qt_fuel_capacity: str = "",
-        expedition_fee: str = "",
-        claim_time: str = "",
-        expedite_time: str = "",
-    ) -> None:
-        """Insère ou met à jour un ship par `name` unique."""
-        sql = """
-        INSERT INTO ships (name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, scm_boost_backward,
-            nav_max_speed, pitch, yaw, roll, boosted_pitch, boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, dimensions, mass,
-            hydrogen_capacity, qt_fuel_capacity, expedition_fee, claim_time, expedite_time)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(name) DO UPDATE SET
-            brand=excluded.brand,
-            role=excluded.role,
-            career=excluded.career,
-            size=excluded.size,
-            crew_size=excluded.crew_size,
-            scm_speed=excluded.scm_speed,
-            scm_boost_forward=excluded.scm_boost_forward,
-            scm_boost_backward=excluded.scm_boost_backward,
-            nav_max_speed=excluded.nav_max_speed,
-            pitch=excluded.pitch,
-            yaw=excluded.yaw,
-            roll=excluded.roll,
-            boosted_pitch=excluded.boosted_pitch,
-            boosted_yaw=excluded.boosted_yaw,
-            boosted_roll=excluded.boosted_roll,
-            power_consumption=excluded.power_consumption,
-            cm_decoy_noise=excluded.cm_decoy_noise,
-            hp=excluded.hp,
-            cargo=excluded.cargo,
-            dimensions=excluded.dimensions,
-            mass=excluded.mass,
-            hydrogen_capacity=excluded.hydrogen_capacity,
-            qt_fuel_capacity=excluded.qt_fuel_capacity,
-            expedition_fee=excluded.expedition_fee,
-            claim_time=excluded.claim_time,
-            expedite_time=excluded.expedite_time
-        """
-        params = (
-            name.upper(),
-            brand.upper(),
-            role.upper(),
-            career.upper(),
-            size,
-            int(crew_size) if crew_size else 0,
-            scm_speed,
-            scm_boost_forward,
-            scm_boost_backward,
-            nav_max_speed,
-            pitch,
-            yaw,
-            roll,
-            boosted_pitch,
-            boosted_yaw,
-            boosted_roll,
-            power_consumption,
-            cm_decoy_noise,
-            int(hp) if hp else 0,
-            cargo,
-            dimensions,
-            mass,
-            hydrogen_capacity,
-            qt_fuel_capacity,
-            expedition_fee,
-            claim_time,
-            expedite_time,
-        )
-        self.app.commit(sql, params)
+    def _safe_int(self, value, default=0):
+        """Convertit en int sans crasher."""
         try:
+            return int(float(value)) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_float(self, value, default=0.0):
+        """Convertit en float sans crasher."""
+        try:
+            return float(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    def save_ship(self, data_dict: dict) -> None:
+        """
+        Prend un dictionnaire de la vue et le transforme en objet Ship 
+        avant de le sauvegarder.
+        """
+        try:
+            # Création de l'objet Ship avec conversion des types
+            ship = Ship(
+                name=str(data_dict.get("name", "")),
+                brand=str(data_dict.get("brand", "")),
+                role=str(data_dict.get("role", "")),
+                career=str(data_dict.get("career", "")),
+                size=str(data_dict.get("size", "")),
+                crew_size=self._safe_int(data_dict.get("crew_size")),
+                scm_speed=self._safe_int(data_dict.get("scm_speed")),
+                scm_boost_forward=self._safe_int(data_dict.get("scm_boost_forward")),
+                scm_boost_backward=self._safe_int(data_dict.get("scm_boost_backward")),
+                nav_max_speed=self._safe_int(data_dict.get("nav_max_speed")),
+                pitch=self._safe_int(data_dict.get("pitch")),
+                yaw=self._safe_int(data_dict.get("yaw")),
+                roll=self._safe_int(data_dict.get("roll")),
+                boosted_pitch=self._safe_int(data_dict.get("boosted_pitch")),
+                boosted_yaw=self._safe_int(data_dict.get("boosted_yaw")),
+                boosted_roll=self._safe_int(data_dict.get("boosted_roll")),
+                power_consumption=str(data_dict.get("power_consumption", "")),
+                cm_decoy_noise=str(data_dict.get("cm_decoy_noise", "")),
+                hp=self._safe_int(data_dict.get("hp")),
+                cargo=self._safe_int(data_dict.get("cargo")),
+                dimensions=str(data_dict.get("dimensions", "")),
+                mass=str(data_dict.get("mass", "")),
+                hydrogen_capacity=self._safe_float(data_dict.get("hydrogen_capacity")),
+                qt_fuel_capacity=self._safe_float(data_dict.get("qt_fuel_capacity")),
+                expedition_fee=str(data_dict.get("expedition_fee", "")),
+                claim_time=self._safe_float(data_dict.get("claim_time")),
+                expedite_time=self._safe_float(data_dict.get("expedite_time"))
+            )
+
+            # Génération auto de la requête SQL à partir des colonnes du modèle
+            cols = ", ".join(ship.COLUMNS)
+            placeholders = ", ".join(["?"] * len(ship.COLUMNS))
+            updates = ", ".join([f"{c}=excluded.{c}" for c in ship.COLUMNS if c != "name"])
+
+            sql = f"""
+                INSERT INTO ships ({cols}) VALUES ({placeholders})
+                ON CONFLICT(name) DO UPDATE SET {updates}
+            """
+            
+            self.app.commit(sql, ship.to_db_tuple())
+            
             if hasattr(self.app, "log"):
-                self.app.log(f"Saved ship: {name}", source="SHIP")
-        except Exception:
-            pass
+                self.app.log(f"Ship SYNC: {ship.name}", source="FLEET")
+                
+        except Exception as e:
+            raise Exception(f"Controller Error: {str(e)}")
 
     def load_ship(self, name: str) -> list:
         """Retourne les rows correspondant au nom (uppercased)."""
