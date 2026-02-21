@@ -773,30 +773,32 @@ class IntelligenceFrame(ctk.CTkFrame):
 
     def save_org_to_unitool(self):
         """Synchronise les données scannées avec le OrgController."""
+        import json
+        from datetime import datetime
+        
         sid = self.ent_o.get().strip().upper()
-        if not sid:
+        if not sid or len(sid) < 2: # Sécurité : on n'enregistre pas de SID vide ou trop court
             return
 
-        # 1. Analyse du terminal pour extraire les membres
+        # 1. Analyse du terminal
         raw_lines = self.member_list.get("1.0", "end").splitlines()
         visible_members = []
         redacted_count = 0
 
         for line in raw_lines:
-            if "|" in line and "HANDLE" not in line and "---" not in line:
+            # On ignore les lignes de déco, les titres et les lignes vides
+            if "|" in line and "HANDLE" not in line and "---" not in line and "TOTAL" not in line:
                 parts = line.split("|")
                 handle = parts[0].strip()
                 rank = parts[1].strip() if len(parts) > 1 else "MEMBER"
                 
                 if "[REDACTED]" in handle:
                     redacted_count += 1
-                elif handle:
+                elif handle and handle != "HANDLE": # Évite d'ajouter les en-têtes
                     visible_members.append({"h": handle, "r": rank})
 
-        # 2. Préparation des données pour le contrôleur
+        # 2. Préparation des données
         total_members = len(visible_members) + redacted_count
-        
-        # On prépare les arguments pour update_org ou l'insertion initiale
         data_payload = {
             "member_count": total_members,
             "visible_members": json.dumps(visible_members),
@@ -805,34 +807,36 @@ class IntelligenceFrame(ctk.CTkFrame):
         }
 
         try:
-            # 3. Vérification si l'org existe déjà via le controller
+            # 3. Vérification via le controller (Correction du 's')
             existing_org = self.controller.org.get_org_model(sid)
 
             if existing_org:
-                # MISE À JOUR : On utilise la méthode de ton controller
-                self.controller.orgs.update_org(sid, **data_payload)
+                # MISE À JOUR (Correction de .orgs -> .org)
+                self.controller.org.update_org(sid, **data_payload)
                 action_text = "UPDATED"
             else:
-                # INSERTION : Si elle n'existe pas, on passe par une requête directe via l'app
-                # Car ton controller n'a pas encore de méthode 'create_org'
+                # INSERTION PROPRE
                 columns = ["sid", "name"] + list(data_payload.keys())
                 placeholders = ", ".join(["?"] * len(columns))
                 sql = f"INSERT INTO organizations ({', '.join(columns)}) VALUES ({placeholders})"
                 
+                # On met le SID par défaut dans NAME si on n'a pas mieux
                 params = [sid, sid] + list(data_payload.values())
                 self.controller.db.commit(sql, tuple(params))
                 action_text = "ARCHIVED"
 
-            # 4. Feedback visuel Style Drake
+            # 4. Feedback
             self.btn_save_org_db.configure(
                 fg_color="#2ecc71", 
                 text=f"ORG {action_text} ✓", 
                 state="disabled"
             )
+            main_win = self.winfo_toplevel()
+            main_win.attributes("-topmost", True)
             
-            self._log(f"UPLINK SUCCESS: {sid} synchronization complete ({total_members} members).")
-            DrakePopup.info("DRAKE SYSTEMS", f"Dossier {sid} synchronisé avec succès.\nMembres: {total_members}")
+            self._log(f"UPLINK SUCCESS: {sid} synchronization complete.")
+            DrakePopup.info("SYSTEMS", f"Dossier {sid} synchronisé.\nMembres: {total_members}", parent=main_win)
 
         except Exception as e:
             self._log(f"Controller Error: {e}")
-            DrakePopup.error("SYNC FAILURE", f"Erreur de communication avec le OrgController : {e}")
+            DrakePopup.error("SYNC FAILURE", f"Détails : {e}")

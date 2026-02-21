@@ -320,6 +320,10 @@ class ContractFrame(ctk.CTkFrame):
         )
         scroll.pack(fill="both", expand=True, padx=20, pady=10)
 
+        btn_abort = DrakeButton(toplevel, text="SAVE", border_width=1,
+                                   command=toplevel.destroy)
+        btn_abort.pack(side="bottom", fill="x", padx=20, pady=(0,20))
+
         def delete(name):
             self.controller.db.commit("DELETE FROM contract_types WHERE name=?", (name,))
             if hasattr(self.controller, "log"):

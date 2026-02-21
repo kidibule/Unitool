@@ -81,48 +81,70 @@ class ScannerFrame(ctk.CTkFrame):
         self.org_results.pack(pady=5, padx=10, fill="both", expand=True)
 
     def run_org_scan(self, event):
-        """Moteur de recherche corrigé pour correspondre au controller."""
+        """Moteur de recherche avec Roster aligné et footer unique (Drake Style)."""
         import json
         q = self.org_search_entry.get().strip().upper()
+        
+        # 1. On vide impérativement avant de commencer
         self.org_results.delete("0.0", "end")
 
         if len(q) > 1:
-            # CHANGEMENT ICI : self.controller.org (au lieu de .orgs)
             orgs = self.controller.org.search_orgs(q) 
+            orgs = [o for o in orgs if o[0] and len(str(o[0])) > 2]
 
             for o in orgs:
                 sid, name, tag, count, o_type, spec = o
+                tag_name_click = f"edit_name_{sid}"
                 tag_link = f"link_org_{sid}"
 
+                # --- ENTÊTE ORGA ---
                 self.org_results.insert("end", " 🏢 ")
-                self.org_results.insert("end", f"{name} ", "NEUTRE")
+                self.org_results.insert("end", f"{name} ", (tag_name_click, "NEUTRE"))
                 self.org_results.insert("end", f"[{sid}]", (tag_link, "link_rsi"))
                 self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec}\n")
                 self.org_results.insert("end", f"   EFFECTIFS: {count} membres\n")
 
-                # RÉCUPÉRATION DU ROSTER (STYLE ORANGE DRAKE)
-                # CHANGEMENT ICI AUSSI : self.controller.org
+                # Bindings
+                self.org_results.tag_bind(tag_name_click, "<Double-Button-1>", lambda e, s=sid: self.edit_org_window(s))   
+                
+                # --- SECTION ROSTER ---
                 org_model = self.controller.org.get_org_model(sid)
                 
                 if org_model and org_model.visible_members:
                     try:
                         members = json.loads(org_model.visible_members)
                         if members:
+                            # Titres
                             self.org_results.insert("end", f"\n   {'HANDLE':<25} | {'RANK':<20}\n", "ACCENT")
                             self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
+                            
+                            # Affichage des membres
                             for m in members:
-                                h, r = m.get('h', '???').upper(), m.get('r', '???').upper()
+                                h = str(m.get('h', '???')).upper()
+                                r = str(m.get('r', '???')).upper()
                                 self.org_results.insert("end", f"   {h:<25} | {r:<20}\n", "ACCENT")
                             
+                            # --- LE FOOTER UNIQUE (C'est ici qu'on corrige le doublon) ---
                             self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
-                            # Gestion des Redacted
-                            r_val = 0
-                            if org_model.redacted_members and ":" in org_model.redacted_members:
-                                r_val = org_model.redacted_members.split(":")[-1]
                             
-                            self.org_results.insert("end", f"   TOTAL: {count} | VISIBLE: {len(members)} | REDACTED: {r_val}\n", "ACCENT")
-                    except Exception: pass
+                            # On récupère la valeur REDACTED proprement
+                            r_val = 0
+                            if org_model.redacted_members:
+                                try:
+                                    if ":" in str(org_model.redacted_members):
+                                        r_val = str(org_model.redacted_members).split(":")[-1].strip()
+                                    else:
+                                        r_val = int(org_model.redacted_members)
+                                except: r_val = 0
 
+                            # UNE SEULE LIGNE DE RÉSUMÉ
+                            summary = f"   TOTAL: {count:<4} | VISIBLE: {len(members):<4} | REDACTED: {r_val}\n"
+                            self.org_results.insert("end", summary, "ACCENT")
+                            
+                    except Exception as e:
+                        self.org_results.insert("end", f"   [!] Erreur Roster: {e}\n", "ACCENT")
+
+                # Séparateur de fin de fiche
                 self.org_results.insert("end", f"\n{'-'*60}\n")
                 self.org_results.tag_bind(tag_link, "<Button-1>", lambda e, s=sid: self.open_org(s))
 
@@ -135,6 +157,10 @@ class ScannerFrame(ctk.CTkFrame):
         self.results.tag_config("NEUTRE", foreground=DrakeConfig.TEXT_MAIN)
         self.results.tag_config("open_contract", foreground=DrakeConfig.ACCENT_PRIMARY)
         self.results.tag_config("closed_contract", foreground="green")
+
+        self.org_results.tag_config("ACCENT", foreground="#ff8c00") # L'orange Drake
+        self.org_results.tag_config("NEUTRE", foreground="white")
+        self.org_results.tag_config("ENNEMI", foreground="#ff4444")
 
         for k in ["link", "link_org", "link_rsi"]:
             self.results.tag_bind(k, "<Enter>", lambda e: self.results.configure(cursor="hand2"))
@@ -239,30 +265,36 @@ class ScannerFrame(ctk.CTkFrame):
                 # On ferme la fenêtre AVANT de lancer le popup 
                 # (cela évite les conflits de focus/grab qui font planter l'app)
                 toplevel.grab_release()
-                toplevel.destroy()
+                main_win = self.winfo_toplevel()
+                main_win.attributes("-topmost", True)
                 
                 # Le popup de succès s'affiche sur la fenêtre principale
-                DrakePopup.info("DRAKE SYSTEMS", f"Dossier de {pseudo} synchronisé.")
+                DrakePopup.info("SYSTEMS", f"Dossier de {pseudo} synchronisé.", parent=main_win)
 
             except Exception as e:
                 # On affiche l'erreur sans fermer pour pouvoir copier le message
                 print(f"DEBUG SAVE ERROR: {e}")
-                DrakePopup.error("ERREUR SQL", f"Détails : {e}", parent=toplevel)
+                DrakePopup.error("ERREUR SQL", f"Détails : {e}", parent=main_win)
 
-        # 2. On place le bouton DIRECTEMENT sur le toplevel, tout en bas
-        btn_save = DrakeButton(toplevel, text="SAVE CHANGES", command=save_all, height=40)
-        btn_save.pack(side="bottom", fill="x", padx=20, pady=20)
         
-        # Petit bouton pour annuler juste en dessous (optionnel mais propre)
         btn_cancel = ctk.CTkButton(
             toplevel, 
             text="CANCEL", 
             fg_color="transparent", 
             border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
+            border_color=DrakeConfig.BORDER_COLOR, 
             command=toplevel.destroy
         )
-        btn_cancel.pack(fill="x", padx=20, pady=(0, 15))
+        btn_cancel.pack(side="bottom", fill="x", padx=20, pady=(0, 20)) # pady=(Top, Bottom)
+
+        # 2. On place le bouton SAVE juste au-dessus
+        btn_save = DrakeButton(
+            toplevel, 
+            text="SAVE CHANGES", 
+            command=save_all, 
+            height=40
+        )
+        btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 5))
 
     def run_scan(self, event):
         q = self.search_entry.get().strip().upper()
@@ -364,12 +396,111 @@ class ScannerFrame(ctk.CTkFrame):
                     writer = csv.writer(f, delimiter=";")
                     writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
                     writer.writerows(rows)
-                DrakePopup.info("DRAKE SYSTEMS", "EXPORTATION TERMINÉE", parent=self)
+                    main_win = self.winfo_toplevel()
+                    main_win.attributes("-topmost", True)
+                DrakePopup.info("SYSTEMS", "EXPORTATION TERMINÉE", parent=main_win)
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Exported DB to {filename}", source="SCANNER")
                 except Exception:
                     pass
             except Exception as e:
-                DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=self)
+                DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=main_win)
+
+    def edit_org_window(self, sid):
+        """Ouvre la console Drake d'édition pour une organisation."""
+        toplevel = ctk.CTkToplevel(self)
+        toplevel.title(f"CORPORATE DOSSIER: {sid}")
+        toplevel.geometry("750x850")
+        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
+        toplevel.transient(self)
+        toplevel.grab_set()
+
+        # Récupération via ton OrgController
+        org = self.controller.org.get_org_model(sid)
+        if not org:
+            return
+
+        # Header stylisé
+        ctk.CTkLabel(
+            toplevel, text=f"DATABASE ACCESS : {org.name} [{sid}]", 
+            font=("Orbitron", 14, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY
+        ).pack(pady=15)
+
+        container = ctk.CTkScrollableFrame(toplevel, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=15, pady=5)
+
+        # --- FONCTION INTERNE POUR CRÉER LES LIGNES ---
+        def create_field(parent, label, current_value, is_numeric=False):
+            f = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL, corner_radius=2)
+            f.pack(fill="x", pady=3)
+            ctk.CTkLabel(f, text=label.upper(), font=("Segoe UI", 10, "bold"), 
+                         text_color=DrakeConfig.TEXT_SECONDARY, width=160, anchor="w").pack(side="left", padx=10)
+            
+            entry = ctk.CTkEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, 
+                                 border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+            entry.insert(0, str(current_value) if current_value not in [None, "NONE"] else "")
+            entry.pack(side="right", fill="x", expand=True, padx=10, pady=8)
+            return entry
+
+        # --- CHAMPS DATA RSI ---
+        e_name = create_field(container, "Nom Corp", org.name)
+        e_tag  = create_field(container, "Tag RSI", org.tag)
+        e_type = create_field(container, "Type Orga", org.org_type)
+        e_spec = create_field(container, "Spécialisation", org.specialization)
+        e_count = create_field(container, "Membres", org.member_count)
+
+        # --- SECTION DIPLOMATIE (CHARTRE ORANGE) ---
+        ctk.CTkLabel(container, text="DIPLOMATIC CHANNELS", font=("Orbitron", 11), 
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(20, 5), padx=5)
+        
+        e_allies = create_field(container, "Alliés", org.allies)
+        e_enemies = create_field(container, "Ennemis", org.enemies)
+
+        # --- NOTES LIBRES ---
+        ctk.CTkLabel(container, text="INTEL NOTES", font=("Orbitron", 11), 
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(20, 5), padx=5)
+        
+        e_notes = ctk.CTkTextbox(container, height=180, fg_color=DrakeConfig.BG_TERMINAL, 
+                                 border_color=DrakeConfig.BORDER_COLOR, border_width=1)
+        # On utilise le champ 'neutrals' comme stockage de notes si tu n'as pas de colonne 'notes'
+        e_notes.insert("0.0", org.neutrals if org.neutrals and org.neutrals != "NONE" else "")
+        e_notes.pack(fill="x", padx=5, pady=5)
+
+        # --- LOGIQUE DE SAUVEGARDE ---
+        def save_action():
+            try:
+                # Préparation du dictionnaire pour kwargs de update_org
+                payload = {
+                    "name": e_name.get().strip(),
+                    "tag": e_tag.get().strip().upper(),
+                    "org_type": e_type.get().strip().upper(),
+                    "specialization": e_spec.get().strip().upper(),
+                    "member_count": e_count.get().strip(),
+                    "allies": e_allies.get().strip(),
+                    "enemies": e_enemies.get().strip(),
+                    "neutrals": e_notes.get("0.0", "end").strip() # Stocké dans neutrals
+                }
+                
+                # Appel à la méthode de ton OrgController
+                self.controller.org.update_org(sid, **payload)
+                
+                # Feedback et fermeture
+                self.run_org_scan(None) # Rafraîchir la liste en arrière-plan
+                main_win = self.winfo_toplevel()
+                main_win.attributes("-topmost", True)
+
+                DrakePopup.info("SYSTEMS", f"Dossier {sid} synchronisé avec succès.", parent=main_win)
+                
+            except Exception as ex:
+                DrakePopup.error("SYNC FAILURE", f"Erreur de communication : {ex}", parent=main_win)
+
+        btn_abort = ctk.CTkButton(toplevel, text="CANCEL", fg_color="transparent", border_width=1,
+                                  border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
+        btn_abort.pack(side="bottom", fill="x", padx=20, pady=(0,20))
+
+        # --- BOUTON DE VALIDATION ---
+        btn_save = DrakeButton(toplevel, text="UPDATE DATABASE", command=save_action, height=45)
+        btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 5))
+        
 
