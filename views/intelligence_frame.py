@@ -1,19 +1,12 @@
 import customtkinter as ctk
-
+import json
 import time, threading
-
 from datetime import datetime
-
 from selenium import webdriver
-
 from selenium.webdriver.chrome.service import Service
-
 from selenium.webdriver.chrome.options import Options
-
 from selenium.webdriver.common.by import By
-
 from webdriver_manager.chrome import ChromeDriverManager
-
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
 
 
@@ -779,40 +772,67 @@ class IntelligenceFrame(ctk.CTkFrame):
             pass
 
     def save_org_to_unitool(self):
-        """Enregistre l'organisation scannée dans la base de données Unitool."""
+        """Synchronise les données scannées avec le OrgController."""
         sid = self.ent_o.get().strip().upper()
-        
         if not sid:
             return
 
+        # 1. Analyse du terminal pour extraire les membres
+        raw_lines = self.member_list.get("1.0", "end").splitlines()
+        visible_members = []
+        redacted_count = 0
+
+        for line in raw_lines:
+            if "|" in line and "HANDLE" not in line and "---" not in line:
+                parts = line.split("|")
+                handle = parts[0].strip()
+                rank = parts[1].strip() if len(parts) > 1 else "MEMBER"
+                
+                if "[REDACTED]" in handle:
+                    redacted_count += 1
+                elif handle:
+                    visible_members.append({"h": handle, "r": rank})
+
+        # 2. Préparation des données pour le contrôleur
+        total_members = len(visible_members) + redacted_count
+        
+        # On prépare les arguments pour update_org ou l'insertion initiale
+        data_payload = {
+            "member_count": total_members,
+            "visible_members": json.dumps(visible_members),
+            "redacted_members": f"REDACTED_COUNT:{redacted_count}",
+            "updated_at": datetime.now().strftime("%d/%m/%Y")
+        }
+
         try:
-            # On récupère les infos de base (le nom est souvent dans les logs ou le terminal)
-            # Pour faire simple, on utilise le SID comme nom si on n'a pas extrait le nom complet
-            name = sid 
-            
-            # Préparation de la requête SQL (Upsert)
-            sql = """
-                INSERT INTO organizations (sid, name, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(sid) DO UPDATE SET 
-                    updated_at=excluded.updated_at
-            """
-            date_now = datetime.now().strftime("%d/%m/%Y")
-            
-            self.controller.db.commit(sql, (sid, name, date_now))
-            
-            # Feedback visuel (Style Drake)
+            # 3. Vérification si l'org existe déjà via le controller
+            existing_org = self.controller.org.get_org_model(sid)
+
+            if existing_org:
+                # MISE À JOUR : On utilise la méthode de ton controller
+                self.controller.orgs.update_org(sid, **data_payload)
+                action_text = "UPDATED"
+            else:
+                # INSERTION : Si elle n'existe pas, on passe par une requête directe via l'app
+                # Car ton controller n'a pas encore de méthode 'create_org'
+                columns = ["sid", "name"] + list(data_payload.keys())
+                placeholders = ", ".join(["?"] * len(columns))
+                sql = f"INSERT INTO organizations ({', '.join(columns)}) VALUES ({placeholders})"
+                
+                params = [sid, sid] + list(data_payload.values())
+                self.controller.db.commit(sql, tuple(params))
+                action_text = "ARCHIVED"
+
+            # 4. Feedback visuel Style Drake
             self.btn_save_org_db.configure(
-                fg_color="#2ecc71", text="ORG ARCHIVÉE ✓", state="disabled"
+                fg_color="#2ecc71", 
+                text=f"ORG {action_text} ✓", 
+                state="disabled"
             )
             
-            DrakePopup.info("DRAKE SYSTEMS", f"L'organisation {sid} a été ajoutée aux archives.")
-            self._log(f"organization archived: {sid}")
-
-            # Mise à jour des compteurs sur le HUD principal
-            if hasattr(self.controller, "view") and hasattr(self.controller.view, "refresh_intel"):
-                self.controller.view.refresh_intel()
+            self._log(f"UPLINK SUCCESS: {sid} synchronization complete ({total_members} members).")
+            DrakePopup.info("DRAKE SYSTEMS", f"Dossier {sid} synchronisé avec succès.\nMembres: {total_members}")
 
         except Exception as e:
-            DrakePopup.error("ERREUR DB", f"Impossible d'archiver l'organisation : {e}")
-            self._log(f"error saving org: {e}")
+            self._log(f"Controller Error: {e}")
+            DrakePopup.error("SYNC FAILURE", f"Erreur de communication avec le OrgController : {e}")

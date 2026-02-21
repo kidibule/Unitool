@@ -79,3 +79,11 @@ class OrgController:
     def export_orgs_csv(self) -> list:
         """Récupère toutes les organisations pour l'export."""
         return self.app.query("SELECT * FROM organizations")
+    
+    def save_scanned_org(self, sid, name, **kwargs):
+        """Méthode 'tout-en-un' pour le Scrapbot."""
+        if self.get_org_model(sid):
+            self.update_org(sid, **kwargs)
+        else:
+            # Logique d'insertion ici...
+            pass

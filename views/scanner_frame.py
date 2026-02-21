@@ -81,16 +81,16 @@ class ScannerFrame(ctk.CTkFrame):
         self.org_results.pack(pady=5, padx=10, fill="both", expand=True)
 
     def run_org_scan(self, event):
-        """Moteur de recherche dédié aux organisations."""
+        """Moteur de recherche corrigé pour correspondre au controller."""
+        import json
         q = self.org_search_entry.get().strip().upper()
         self.org_results.delete("0.0", "end")
 
         if len(q) > 1:
-            # Appel au nouveau contrôleur d'orgas
+            # CHANGEMENT ICI : self.controller.org (au lieu de .orgs)
             orgs = self.controller.org.search_orgs(q) 
 
             for o in orgs:
-                # o est ici un tuple (sid, name, tag, member_count, type, spec)
                 sid, name, tag, count, o_type, spec = o
                 tag_link = f"link_org_{sid}"
 
@@ -99,9 +99,31 @@ class ScannerFrame(ctk.CTkFrame):
                 self.org_results.insert("end", f"[{sid}]", (tag_link, "link_rsi"))
                 self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec}\n")
                 self.org_results.insert("end", f"   EFFECTIFS: {count} membres\n")
-                self.org_results.insert("end", f"{'-'*40}\n")
 
-                # Binding pour ouvrir RSI
+                # RÉCUPÉRATION DU ROSTER (STYLE ORANGE DRAKE)
+                # CHANGEMENT ICI AUSSI : self.controller.org
+                org_model = self.controller.org.get_org_model(sid)
+                
+                if org_model and org_model.visible_members:
+                    try:
+                        members = json.loads(org_model.visible_members)
+                        if members:
+                            self.org_results.insert("end", f"\n   {'HANDLE':<25} | {'RANK':<20}\n", "ACCENT")
+                            self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
+                            for m in members:
+                                h, r = m.get('h', '???').upper(), m.get('r', '???').upper()
+                                self.org_results.insert("end", f"   {h:<25} | {r:<20}\n", "ACCENT")
+                            
+                            self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
+                            # Gestion des Redacted
+                            r_val = 0
+                            if org_model.redacted_members and ":" in org_model.redacted_members:
+                                r_val = org_model.redacted_members.split(":")[-1]
+                            
+                            self.org_results.insert("end", f"   TOTAL: {count} | VISIBLE: {len(members)} | REDACTED: {r_val}\n", "ACCENT")
+                    except Exception: pass
+
+                self.org_results.insert("end", f"\n{'-'*60}\n")
                 self.org_results.tag_bind(tag_link, "<Button-1>", lambda e, s=sid: self.open_org(s))
 
     def setup_tags(self):
