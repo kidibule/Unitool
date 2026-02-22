@@ -4,7 +4,7 @@ import customtkinter as ctk
 import csv
 from datetime import datetime
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox
 from controllers.ship_controller import ShipController
 
 
@@ -29,11 +29,11 @@ class LoggerFrame(ctk.CTkFrame):
 
         self.tabview.add("PLAYERS")
         self.tabview.add("ORGANIZATIONS")
-        self.tabview.add("SHIPS") # <-- Ajoute ceci
+        self.tabview.add("SHIPS")
 
         self.tab_targets = self.tabview.tab("PLAYERS")
         self.tab_orgs = self.tabview.tab("ORGANIZATIONS")
-        self.tab_ships = self.tabview.tab("SHIPS") # <-- Définis la référence
+        self.tab_ships = self.tabview.tab("SHIPS")
 
         # Appels des setups
         self.setup_targets_tab()
@@ -42,6 +42,7 @@ class LoggerFrame(ctk.CTkFrame):
 
 
     def setup_orgs_tab(self):
+
         """Formulaire Orga avec marges augmentées et titre de section pour les notes"""
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
@@ -49,8 +50,24 @@ class LoggerFrame(ctk.CTkFrame):
             "border_color": DrakeConfig.BORDER_COLOR,
             "corner_radius": 0,
             "height": 35,
+            "border_width": 1
         }
-
+        
+        combo_kwargs = {
+            "fg_color": DrakeConfig.BG_MAIN,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "button_color": DrakeConfig.BORDER_COLOR,
+            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_fg_color": DrakeConfig.BG_PANEL,
+            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
+            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "font": DrakeConfig.FONT_UI,
+            "corner_radius": 0,
+            "border_width": 1
+        }
+        
         # --- SECTION 1 : IDENTITÉ (Marge 50 comme Target) ---
         f_top = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_top.pack(pady=(20, 5), padx=50, fill="x")
@@ -68,12 +85,11 @@ class LoggerFrame(ctk.CTkFrame):
         f_type_align = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_type_align.pack(pady=5, padx=50, fill="x")
 
-        self.org_type = ctk.CTkComboBox(f_type_align, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"], **entry_kwargs)
+        self.org_type = DrakeComboBox(f_type_align, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"])
         self.org_type.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.org_type.set("ORGANIZATION")
 
-        self.org_align = ctk.CTkComboBox(f_type_align, values=["NEUTRE", "AMI", "ENNEMI"],
-                                        button_color=DrakeConfig.ACCENT_PRIMARY, **entry_kwargs)
+        self.org_align = DrakeComboBox(f_type_align, values=["NEUTRE", "AMI", "ENNEMI"])
         self.org_align.pack(side="right", fill="x", expand=True, padx=(5, 0))
         self.org_align.set("NEUTRE")
 
@@ -123,7 +139,6 @@ class LoggerFrame(ctk.CTkFrame):
             self.controller.log("ERROR", "SID and Name are mandatory for registration.")
             return
 
-        # On prépare la requête SQL (assure-toi que ta table a bien ces colonnes)
         sql = """INSERT INTO organizations (sid, name, tag, description, org_type, specialization, allies, enemies, alignment, updated_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(sid) DO UPDATE SET 
@@ -150,7 +165,7 @@ class LoggerFrame(ctk.CTkFrame):
             self.controller.log("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="LOGGER")
-            self.clear_org_fields() # On vide après succès
+            self.clear_org_fields() 
         except Exception as e:
             self.controller.log("DB ERROR", f"Failed to save organization: {e}")
 
@@ -193,17 +208,32 @@ class LoggerFrame(ctk.CTkFrame):
         self.focus_set()
 
     def setup_targets_tab(self):
-        # On définit entry_kwargs localement ou on utilise self.entry_kwargs si défini dans __init__
+        
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
             "border_color": DrakeConfig.BORDER_COLOR,
             "corner_radius": 0,
             "height": 35,
+            "border_width": 1
+        }
+
+        combo_kwargs = {
+            "fg_color": DrakeConfig.BG_MAIN,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "button_color": DrakeConfig.BORDER_COLOR,
+            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_fg_color": DrakeConfig.BG_PANEL,
+            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
+            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "font": DrakeConfig.FONT_UI,
+            "corner_radius": 0,
+            "border_width": 1
         }
 
         # --- 1. IDENTITÉ & MENACE ---
-        # PARENT CHANGÉ : self -> self.tab_targets
         f_top = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_top.pack(pady=(20, 10), padx=50, fill="x")
 
@@ -211,15 +241,8 @@ class LoggerFrame(ctk.CTkFrame):
         self.p_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.p_in.bind("<Return>", self.load_target)
 
-        self.threat_in = ctk.CTkComboBox(
-            f_top,
-            values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-            font=DrakeConfig.FONT_UI,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            button_color=DrakeConfig.ACCENT_PRIMARY,
-            corner_radius=0,
-            width=120,
-        )
+        self.threat_in = DrakeComboBox(f_top, values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],)
+
         self.threat_in.pack(side="right")
         self.threat_in.set("LOW")
 
@@ -250,30 +273,24 @@ class LoggerFrame(ctk.CTkFrame):
         self.loss_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         #--- 5. ALIGNEMENT & PROFIL ---
-        self.a_btn = ctk.CTkComboBox(
+        self.a_btn = DrakeComboBox(
             self.tab_targets,
-            values=["AMI", "NEUTRE", "ENNEMI"],
-            font=DrakeConfig.FONT_UI,             
-            fg_color=DrakeConfig.BG_TERMINAL,    
-            button_color=DrakeConfig.ACCENT_PRIMARY, 
-            button_hover_color=DrakeConfig.ACCENT_HOVER,
-            border_color=DrakeConfig.BORDER_COLOR,
-            dropdown_fg_color=DrakeConfig.BG_TERMINAL, 
-            corner_radius=0,
-            width=200
+            values=["AMI", "NEUTRE", "ENNEMI"]
         )
-        # Utilisation de pack cohérente avec le reste du dossier Target
+
         self.a_btn.pack(pady=(5, 10), padx=50, fill="x")
         self.a_btn.set("NEUTRE")
 
         f_combat = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_combat.pack(pady=5, padx=50, fill="x")
-        self.pvp_in = ctk.CTkComboBox(f_combat, values=["NOOB", "ROOKIE", "VETERAN", "ACE"], **entry_kwargs)
+        self.pvp_in = DrakeComboBox(
+            f_combat, 
+            values=["NOOB", "ROOKIE", "VETERAN", "ACE"],
+)
         self.pvp_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.act_in = ctk.CTkComboBox(
+        self.act_in = DrakeComboBox(
             f_combat,
-            values=["PIRATE", "BOUNTY HUNTER", "MINEUR", "TRADER"],
-            **entry_kwargs,
+            values=["PIRATE", "BOUNTY HUNTER", "MINEUR", "TRADER"]
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
@@ -307,7 +324,6 @@ class LoggerFrame(ctk.CTkFrame):
         h = self.p_in.get().strip().upper()
         if not h:
             return
-        # Prepare values and sanitize
         org_val = (self.o_in.get() or "").upper()
         sid_val = (self.sid_in.get() or "").upper()
         rank_val = (self.rank_in.get() or "").upper()
@@ -339,7 +355,6 @@ class LoggerFrame(ctk.CTkFrame):
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, "0")
 
-        # Check existing record to avoid duplicates
         existing = self.controller.db.query(
             "SELECT org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, threat, wins, losses FROM targets WHERE pseudo = ?",
             (h,)
@@ -414,7 +429,6 @@ class LoggerFrame(ctk.CTkFrame):
         )
         if rows:
             r = rows[0]
-            # Remplissage des champs selon l'ordre des colonnes dans la table
             self.o_in.delete(0, "end")
             self.o_in.insert(0, r[1] or "")
             self.s_in.delete(0, "end")
@@ -528,6 +542,28 @@ class LoggerFrame(ctk.CTkFrame):
             "corner_radius": 0,
             "height": 30,
         }
+        combo_kwargs = {
+            "fg_color": DrakeConfig.BG_MAIN,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "button_color": DrakeConfig.BORDER_COLOR,
+            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_fg_color": DrakeConfig.BG_PANEL,
+            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
+            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "font": DrakeConfig.FONT_UI,
+            "corner_radius": 0,
+            "border_width": 1
+        }
+
+        # --- VALEURS STANDARDS ---
+        CAREER_OPTIONS = ["COMBAT", "TRANSPORT", "EXPLORATION", "INDUSTRIAL", "SUPPORT", "COMPETITION", "RESEARCH"]
+        ROLE_OPTIONS = [
+            "LIGHT FIGHTER", "MEDIUM FIGHTER", "HEAVY FIGHTER", "BOMBER", 
+            "FREIGHTER", "DATA RUNNER", "MINING", "SALVAGE", "REFUELING",
+            "MEDICAL", "SNUB", "DROP SHIP", "INTERDICTION", "PATROL"
+        ]
 
         # --- HEADER & IDENTITY ---
         f_identity = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
@@ -537,17 +573,25 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_name.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.ship_name.bind("<Return>", self.load_ship)
 
-        self.ship_brand = ctk.CTkEntry(f_identity, placeholder_text="BRAND / MANUFACTURER", **entry_kwargs)
+        self.ship_brand = ctk.CTkEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
         self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
         # --- ROLE & SPECS ---
         f_role = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_role.pack(pady=5, padx=50, fill="x")
         
-        self.ship_role = ctk.CTkEntry(f_role, placeholder_text="ROLE", **entry_kwargs)
+        self.ship_role = DrakeComboBox(
+            f_role, 
+            values=ROLE_OPTIONS,
+        )
+        self.ship_role.set("ROLE") # Placeholder
         self.ship_role.pack(side="left", fill="x", expand=True, padx=(0,5))
         
-        self.ship_career = ctk.CTkEntry(f_role, placeholder_text="CAREER", **entry_kwargs)
+        self.ship_career = DrakeComboBox(
+            f_role, 
+            values=CAREER_OPTIONS, 
+        )
+        self.ship_career.set("CAREER") # Placeholder
         self.ship_career.pack(side="left", fill="x", expand=True, padx=5)
         
         self.ship_size = ctk.CTkEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
@@ -657,8 +701,6 @@ class LoggerFrame(ctk.CTkFrame):
             self.ship_name.focus_set()
             return
 
-        # 3. Sécurité : Vérification des types numériques
-        # On définit les champs qui DOIVENT être des nombres
         numeric_fields = {
             "CREW": self.ship_crew.get(),
             "SCM SPEED": self.ship_scm.get(),
@@ -670,14 +712,13 @@ class LoggerFrame(ctk.CTkFrame):
         }
 
         for label, value in numeric_fields.items():
-            if value: # On ne vérifie que si le champ n'est pas vide
+            if value:
                 try:
-                    float(value) # Test de conversion
+                    float(value) 
                 except ValueError:
                     self.controller.log("DATA CORRUPTION", f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.")
-                    return # ON ARRÊTE TOUT ICI
+                    return 
 
-        # 4. Si on arrive ici, tout est OK, on prépare le dictionnaire pour le controller
         data = {
             "name": name,
             "brand": self.ship_brand.get(),
@@ -708,7 +749,6 @@ class LoggerFrame(ctk.CTkFrame):
             "expedite_time": self.ship_expedite.get()
         }
 
-        # 5. Appel au contrôleur (enfin sécurisé)
         try:
             self.ship_controller.save_ship(data)
             self.controller.log("DATABASE", f"SHIP {name.upper()} DATA SYNCED.")
@@ -719,14 +759,12 @@ class LoggerFrame(ctk.CTkFrame):
         name = self.ship_name.get().strip()
         if not name: return
 
-        # On demande au contrôleur de nous donner un objet Ship
         ship = self.ship_controller.load_ship_as_model(name)
         
         if not ship:
             self.controller.log("NOT FOUND", f"No record for {name}")
             return
 
-        # Remplissage automatique via les attributs du modèle
         self.ship_brand.delete(0, "end"); self.ship_brand.insert(0, ship.brand)
         self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
         self.ship_career.delete(0, "end"); self.ship_career.insert(0, ship.career)
@@ -746,7 +784,6 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
-                # On envoie directement la liste de dicts au contrôleur
                 self.ship_controller.import_ships_csv(list(reader))
             self.controller.log("SUCCESS", "Fleet import successful.")
         except Exception as e:
@@ -759,7 +796,6 @@ class LoggerFrame(ctk.CTkFrame):
             data = self.ship_controller.export_ships_csv()
             with open(path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=";")
-                # Headers basés sur ton SQL
                 writer.writerow(["name", "brand", "role", "career", "size", "crew_size", "scm_speed"]) 
                 writer.writerows(data)
             self.controller.log("SUCCESS", f"Fleet exported to {path}")

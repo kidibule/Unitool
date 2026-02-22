@@ -9,7 +9,7 @@ import webbrowser
 import csv
 import json
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox
 from utils import format_int_with_dots
 
 
@@ -252,7 +252,7 @@ class ScannerFrame(ctk.CTkFrame):
         align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         align_f.pack(fill="x", pady=4)
         ctk.CTkLabel(align_f, text="ALIGNEMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
-        e_align = ctk.CTkOptionMenu(align_f, values=["NEUTRE", "AMI", "ENNEMI", "PIRATE"], fg_color=DrakeConfig.BG_MAIN, button_color=DrakeConfig.ACCENT_PRIMARY, text_color="black")
+        e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
         e_align.set(d[8] if len(d) > 8 and d[8] else "NEUTRE")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 
@@ -490,9 +490,7 @@ class ScannerFrame(ctk.CTkFrame):
         align_f.pack(fill="x", pady=4)
         ctk.CTkLabel(align_f, text="ALIGNEMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         
-        e_align = ctk.CTkOptionMenu(align_f, values=["NEUTRE", "AMI", "ENNEMI"], 
-                                    fg_color=DrakeConfig.BG_MAIN, button_color=DrakeConfig.ACCENT_PRIMARY, 
-                                    text_color="black", corner_radius=0)
+        e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
         e_align.set(org.alignment if hasattr(org, 'alignment') else "NEUTRE")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 

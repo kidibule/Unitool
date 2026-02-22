@@ -349,3 +349,48 @@ class DrakeApp(ctk.CTk):
 if __name__ == "__main__":
     app = DrakeApp()
     app.mainloop()
+
+class DrakeComboBox(ctk.CTkComboBox):
+    """ComboBox Drake avec bouton carré, angles adoucis et champ ajusté."""
+
+    def __init__(self, master, **kwargs) -> None:
+        # On extrait button_width car il ne doit pas aller dans le super().__init__ 
+        # pour éviter le crash ValueError
+        btn_w = kwargs.pop("button_width", 35)
+
+        defaults = {
+            # Couleurs et Bordures
+            "fg_color": DrakeConfig.BG_TERMINAL,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "button_color": DrakeConfig.ACCENT_PRIMARY,
+            "button_hover_color": DrakeConfig.ACCENT_HOVER,
+            
+            # Style du menu déroulant
+            "dropdown_fg_color": DrakeConfig.BG_PANEL,
+            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
+            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
+            
+            # Dimensions et Géométrie
+            "height": 30,
+            "corner_radius": 6,     
+            "border_width": 1,
+            "font": DrakeConfig.FONT_UI,
+        }
+        
+        defaults.update(kwargs)
+        super().__init__(master, **defaults)
+
+        # --- AJUSTEMENTS VISUELS POST-INITIALISATION ---
+        try:
+
+            self._canvas.itemconfig(self._canvas_button_background, width=btn_w)
+            
+            self._entry.pack_configure(padx=(5, btn_w + 5), pady=4) 
+            
+            arrow_x = self._current_width - (btn_w / 2)
+            self._canvas.coords(self._canvas_arrow, arrow_x, 35 / 2)
+
+        except Exception as e:
+
+            pass

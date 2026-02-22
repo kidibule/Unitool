@@ -2,7 +2,7 @@
 
 import customtkinter as ctk
 import tkinter as tk
-from drake_ui.engine import DrakeConfig, DrakeButton
+from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton
 from utils import format_int_with_dots
 
 class ContractFrame(ctk.CTkFrame):
@@ -27,9 +27,21 @@ class ContractFrame(ctk.CTkFrame):
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
             "border_color": DrakeConfig.BORDER_COLOR,
+            "text_color": DrakeConfig.TEXT_MAIN,
             "corner_radius": 0,
-            "height": 30,
+            "border_width": 1
+        }   
+        combo_kwargs = {
+            "fg_color": DrakeConfig.BG_TERMINAL,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "button_color": DrakeConfig.ACCENT_PRIMARY,
+            "button_hover_color": DrakeConfig.ACCENT_HOVER,
+            "dropdown_fg_color": DrakeConfig.BG_PANEL,
+            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
+            "font": DrakeConfig.FONT_UI,
+            "corner_radius": 0
         }
+
 
         self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs)
         self.target_in.pack(side="left", padx=10, pady=15)
@@ -45,30 +57,23 @@ class ContractFrame(ctk.CTkFrame):
         self.reward_in.pack(side="left", padx=10, pady=15)
 
         self.type_var = ctk.StringVar(value="TYPE")
-        self.type_menu = ctk.CTkOptionMenu(
-            f_add, variable=self.type_var, width=100,
-            fg_color=DrakeConfig.BG_MAIN, 
-            button_color=DrakeConfig.BORDER_COLOR,
-            button_hover_color=DrakeConfig.ACCENT_PRIMARY,
-            dropdown_fg_color=DrakeConfig.BG_PANEL,
-            dropdown_hover_color=DrakeConfig.ACCENT_PRIMARY,
-            dropdown_text_color=DrakeConfig.TEXT_MAIN,
-            values=[], command=self.apply_type, corner_radius=0
+        self.type_menu = DrakeComboBox(
+            f_add, 
+            variable=self.type_var, 
+            width=100,
+            values=[],  # Liste vide initialement
+            command=self.apply_type,
+            **combo_kwargs,
         )
         self.type_menu.pack(side="left", padx=5)
 
-        self.prio_var = ctk.StringVar(value="MEDIUM")
-        self.prio_menu = ctk.CTkOptionMenu(
-            f_add, variable=self.prio_var, width=100,
-            fg_color=DrakeConfig.BG_MAIN,
-            button_color=DrakeConfig.BORDER_COLOR,
-            button_hover_color=DrakeConfig.ACCENT_PRIMARY,
-            dropdown_fg_color=DrakeConfig.BG_PANEL,
-            dropdown_hover_color=DrakeConfig.ACCENT_PRIMARY,
-            dropdown_text_color=DrakeConfig.TEXT_MAIN,
-            values=["LOW", "MEDIUM", "HIGH", "CRITICAL"], corner_radius=0
+        self.prio_var = ctk.StringVar(value="PRORITY")
+        self.prio_menu = DrakeComboBox(
+            f_add, 
+            variable=self.prio_var, 
+            width=100,
+            values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
         )
-
         self.prio_menu.pack(side="left", padx=5)
 
         DrakeButton(f_add, text="ACCEPT CONTRACT", width=150, command=self.add_contract).pack(side="left", padx=15)
