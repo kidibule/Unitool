@@ -31,18 +31,7 @@ class ContractFrame(ctk.CTkFrame):
             "corner_radius": 0,
             "border_width": 1
         }   
-        combo_kwargs = {
-            "fg_color": DrakeConfig.BG_TERMINAL,
-            "border_color": DrakeConfig.BORDER_COLOR,
-            "button_color": DrakeConfig.ACCENT_PRIMARY,
-            "button_hover_color": DrakeConfig.ACCENT_HOVER,
-            "dropdown_fg_color": DrakeConfig.BG_PANEL,
-            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
-            "font": DrakeConfig.FONT_UI,
-            "corner_radius": 0
-        }
-
-
+        
         self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs)
         self.target_in.pack(side="left", padx=10, pady=15)
         self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
@@ -63,7 +52,6 @@ class ContractFrame(ctk.CTkFrame):
             width=100,
             values=[],  # Liste vide initialement
             command=self.apply_type,
-            **combo_kwargs,
         )
         self.type_menu.pack(side="left", padx=5)
 

@@ -53,21 +53,6 @@ class LoggerFrame(ctk.CTkFrame):
             "border_width": 1
         }
         
-        combo_kwargs = {
-            "fg_color": DrakeConfig.BG_MAIN,
-            "border_color": DrakeConfig.BORDER_COLOR,
-            "button_color": DrakeConfig.BORDER_COLOR,
-            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_fg_color": DrakeConfig.BG_PANEL,
-            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
-            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
-            "text_color": DrakeConfig.TEXT_MAIN,
-            "font": DrakeConfig.FONT_UI,
-            "corner_radius": 0,
-            "border_width": 1
-        }
-        
         # --- SECTION 1 : IDENTITÉ (Marge 50 comme Target) ---
         f_top = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_top.pack(pady=(20, 5), padx=50, fill="x")
@@ -215,21 +200,6 @@ class LoggerFrame(ctk.CTkFrame):
             "border_color": DrakeConfig.BORDER_COLOR,
             "corner_radius": 0,
             "height": 35,
-            "border_width": 1
-        }
-
-        combo_kwargs = {
-            "fg_color": DrakeConfig.BG_MAIN,
-            "border_color": DrakeConfig.BORDER_COLOR,
-            "button_color": DrakeConfig.BORDER_COLOR,
-            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_fg_color": DrakeConfig.BG_PANEL,
-            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
-            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
-            "text_color": DrakeConfig.TEXT_MAIN,
-            "font": DrakeConfig.FONT_UI,
-            "corner_radius": 0,
             "border_width": 1
         }
 
@@ -541,20 +511,6 @@ class LoggerFrame(ctk.CTkFrame):
             "border_color": DrakeConfig.BORDER_COLOR,
             "corner_radius": 0,
             "height": 30,
-        }
-        combo_kwargs = {
-            "fg_color": DrakeConfig.BG_MAIN,
-            "border_color": DrakeConfig.BORDER_COLOR,
-            "button_color": DrakeConfig.BORDER_COLOR,
-            "button_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_fg_color": DrakeConfig.BG_PANEL,
-            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
-            "dropdown_border_color": DrakeConfig.ACCENT_PRIMARY,
-            "text_color": DrakeConfig.TEXT_MAIN,
-            "font": DrakeConfig.FONT_UI,
-            "corner_radius": 0,
-            "border_width": 1
         }
 
         # --- VALEURS STANDARDS ---
