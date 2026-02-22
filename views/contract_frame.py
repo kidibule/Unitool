@@ -147,6 +147,9 @@ class ContractFrame(ctk.CTkFrame):
                       width=20, height=18, command=lambda: self.delete_history(c.id)).pack(side="right", padx=5)
 
     def add_contract(self):
+        if hasattr(self.type_menu, "close_dropdown"):
+            self.type_menu.close_dropdown()
+
         target = self.target_in.get().strip()
         if not target: return
         
@@ -172,8 +175,10 @@ class ContractFrame(ctk.CTkFrame):
 
     def update_type_menu(self):
         types = self.controller.contract.get_contract_types()
-        self.type_menu.configure(values=[t[0] for t in types])
-
+        # On s'assure que c'est une liste plate : ["BOUNTY", "MINING", ...]
+        clean_values = [str(t[0]) for t in types]
+        self.type_menu.configure(values=clean_values)
+        
     def apply_type(self, choice):
         if choice == "TYPE": return
         reward = self.controller.contract.get_contract_reward_for_type(choice)

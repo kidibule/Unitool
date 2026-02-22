@@ -90,8 +90,10 @@ class InterceptionFrame(ctk.CTkFrame):
                 self.selected_sources.append(selected)
                 self.update_count_label()
                 self.output.insert("end", f"[+] Source added: {selected}\n")
+                self.controller.log(f"Source added: {selected}", source="INTERCEPTION")
             else:
                 self.output.insert("end", f"[!] {selected} already in list.\n")
+                self.controller.log(f"{selected} already in list.", source="INTERCEPTION")
 
     def clear_sources(self):
         self.selected_sources = []
@@ -130,3 +132,4 @@ class InterceptionFrame(ctk.CTkFrame):
             self.output.see("end")
         else:
             self.output.insert("end", "[ERROR] Calculation failed.\n")
+            self.controller.log("Interception calculation failed.", source="INTERCEPTION")

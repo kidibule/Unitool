@@ -346,7 +346,9 @@ class ScannerFrame(ctk.CTkFrame):
                 )
 
                 if is_valid_org:
-                    self.results.insert("end", f" [{org_val}/{t.sid or 'N/A'}]", ("link_org", tag_o))
+                    self.results.insert("end", "[")
+                    self.results.insert("end", f"{org_val}/{t.sid or 'N/A'}", ("link_org", tag_o))
+                    self.results.insert("end", "]")
                 else:
                     self.results.insert("end", " [SANS ORG]")
 
