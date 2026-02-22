@@ -8,10 +8,10 @@ from views.scanner_frame import ScannerFrame
 from views.logger_frame import LoggerFrame
 from views.contract_frame import ContractFrame
 from views.intelligence_frame import IntelligenceFrame
+from drake_ui.engine import DrakeConfig
+from views.interception_frame import InterceptionFrame
 from datetime import datetime
 
-# Import du moteur graphique
-from drake_ui.engine import DrakeConfig, DrakeButton
 
 
 class MainView(ctk.CTkFrame):
@@ -71,6 +71,7 @@ class MainView(ctk.CTkFrame):
             ("ContractFrame", "CONTRATS"),
             ("LoggerFrame", "ARCHIVER"),
             ("IntelligenceFrame", "INTEL"),
+            ("InterceptionFrame", "INTERCEPTION"),
         ]
 
         # Remplacement par des boutons typés Drake
@@ -95,7 +96,7 @@ class MainView(ctk.CTkFrame):
         self.container.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
         self.frames = {}
-        for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame):
+        for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame, InterceptionFrame):
             frame = F(self.container, self.controller)
             self.frames[F.__name__] = frame
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)

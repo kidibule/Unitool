@@ -10,6 +10,8 @@ from .logger_controller import LoggerController
 from .contract_controller import ContractController
 from .intelligence_controller import IntelligenceController
 from .ship_controller import ShipController
+from .org_controller import OrgController
+from .interception_controller import InterceptionController
 from controllers.org_controller import OrgController
 import logging
 import os
@@ -39,6 +41,7 @@ class AppController:
         self.intelligence = IntelligenceController(self)
         self.ship = ShipController(self)
         self.org = OrgController(self)
+        self.interception = InterceptionController(self)  
         # Setup python logger (file + console optional)
         log_path = os.path.join(os.getcwd(), "unitool.log")
         self._logger = logging.getLogger("unitool")

@@ -393,7 +393,7 @@ class DrakeComboBox(ctk.CTkFrame):
             textvariable=self.selected_value,
             text_color=DrakeConfig.TEXT_MAIN,
             fg_color="transparent",
-            hover_color=DrakeConfig.BG_PANEL,
+            hover_color=DrakeConfig.BG_TERMINAL,
             anchor="w",
             corner_radius=6,
             command=self.toggle_dropdown # <--- Cette méthode doit exister plus bas

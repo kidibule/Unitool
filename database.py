@@ -154,6 +154,31 @@ class Database:
 
         self.conn.commit()
 
+        # --- TABLE LOCATIONS (Pour le Quantum Interception System) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS locations (
+            name TEXT PRIMARY KEY,
+            x REAL,
+            y REAL,
+            z REAL,
+            type TEXT DEFAULT 'POI'
+        )""")
+
+        self.conn.commit()
+        self._seed_default_locations()
+
+    def _seed_default_locations(self):
+        """Infection de points de base si vide."""
+        check = self.query("SELECT COUNT(*) FROM locations")
+        if check[0][0] == 0:
+            default_locs = [
+                ('ARC-L1', 150000.0, 25000.0, 0.0, 'STATION'),
+                ('CELLIN', 45000.0, 12000.0, 500.0, 'MOON'),
+                ('DAYMAR', 48000.0, -15000.0, -200.0, 'MOON'),
+                ('YELA', 52000.0, 5000.0, 1200.0, 'MOON')
+            ]
+            for loc in default_locs:
+                self.commit("INSERT INTO locations (name, x, y, z, type) VALUES (?, ?, ?, ?, ?)", loc)
+
     def query(self, sql, params=()):
         self.cursor.execute(sql, params)
         return self.cursor.fetchall()
@@ -226,3 +251,15 @@ class Database:
         """Supprime tous les ships d'un joueur."""
         sql = "DELETE FROM player_ships WHERE pseudo = ?"
         self.commit(sql, (pseudo,))
+
+    # --- MÉTHODES SPÉCIFIQUES ---
+    def get_all_location_names(self):
+        """Récupère uniquement les noms des lieux pour les ComboBox."""
+        res = self.query("SELECT name FROM locations ORDER BY name ASC")
+        return [row[0] for row in res]
+
+    def add_location(self, name, x, y, z, loc_type="POI"):
+        sql = """INSERT INTO locations (name, x, y, z, type) 
+                 VALUES (?, ?, ?, ?, ?) 
+                 ON CONFLICT(name) DO UPDATE SET x=excluded.x, y=excluded.y, z=excluded.z, type=excluded.type"""
+        self.commit(sql, (name.upper(), x, y, z, loc_type))
