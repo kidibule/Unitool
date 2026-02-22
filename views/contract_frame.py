@@ -8,7 +8,7 @@ from utils import format_int_with_dots
 class ContractFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
-        self.controller = controller  # C'est l'AppController
+        self.controller = controller
         
 
         # --- Variables de gestion du popup ---

@@ -7,6 +7,7 @@ class Database:
         self.conn = sqlite3.connect(db_name)
         self.cursor = self.conn.cursor()
         self.setup()
+        self.seed_test_ships()  # Seed de vaisseaux pour tests et développement
 
     def setup(self):
         # --- TABLE TARGETS ---
@@ -263,3 +264,47 @@ class Database:
                  VALUES (?, ?, ?, ?, ?) 
                  ON CONFLICT(name) DO UPDATE SET x=excluded.x, y=excluded.y, z=excluded.z, type=excluded.type"""
         self.commit(sql, (name.upper(), x, y, z, loc_type))
+
+    def seed_test_ships(self):
+        """Injecte des vaisseaux de test pour valider l'interface ShipFrame."""
+        ships = [
+            # (name, brand, role, career, size, crew, scm, boost_f, boost_b, nav, pitch, yaw, roll, b_pitch, b_yaw, b_roll, power, decoy, hp, cargo, dim, mass, hydro, qt, fee, claim, expedite)
+            (
+                "CUTLASS BLACK", "DRAKE INTERPLANETARY", "Medium Fighter / Freight", "Combat / Transport", 
+                "Medium", 3, "165", "450", "300", "1115", "35", "35", "115", "45", "45", "150", 
+                "Standard", "48", 32000, "46", "29x26x10m", "226k kg", "550000", "2500", "2500", "12", "4"
+            ),
+            (
+                "GLADIUS", "AEGIS DYNAMICS", "Light Fighter", "Combat", 
+                "Small", 1, "210", "580", "400", "1230", "65", "65", "210", "85", "85", "280", 
+                "High", "32", 12000, "0", "15x17x5m", "48k kg", "120000", "580", "1200", "5", "1"
+            ),
+            (
+                "CARRACK", "ANVIL AEROSPACE", "Expedition", "Exploration", 
+                "Large", 6, "115", "250", "150", "950", "15", "15", "45", "20", "20", "55", 
+                "Extreme", "96", 185000, "456", "126x76x30m", "4M kg", "18M", "44000", "15000", "45", "15"
+            ),
+            (
+                "MERCURY STAR RUNNER", "CRUSADER INDUSTRIES", "Data Runner / Transport", "Transport", 
+                "Medium", 3, "215", "520", "380", "1285", "38", "38", "125", "48", "48", "160", 
+                "Standard", "64", 45000, "114", "40x38x11m", "250k kg", "850000", "3200", "4500", "15", "5"
+            ),
+            (
+                "F7C-M SUPER HORNET", "ANVIL AEROSPACE", "Medium Fighter", "Combat", 
+                "Small", 2, "175", "480", "350", "1215", "45", "45", "135", "55", "55", "180", 
+                "High", "48", 24000, "0", "22x21x6m", "78k kg", "180000", "750", "1800", "8", "2"
+            )
+        ]
+
+        sql = """INSERT OR REPLACE INTO ships (
+            name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, 
+            scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted_pitch, 
+            boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, 
+            dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, 
+            claim_time, expedite_time
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+
+        for ship in ships:
+            self.commit(sql, ship)
+        
+        print(f"DEBUG: {len(ships)} vaisseaux de test injectés.")
