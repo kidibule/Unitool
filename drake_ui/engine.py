@@ -7,6 +7,8 @@ Contient :
 - `DrakeApp` : petite application de démonstration (utilitaire)
 """
 
+from turtle import width
+
 import customtkinter as ctk
 from typing import Tuple, Optional
 
@@ -350,47 +352,168 @@ if __name__ == "__main__":
     app = DrakeApp()
     app.mainloop()
 
-class DrakeComboBox(ctk.CTkComboBox):
-    """ComboBox Drake avec bouton carré, angles adoucis et champ ajusté."""
+class DrakeComboBox(ctk.CTkFrame):
+    """DrakeComboBox Premium avec dropdown custom et correction du focus."""
 
-    def __init__(self, master, **kwargs) -> None:
-        # On extrait button_width car il ne doit pas aller dans le super().__init__ 
-        # pour éviter le crash ValueError
-        btn_w = kwargs.pop("button_width", 35)
-
-        defaults = {
-            # Couleurs et Bordures
-            "fg_color": DrakeConfig.BG_TERMINAL,
-            "border_color": DrakeConfig.BORDER_COLOR,
-            "text_color": DrakeConfig.TEXT_MAIN,
-            "button_color": DrakeConfig.ACCENT_PRIMARY,
-            "button_hover_color": DrakeConfig.ACCENT_HOVER,
-            
-            # Style du menu déroulant
-            "dropdown_fg_color": DrakeConfig.BG_PANEL,
-            "dropdown_text_color": DrakeConfig.TEXT_MAIN,
-            "dropdown_hover_color": DrakeConfig.ACCENT_PRIMARY,
-            
-            # Dimensions et Géométrie
-            "height": 30,
-            "corner_radius": 6,     
-            "border_width": 1,
-            "font": DrakeConfig.FONT_UI,
-        }
+    def __init__(self, master, values=None, command=None, variable=None, width=200, **kwargs):
+        # 1. Nettoyage des kwargs pour éviter les ValueError
+        if "variable" in kwargs:
+            variable = kwargs.pop("variable")
         
-        defaults.update(kwargs)
-        super().__init__(master, **defaults)
+        fg_color = kwargs.pop("fg_color", DrakeConfig.BG_TERMINAL)
+        border_color = kwargs.pop("border_color", DrakeConfig.BORDER_COLOR)
+        
+        super().__init__(
+            master,
+            fg_color=fg_color,
+            border_color=border_color,
+            border_width=1,
+            corner_radius=6,
+            height=30,
+            width=width,
+            **kwargs
+        )
 
-        # --- AJUSTEMENTS VISUELS POST-INITIALISATION ---
-        try:
+        self.values = values or []
+        self.command = command
+        self.is_open = False
+        
+        # Gestion de la variable
+        if variable:
+            self.selected_value = variable
+        else:
+            self.selected_value = ctk.StringVar(value=self.values[0] if self.values else "")
 
-            self._canvas.itemconfig(self._canvas_button_background, width=btn_w)
-            
-            self._entry.pack_configure(padx=(5, btn_w + 5), pady=4) 
-            
-            arrow_x = self._current_width - (btn_w / 2)
-            self._canvas.coords(self._canvas_arrow, arrow_x, 35 / 2)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        except Exception as e:
+        # --- ENTRY AREA (Cliquable) ---
+        self.entry = ctk.CTkButton(
+            self,
+            textvariable=self.selected_value,
+            text_color=DrakeConfig.TEXT_MAIN,
+            fg_color="transparent",
+            hover_color=DrakeConfig.BG_PANEL,
+            anchor="w",
+            corner_radius=6,
+            command=self.toggle_dropdown # <--- Cette méthode doit exister plus bas
+        )
+        self.entry.grid(row=0, column=0, sticky="nsew", padx=(5, 35))
 
-            pass
+        # --- ARROW BUTTON ---
+        self.button = ctk.CTkButton(
+            self,
+            text="▼",
+            width=32,
+            fg_color=DrakeConfig.ACCENT_PRIMARY,
+            hover_color=DrakeConfig.ACCENT_HOVER,
+            text_color="#000000",
+            corner_radius=4,
+            command=self.toggle_dropdown
+        )
+        self.button.place(relx=1, rely=0, anchor="ne", relheight=1)
+
+        self.dropdown = None
+
+    # ===============================
+    # LOGIQUE (Vérifie bien que ces noms correspondent !)
+    # ===============================
+
+    def toggle_dropdown(self):
+        """Bascule l'état d'ouverture du menu."""
+        if self.is_open:
+            self.close_dropdown()
+        else:
+            self.open_dropdown()
+
+    def open_dropdown(self):
+        if self.is_open: return
+        self.is_open = True
+
+        # Calcul position
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        width = self.winfo_width()
+
+        self.dropdown = ctk.CTkToplevel(self)
+        self.dropdown.overrideredirect(True)
+        self.dropdown.attributes("-topmost", True)
+        self.dropdown.configure(fg_color=DrakeConfig.ACCENT_PRIMARY)
+
+        height = min(len(self.values) * 35 + 15, 200)
+        self.dropdown.geometry(f"{width}x{height}+{x}+{y}")
+
+        border_frame = ctk.CTkFrame(
+            self.dropdown,
+            fg_color=DrakeConfig.BG_PANEL,
+            border_color=DrakeConfig.ACCENT_PRIMARY,
+            border_width=1,
+            corner_radius=1
+        )
+        border_frame.pack(fill="both", expand=True)
+
+        scroll = ctk.CTkScrollableFrame(border_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+        for value in self.values:
+            item = ctk.CTkButton(
+                scroll,
+                text=value,
+                fg_color="transparent",
+                hover_color=DrakeConfig.ACCENT_PRIMARY,
+                text_color=DrakeConfig.TEXT_MAIN,
+                anchor="w",
+                command=lambda v=value: self.select(v)
+            )
+            item.pack(fill="x", pady=2)
+
+        # Focus et fermeture
+        self.dropdown.bind("<FocusOut>", lambda e: self.close_dropdown())
+        self.dropdown.focus()
+
+    def close_dropdown(self):
+        if self.dropdown:
+            self.dropdown.grab_release()
+            self.dropdown.destroy()
+        self.dropdown = None
+        self.is_open = False
+
+    def select(self, value):
+        self.selected_value.set(value)
+        self.close_dropdown()
+        if self.command:
+            self.command(value)
+
+    # ===============================
+    # PUBLIC API
+    # ===============================
+
+    def get(self):
+        return self.selected_value.get()
+
+    def set(self, value):
+        self.selected_value.set(value)
+        
+    def configure(self, **kwargs):
+        # 1. On intercepte et on traite nos paramètres personnalisés
+        if "values" in kwargs:
+            self.values = kwargs.pop("values")
+            # Optionnel : réinitialiser la valeur sélectionnée si elle n'est plus dans la liste
+            if self.get() not in self.values and self.values:
+                self.set(self.values[0])
+
+        if "command" in kwargs:
+            self.command = kwargs.pop("command")
+
+        if "variable" in kwargs:
+            new_var = kwargs.pop("variable")
+            self.selected_value = new_var
+            self.entry.configure(textvariable=self.selected_value)
+
+        if "text_color" in kwargs:
+            color = kwargs.pop("text_color")
+            self.entry.configure(text_color=color)
+
+        # 2. On envoie le RESTE (ce qui n'a pas été "pop") au CTkFrame parent
+        # kwargs ne contient plus 'values', donc plus de ValueError !
+        super().configure(**kwargs)
