@@ -33,21 +33,99 @@ class ShipFrame(ctk.CTkFrame):
         # Création des onglets
         self.tab_ships = self.tabview.add("SHIPS")  # Liste des vaisseaux avec moteur de recherche et fiches techniques
         self.tab_brands = self.tabview.add("COMPONENTS")  # À implémenter : Liste des fabricants et composants (moteurs, armes, etc.)
+        self.tab_loadout = self.tabview.add("LOADOUT")  # À implémenter : Interface d'équipement des composants sur un vaisseau
 
         # Configuration des onglets
         self.setup_ships_tab()
+        self.setup_components_tab()
+        self.setup_loadout_tab()
 
     def setup_ships_tab(self):
         """Configure l'onglet de recherche de vaisseaux (Ships)."""
+        # Barre de recherche existante
         self.ship_search_entry = ctk.CTkEntry(
             self.tab_ships, placeholder_text="RECHERCHER UN VAISSEAU (NOM OU RÔLE)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
-        self.ship_search_entry.pack(pady=10, padx=20, fill="x")
+        self.ship_search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.ship_search_entry.bind("<KeyRelease>", self.run_ship_scan)
 
+        # --- NOUVELLE BARRE D'OUTILS (IMPORT/EXPORT) ---
+        toolbar = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        toolbar.pack(fill="x", padx=20, pady=5)
+
+        # Bouton Import
+        self.btn_import = DrakeButton(
+            toolbar, text="IMPORT CSV", 
+            command=self.controller.ship.import_ships_from_csv,
+            width=150
+        )
+        self.btn_import.pack(side="left", padx=5)
+
+        # Bouton Export
+        self.btn_export = DrakeButton(
+            toolbar, text="EXPORT CSV", 
+            command=self.controller.ship.export_ships_to_csv,
+            width=150
+        )
+        self.btn_export.pack(side="left", padx=5)
+
+        # Terminal de résultats existant
         self.ship_results = DrakeTerminal(self.tab_ships)
         self.ship_results.pack(pady=5, padx=10, fill="both", expand=True)
+    
+    def setup_components_tab(self):
+        """Configure l'onglet de gestion des composants."""
+        # Splitter l'onglet en deux : Recherche à gauche, Ajout à droite
+        self.comp_container = ctk.CTkFrame(self.tab_brands, fg_color="transparent")
+        self.comp_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Liste des composants existants
+        self.comp_list_terminal = DrakeTerminal(self.comp_container)
+        self.comp_list_terminal.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        # Formulaire d'ajout rapide (Drake Style)
+        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=250, fg_color=DrakeConfig.BG_TERMINAL)
+        self.add_comp_frame.pack(side="right", fill="y")
+        
+        ctk.CTkLabel(self.add_comp_frame, text="ADD COMPONENT", font=("Orbitron", 12)).pack(pady=10)
+        
+        self.new_comp_name = ctk.CTkEntry(self.add_comp_frame, placeholder_text="NAME (ex: FR-66)")
+        self.new_comp_name.pack(pady=5, padx=10)
+        
+        self.new_comp_type = ctk.CTkComboBox(self.add_comp_frame, values=["SHIELD", "POWER_PLANT", "QUANTUM_DRIVE", "COOLER"])
+        self.new_comp_type.pack(pady=5, padx=10)
+
+        DrakeButton(self.add_comp_frame, text="SAVE TO DB", command=self.save_new_component).pack(pady=20)
+
+    # Nouvelle méthode dans ShipFrame
+    def setup_loadout_tab(self):
+        """Interface pour équiper les composants sur un vaisseau."""
+        # Splitter l'écran : Gauche (Sélection) | Droite (Visualisation)
+        self.lo_container = ctk.CTkFrame(self.tab_loadout, fg_color="transparent")
+        self.lo_container.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # --- PANNEAU GAUCHE : SÉLECTION ---
+        left_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_TERMINAL, width=300)
+        left_panel.pack(side="left", fill="y", padx=(0, 10))
+
+        ctk.CTkLabel(left_panel, text="SELECT SHIP", font=("Orbitron", 12)).pack(pady=10)
+        # Liste des vaisseaux (Dropdown)
+        ship_list = [row[0] for row in self.controller.query("SELECT name FROM ships")]
+        self.lo_ship_selector = ctk.CTkComboBox(left_panel, values=ship_list, command=self.refresh_loadout_view)
+        self.lo_ship_selector.pack(pady=5, padx=10)
+
+        ctk.CTkLabel(left_panel, text="EQUIP COMPONENT", font=("Orbitron", 12)).pack(pady=(20, 10))
+        # Liste des composants (Dropdown)
+        comp_list = [row[0] for row in self.controller.query("SELECT name FROM components")]
+        self.lo_comp_selector = ctk.CTkComboBox(left_panel, values=comp_list)
+        self.lo_comp_selector.pack(pady=5, padx=10)
+
+        DrakeButton(left_panel, text="INSTALL MODULE", command=self.action_equip).pack(pady=20)
+
+        # --- PANNEAU DROIT : RENDU TERMINAL ---
+        self.lo_terminal = DrakeTerminal(self.lo_container)
+        self.lo_terminal.pack(side="right", fill="both", expand=True)
 
     def run_ship_scan(self, event):
         """Moteur de rendu des fiches techniques."""
@@ -94,7 +172,78 @@ class ShipFrame(ctk.CTkFrame):
 
                 self.ship_results.tag_bind(tag_ship_click, "<Double-Button-1>", 
                                          lambda e, n=ship.name: self.open_edit_window(n))
+                
+                # --- [RENDU DES COMPOSANTS ÉQUIPÉS] ---
+                if ship.components:
+                    self.ship_results.insert("end", " 🛰️ LOADOUT / COMPONENTS:\n", "ACCENT")
+                    for comp in ship.components:
+                        self.ship_results.insert("end", f"   • [{comp.type_name:<15}] {comp.brand} {comp.name} (Size {comp.size})\n")
+                else:
+                    self.ship_results.insert("end", "   NO COMPONENTS REGISTERED\n", "warning_label")
+
+                self.ship_results.insert("end", f"{'='*60}\n\n")
 
     def open_edit_window(self, ship_name):
         # À implémenter : Fenêtre CTkTopLevel avec les champs du modèle Ship
         pass
+
+    def save_new_component(self):
+        """Récupère les données du formulaire et demande au contrôleur de sauvegarder."""
+        name = self.new_comp_name.get().strip().upper()
+        comp_type = self.new_comp_type.get()
+        
+        if not name:
+            # Tu peux ajouter un message d'erreur ici si tu as une console de log
+            print("[ERROR] Le nom du composant est requis.")
+            return
+
+        # On prépare les données (tu peux ajouter brand, size, etc. si tu as les champs)
+        data = {
+            "name": name,
+            "type_name": comp_type,
+            "brand": "UNKNOWN", # Valeur par défaut ou champ à ajouter
+            "size": 1,
+            "grade": "C"
+        }
+
+        try:
+            # On passe par le contrôleur dédié aux composants
+            # Note: Assure-toi que ton controller possède une méthode add_component
+            self.controller.ship.add_component_to_db(data)
+            
+            # Reset du champ et feedback
+            self.new_comp_name.delete(0, "end")
+            print(f"[SUCCESS] {name} ajouté à la base de données.")
+            
+            # Optionnel : rafraîchir la liste des composants
+            # self.run_component_scan() 
+            
+        except Exception as e:
+            print(f"[ERROR] Impossible de sauvegarder : {e}")
+        
+    def refresh_loadout_view(self, ship_name):
+        """Affiche le loadout actuel du vaisseau sélectionné."""
+        self.lo_terminal.delete("0.0", "end")
+        ship = self.controller.ship.load_full_ship(ship_name)
+        
+        if not ship: return
+
+        self.lo_terminal.insert("end", f"--- LOADOUT STATUS: {ship.name} ---\n", "ACCENT")
+        self.lo_terminal.insert("end", f"BRAND: {ship.brand} | SIZE: {ship.size}\n")
+        self.lo_terminal.insert("end", "-"*40 + "\n")
+
+        if not ship.components:
+            self.lo_terminal.insert("end", "\n[!] NO MODULES INSTALLED\n", "warning_label")
+        else:
+            for comp in ship.components:
+                self.lo_terminal.insert("end", f"» [{comp.type_name}] {comp.name} - GRADE {comp.grade}\n")
+
+    def action_equip(self):
+        """Envoie l'ordre d'équipement au contrôleur."""
+        ship_name = self.lo_ship_selector.get()
+        comp_name = self.lo_comp_selector.get()
+        
+        if self.controller.ship.equip_component(ship_name, comp_name):
+            self.refresh_loadout_view(ship_name) # Rafraîchir l'affichage
+            # Feedback visuel
+            self.lo_terminal.insert("end", f"\n[SUCCESS] {comp_name} INSTALLED.", "ACCENT")

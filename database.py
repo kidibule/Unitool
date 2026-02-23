@@ -167,6 +167,34 @@ class Database:
         self.conn.commit()
         self._seed_default_locations()
 
+        # --- TABLE COMPONENT_TYPES ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS component_types (
+            name TEXT PRIMARY KEY,
+            category TEXT -- ex: AVIONICS, PROPULSION, SYSTEMS
+        )""")
+
+        # --- TABLE COMPONENTS ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            brand TEXT,
+            type_name TEXT,
+            size INTEGER,
+            grade TEXT,
+            stats TEXT, -- On peut stocker du JSON ici pour la flexibilité
+            FOREIGN KEY (type_name) REFERENCES component_types(name)
+        )""")
+
+        # --- TABLE SHIP_LOADOUT (Lien entre Ship et Composants) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_loadout (
+            ship_name TEXT,
+            component_name TEXT,
+            quantity INTEGER DEFAULT 1,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            FOREIGN KEY (component_name) REFERENCES components(name),
+            PRIMARY KEY (ship_name, component_name)
+        )""")
+
     def _seed_default_locations(self):
         """Infection de points de base si vide."""
         check = self.query("SELECT COUNT(*) FROM locations")
@@ -308,3 +336,28 @@ class Database:
             self.commit(sql, ship)
         
         print(f"DEBUG: {len(ships)} vaisseaux de test injectés.")
+
+    # --- GESTION DES COMPOSANTS ---
+
+    def add_component_type(self, name, category):
+        self.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", (name.upper(), category.upper()))
+
+    def add_component(self, name, brand, type_name, size, grade, stats="{}"):
+        sql = "INSERT OR REPLACE INTO components (name, brand, type_name, size, grade, stats) VALUES (?, ?, ?, ?, ?, ?)"
+        self.commit(sql, (name.upper(), brand.upper(), type_name.upper(), size, grade.upper(), stats))
+
+    def equip_component_to_ship(self, ship_name, component_name, qty=1):
+        """Lien MVC : Le contrôleur appellera cette méthode pour modifier le loadout"""
+        sql = "INSERT OR REPLACE INTO ship_loadout (ship_name, component_name, quantity) VALUES (?, ?, ?)"
+        self.commit(sql, (ship_name.upper(), component_name.upper(), qty))
+
+    def get_ship_components(self, ship_name):
+        """Récupère tous les composants équipés sur un vaisseau"""
+        sql = """
+            SELECT c.*, ct.category 
+            FROM components c
+            JOIN ship_loadout sl ON c.name = sl.component_name
+            JOIN component_types ct ON c.type_name = ct.name
+            WHERE sl.ship_name = ?
+        """
+        return self.query(sql, (ship_name.upper(),))

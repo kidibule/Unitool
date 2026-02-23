@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from .base_model import BaseModel
+from .component import Component
 
 
 class Ship(BaseModel):
@@ -108,6 +109,8 @@ class Ship(BaseModel):
         self.claim_time = claim_time
         self.expedite_time = expedite_time
 
+        self.components = [] 
+
     @classmethod
     def from_db_row(cls, row: tuple):
         if not row:
@@ -145,3 +148,16 @@ class Ship(BaseModel):
 
     def to_db_tuple(self) -> tuple:
         return self.to_tuple(self.COLUMNS)
+    
+    def add_component(self, component: Component):
+        """Ajoute un objet Component à la liste du vaisseau"""
+        self.components.append(component)
+
+    def get_components_by_type(self, type_filter):
+        """Retourne uniquement les composants d'un certain type (ex: SHIELD)"""
+        return [c for c in self.components if c.type_name == type_filter.upper()]
+
+    @property
+    def total_power_draw(self):
+        """Exemple de calcul dynamique basé sur les composants équipés"""
+        return sum(float(c.stats.get("power_draw", 0)) for c in self.components)

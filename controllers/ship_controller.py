@@ -2,6 +2,9 @@
 
 from datetime import datetime
 from models.ship import Ship
+from models.component import Component
+import csv
+from tkinter import filedialog, messagebox
 
 
 class ShipController:
@@ -144,3 +147,98 @@ class ShipController:
 
     def clear_all_fields(self):
         pass
+
+    def load_full_ship(self, name: str) -> Ship:
+        """Charge un modèle Ship avec tous ses composants attachés."""
+        # 1. On charge d'abord le modèle de base
+        ship = self.load_ship_as_model(name)
+        
+        if ship:
+            # 2. On récupère les composants via la table de liaison ship_loadout
+            # Note: J'utilise self.app.query car ton controller délègue à Database via app
+            sql = """
+                SELECT c.* FROM components c
+                JOIN ship_loadout sl ON c.name = sl.component_name
+                WHERE sl.ship_name = ?
+            """
+            rows = self.app.query(sql, (ship.name,))
+            
+            # 3. On transforme les rows en objets Component et on les injecte
+            for row in rows:
+                # Adapte les index selon ta table components (ex: name, brand, type_name...)
+                comp = Component(
+                    name=row[1], 
+                    brand=row[2], 
+                    type_name=row[3], 
+                    size=row[4], 
+                    grade=row[5]
+                )
+                ship.add_component(comp)
+                
+        return ship
+    
+    def equip_component(self, ship_name: str, component_name: str) -> bool:
+        """Relie un composant à un vaisseau dans la base de données."""
+        try:
+            # On pourrait vérifier ici la taille du composant vs la taille du ship
+            sql = "INSERT OR REPLACE INTO ship_loadout (ship_name, component_name) VALUES (?, ?)"
+            self.app.commit(sql, (ship_name.upper(), component_name.upper()))
+            
+            if hasattr(self.app, "log"):
+                self.app.log(f"LOADOUT: {component_name} équipé sur {ship_name}", source="FLEET")
+            return True
+        except Exception as e:
+            if hasattr(self.app, "log"):
+                self.app.log(f"LOADOUT ERROR: {str(e)}", source="ERROR")
+            return False
+
+    def export_ships_to_csv(self):
+        """Exporte la table ships vers un fichier CSV."""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            title="EXPORTER LA FLOTTE"
+        )
+        if not file_path:
+            return
+
+        try:
+            # On récupère toutes les données
+            rows = self.app.query("SELECT * FROM ships")
+            # On récupère les noms des colonnes pour le header
+            headers = [description[0] for description in self.app.cursor.description]
+
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+            
+            self.app.log(f"EXPORT SUCCESS: {file_path}", source="SYSTEM")
+            messagebox.showinfo("UNITOOL", "Exportation réussie !")
+        except Exception as e:
+            messagebox.showerror("Export Error", str(e))
+
+    def import_ships_from_csv(self):
+        """Importe des vaisseaux depuis un CSV et les insère en base."""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv")],
+            title="IMPORTER LA FLOTTE"
+        )
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                self.import_ships_csv(list(reader)) # Utilise ta méthode existante
+                
+            messagebox.showinfo("UNITOOL", "Importation terminée avec succès !")
+        except Exception as e:
+            messagebox.showerror("Import Error", str(e))
+
+    def add_component_to_db(self, data: dict):
+        """Inscrit un nouveau composant dans la table components."""
+        sql = """INSERT OR REPLACE INTO components (name, brand, type_name, size, grade) 
+                 VALUES (?, ?, ?, ?, ?)"""
+        params = (data['name'], data['brand'], data['type_name'], data['size'], data['grade'])
+        self.app.commit(sql, params)
