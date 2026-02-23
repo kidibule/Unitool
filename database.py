@@ -76,38 +76,35 @@ class Database:
             (name TEXT PRIMARY KEY, reward TEXT)""")
 
         # Table for ships 
-        self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS ships (
-                name TEXT PRIMARY KEY,
-                brand TEXT,
-                role TEXT,
-                career TEXT,
-                size TEXT,
-                crew_size INTEGER DEFAULT 0,
-                scm_speed TEXT,
-                scm_boost_forward TEXT,
-                scm_boost_backward TEXT,
-                nav_max_speed TEXT,
-                pitch TEXT,
-                yaw TEXT,
-                roll TEXT,
-                boosted_pitch TEXT,
-                boosted_yaw TEXT,
-                boosted_roll TEXT,
-                power_consumption TEXT,
-                cm_decoy_noise TEXT,
-                hp INTEGER DEFAULT 0,
-                cargo TEXT,
-                dimensions TEXT,
-                mass TEXT,
-                hydrogen_capacity TEXT,
-                qt_fuel_capacity TEXT,
-                expedition_fee TEXT,
-                claim_time TEXT,
-                expedite_time TEXT
-            )"""
-        )
-
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ships (
+            name TEXT PRIMARY KEY,
+            brand TEXT,
+            role TEXT,
+            career TEXT,
+            size TEXT,
+            crew_size INTEGER DEFAULT 0,
+            scm_speed TEXT,
+            scm_boost_forward TEXT,
+            scm_boost_backward TEXT,
+            nav_max_speed TEXT,
+            pitch TEXT,
+            yaw TEXT,
+            roll TEXT,
+            boosted_pitch TEXT,
+            boosted_yaw TEXT,
+            boosted_roll TEXT,
+            power_consumption TEXT,
+            cm_decoy_noise TEXT,
+            hp INTEGER DEFAULT 0,
+            cargo TEXT,
+            dimensions TEXT,
+            mass TEXT,
+            hydrogen_capacity TEXT,
+            qt_fuel_capacity TEXT,
+            expedition_fee TEXT,
+            claim_time TEXT,
+            expedite_time TEXT
+        )""")
         # Ensure legacy DBs get new ship columns if missing
         ship_columns = [
             ("brand", "TEXT"),
@@ -144,6 +141,35 @@ class Database:
             except Exception:
                 pass
 
+                # --- 2. TABLE DES TYPES (Pour le filtrage) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS component_types (
+            name TEXT PRIMARY KEY,  -- ex: LASER_REPEATER, SHIELD_GEN
+            category TEXT           -- ex: WEAPON, SYSTEMS, PROPULSION
+        )""")
+
+        # --- 3. TABLE DES COMPOSANTS (Catalogue) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,       -- ex: FR-66
+            brand TEXT,             -- ex: SHIBIN
+            type_name TEXT,         -- ex: SHIELD_GEN
+            category TEXT,          -- ex: SYSTEMS (Doublon utile pour la performance)
+            size INTEGER,
+            grade TEXT,
+            stats TEXT,             -- JSON string
+            FOREIGN KEY (type_name) REFERENCES component_types(name)
+        )""")
+
+        # --- 4. TABLE LOADOUT (Liaison Vaisseau <-> Composants) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_loadout (
+            ship_name TEXT,
+            component_name TEXT,
+            quantity INTEGER DEFAULT 1,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            FOREIGN KEY (component_name) REFERENCES components(name),
+            PRIMARY KEY (ship_name, component_name)
+        )""")
+
         # Table linking players to multiple ships (used by add_ship/get_ships)
         self.cursor.execute(
             """CREATE TABLE IF NOT EXISTS player_ships (
@@ -166,34 +192,6 @@ class Database:
 
         self.conn.commit()
         self._seed_default_locations()
-
-        # --- TABLE COMPONENT_TYPES ---
-        self.cursor.execute("""CREATE TABLE IF NOT EXISTS component_types (
-            name TEXT PRIMARY KEY,
-            category TEXT -- ex: AVIONICS, PROPULSION, SYSTEMS
-        )""")
-
-        # --- TABLE COMPONENTS ---
-        self.cursor.execute("""CREATE TABLE IF NOT EXISTS components (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
-            brand TEXT,
-            type_name TEXT,
-            size INTEGER,
-            grade TEXT,
-            stats TEXT, -- On peut stocker du JSON ici pour la flexibilité
-            FOREIGN KEY (type_name) REFERENCES component_types(name)
-        )""")
-
-        # --- TABLE SHIP_LOADOUT (Lien entre Ship et Composants) ---
-        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_loadout (
-            ship_name TEXT,
-            component_name TEXT,
-            quantity INTEGER DEFAULT 1,
-            FOREIGN KEY (ship_name) REFERENCES ships(name),
-            FOREIGN KEY (component_name) REFERENCES components(name),
-            PRIMARY KEY (ship_name, component_name)
-        )""")
 
     def _seed_default_locations(self):
         """Infection de points de base si vide."""
@@ -342,9 +340,12 @@ class Database:
     def add_component_type(self, name, category):
         self.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", (name.upper(), category.upper()))
 
-    def add_component(self, name, brand, type_name, size, grade, stats="{}"):
-        sql = "INSERT OR REPLACE INTO components (name, brand, type_name, size, grade, stats) VALUES (?, ?, ?, ?, ?, ?)"
-        self.commit(sql, (name.upper(), brand.upper(), type_name.upper(), size, grade.upper(), stats))
+    def add_component(self, name, brand, type_name, category, size, grade, stats="{}"):
+        # On ajoute category dans le INSERT
+        sql = """INSERT OR REPLACE INTO components 
+                (name, brand, type_name, category, size, grade, stats) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)"""
+        self.commit(sql, (name.upper(), brand.upper(), type_name.upper(), category.upper(), size, grade.upper(), stats))
 
     def equip_component_to_ship(self, ship_name, component_name, qty=1):
         """Lien MVC : Le contrôleur appellera cette méthode pour modifier le loadout"""

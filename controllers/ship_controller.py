@@ -149,34 +149,33 @@ class ShipController:
         pass
 
     def load_full_ship(self, name: str) -> Ship:
-        """Charge un modèle Ship avec tous ses composants attachés."""
-        # 1. On charge d'abord le modèle de base
         ship = self.load_ship_as_model(name)
         
         if ship:
-            # 2. On récupère les composants via la table de liaison ship_loadout
-            # Note: J'utilise self.app.query car ton controller délègue à Database via app
+            # Assure-toi que ta requête SELECT récupère bien la colonne category
             sql = """
-                SELECT c.* FROM components c
+                SELECT c.id, c.name, c.brand, c.type_name, c.category, c.size, c.grade, c.stats 
+                FROM components c
                 JOIN ship_loadout sl ON c.name = sl.component_name
                 WHERE sl.ship_name = ?
             """
             rows = self.app.query(sql, (ship.name,))
             
-            # 3. On transforme les rows en objets Component et on les injecte
             for row in rows:
-                # Adapte les index selon ta table components (ex: name, brand, type_name...)
+                # On adapte ici pour correspondre au nouveau __init__ de Component
                 comp = Component(
                     name=row[1], 
                     brand=row[2], 
                     type_name=row[3], 
-                    size=row[4], 
-                    grade=row[5]
+                    category=row[4], # C'est l'argument qui manquait !
+                    size=row[5], 
+                    grade=row[6],
+                    stats=row[7] if len(row) > 7 else {}
                 )
                 ship.add_component(comp)
                 
         return ship
-    
+
     def equip_component(self, ship_name: str, component_name: str) -> bool:
         """Relie un composant à un vaisseau dans la base de données."""
         try:
@@ -238,7 +237,18 @@ class ShipController:
 
     def add_component_to_db(self, data: dict):
         """Inscrit un nouveau composant dans la table components."""
-        sql = """INSERT OR REPLACE INTO components (name, brand, type_name, size, grade) 
-                 VALUES (?, ?, ?, ?, ?)"""
-        params = (data['name'], data['brand'], data['type_name'], data['size'], data['grade'])
+        # On ajoute category ici
+        sql = """INSERT OR REPLACE INTO components 
+                (name, brand, type_name, category, size, grade, stats) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)"""
+        
+        params = (
+            data['name'].upper(), 
+            data['brand'].upper(), 
+            data['type_name'].upper(), 
+            data.get('category', 'SYSTEMS').upper(), # Valeur par défaut si absente
+            self._safe_int(data['size']), 
+            data['grade'].upper(),
+            data.get('stats', '{}')
+        )
         self.app.commit(sql, params)

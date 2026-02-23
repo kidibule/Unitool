@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships & Brands)."""
@@ -112,13 +112,13 @@ class ShipFrame(ctk.CTkFrame):
         ctk.CTkLabel(left_panel, text="SELECT SHIP", font=("Orbitron", 12)).pack(pady=10)
         # Liste des vaisseaux (Dropdown)
         ship_list = [row[0] for row in self.controller.query("SELECT name FROM ships")]
-        self.lo_ship_selector = ctk.CTkComboBox(left_panel, values=ship_list, command=self.refresh_loadout_view)
+        self.lo_ship_selector = DrakeComboBox(left_panel, values=ship_list, command=self.refresh_loadout_view)
         self.lo_ship_selector.pack(pady=5, padx=10)
 
         ctk.CTkLabel(left_panel, text="EQUIP COMPONENT", font=("Orbitron", 12)).pack(pady=(20, 10))
         # Liste des composants (Dropdown)
         comp_list = [row[0] for row in self.controller.query("SELECT name FROM components")]
-        self.lo_comp_selector = ctk.CTkComboBox(left_panel, values=comp_list)
+        self.lo_comp_selector = DrakeComboBox(left_panel, values=comp_list)
         self.lo_comp_selector.pack(pady=5, padx=10)
 
         DrakeButton(left_panel, text="INSTALL MODULE", command=self.action_equip).pack(pady=20)
@@ -174,6 +174,53 @@ class ShipFrame(ctk.CTkFrame):
                                          lambda e, n=ship.name: self.open_edit_window(n))
                 
                 # --- [RENDU DES COMPOSANTS ÉQUIPÉS] ---
+    def run_ship_scan(self, event):
+        """Moteur de rendu des fiches techniques."""
+        q = self.ship_search_entry.get().strip().upper()
+        self.ship_results.delete("0.0", "end")
+
+        if len(q) > 1:
+            # Utilisation directe de self.controller.query (délégué à Database)
+            sql = "SELECT name FROM ships WHERE name LIKE ? OR brand LIKE ? LIMIT 10"
+            rows = self.controller.query(sql, (f"%{q}%", f"%{q}%"))
+
+            for row in rows:
+                ship_name = row[0]
+                ship = self.controller.ship.load_ship_as_model(ship_name)
+                
+                if not ship: continue
+
+                tag_ship_click = f"edit_ship_{ship.name.replace(' ', '_')}"
+
+                # --- [RENDU FORMAT DOSSIER] ---
+                self.ship_results.insert("end", " ■ ", "ACCENT") 
+                self.ship_results.insert("end", f"{ship.brand.upper()} {ship.name.upper()} ", (tag_ship_click, "NEUTRE"))
+                self.ship_results.insert("end", f"[{ship.size.upper()}]\n", "info_label")
+                
+                self.ship_results.insert("end", f"   ROLE: {ship.role} | CAREER: {ship.career}\n")
+                self.ship_results.insert("end", f"   CREW: {ship.crew_size} | CARGO: {ship.cargo} SCU | HP: {ship.hp}\n")
+
+                self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
+                
+                # Stats techniques
+                stats = [
+                    ("SCM/NAV SPEED", f"{ship.scm_speed} / {ship.nav_max_speed} m/s"),
+                    ("PITCH/YAW/ROLL", f"{ship.pitch}/{ship.yaw}/{ship.roll}"),
+                    ("BOOSTED P/Y/R", f"{ship.boosted_pitch}/{ship.boosted_yaw}/{ship.boosted_roll}")
+                ]
+                for label, val in stats:
+                    self.ship_results.insert("end", f"   {label:<25} | {val:<20}\n", "ACCENT")
+
+                self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
+                self.ship_results.insert("end", "   CLAIM: ", "warning_label")
+                self.ship_results.insert("end", f"BASE: {ship.claim_time}m | EXPEDITE: {ship.expedite_time}m\n")
+                
+                self.ship_results.insert("end", f"{'='*60}\n\n")
+
+                self.ship_results.tag_bind(tag_ship_click, "<Double-Button-1>", 
+                                         lambda e, n=ship.name: self.open_edit_window(n))
+                
+                # --- [RENDU DES COMPOSANTS ÉQUIPÉS] ---
                 if ship.components:
                     self.ship_results.insert("end", " 🛰️ LOADOUT / COMPONENTS:\n", "ACCENT")
                     for comp in ship.components:
@@ -182,7 +229,7 @@ class ShipFrame(ctk.CTkFrame):
                     self.ship_results.insert("end", "   NO COMPONENTS REGISTERED\n", "warning_label")
 
                 self.ship_results.insert("end", f"{'='*60}\n\n")
-
+                                         
     def open_edit_window(self, ship_name):
         # À implémenter : Fenêtre CTkTopLevel avec les champs du modèle Ship
         pass
