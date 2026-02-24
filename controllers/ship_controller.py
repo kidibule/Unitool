@@ -306,3 +306,12 @@ class ShipController:
             return False, "Limite d'emplacements atteinte pour cette catégorie."
         
         return True, "OK"
+    
+    def update_ship_specs(self, ship_name, data):
+        """Met à jour les colonnes de la table ships."""
+        set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
+        values = list(data.values())
+        values.append(ship_name)
+        
+        sql = f"UPDATE ships SET {set_clause} WHERE name = ?"
+        self.controller.query(sql, tuple(values))
