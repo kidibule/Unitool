@@ -110,6 +110,44 @@ class Ship(BaseModel):
         self.expedite_time = expedite_time
 
         self.components = [] 
+        self.capabilities = {}
+
+    def set_capability(self, category: str, max_qty: int, max_size: int):
+        """Définit les limites d'équipement pour une catégorie (ex: WEAPON, 4, 3)."""
+        self.capabilities[category.upper()] = {
+            "max_qty": max_qty,
+            "max_size": max_size
+        }
+
+    def can_add_component(self, component: Component) -> tuple[bool, str]:
+        """
+        Vérifie si le composant respecte les specs du châssis.
+        Retourne (True, "OK") ou (False, "Raison du refus").
+        """
+        cap = self.capabilities.get(component.category.upper())
+        
+        if not cap:
+            return False, f"ERREUR : Aucun slot [{component.category}] sur ce châssis."
+
+        # 1. Vérification de la Taille (S1, S2, etc.)
+        if int(component.size) > cap["max_size"]:
+            return False, f"TAILLE : S{component.size} excède la limite (Max S{cap['max_size']})."
+
+        # 2. Vérification de la Quantité d'emplacements
+        current_count = sum(1 for c in self.components if c.category == component.category)
+        if current_count >= cap["max_qty"]:
+            return False, f"SLOTS : Tous les emplacements [{component.category}] sont occupés ({cap['max_qty']}/{cap['max_qty']})."
+
+        return True, "Configuration valide."
+
+    def add_component(self, component: Component) -> bool:
+        """Ajoute le composant seulement si la validation passe."""
+        allowed, message = self.can_add_component(component)
+        if allowed:
+            self.components.append(component)
+            return True
+        print(f"REFUSÉ : {message}") # Debug ou Log
+        return False
 
     @classmethod
     def from_db_row(cls, row: tuple):
@@ -149,15 +187,14 @@ class Ship(BaseModel):
     def to_db_tuple(self) -> tuple:
         return self.to_tuple(self.COLUMNS)
     
-    def add_component(self, component: Component):
-        """Ajoute un objet Component à la liste du vaisseau"""
-        self.components.append(component)
-
-    def get_components_by_type(self, type_filter):
-        """Retourne uniquement les composants d'un certain type (ex: SHIELD)"""
-        return [c for c in self.components if c.type_name == type_filter.upper()]
-
     @property
     def total_power_draw(self):
         """Exemple de calcul dynamique basé sur les composants équipés"""
         return sum(float(c.stats.get("power_draw", 0)) for c in self.components)
+        # --- CALCULS DYNAMIQUES ---
+
+    @property
+    def total_shields(self):
+        """Calcule la capacité de bouclier totale basée sur les stats des composants."""
+        return sum(float(c.stats.get("shield_hp", 0)) for c in self.components if c.category == "SYSTEMS")
+

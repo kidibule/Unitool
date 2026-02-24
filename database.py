@@ -160,6 +160,25 @@ class Database:
             FOREIGN KEY (type_name) REFERENCES component_types(name)
         )""")
 
+ #       # --- 4. TABLE DES CAPABILITÉS (Limites d'équipement par vaisseau) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_specs (
+            ship_name TEXT,
+            category TEXT,      -- WEAPON, SYSTEMS, PROPULSION
+            max_qty INTEGER,    -- Nombre de slots
+            max_size INTEGER,   -- Taille max par slot
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            PRIMARY KEY (ship_name, category)
+        )""")
+
+        # --- 4. TABLE DES SLOTS (Limites d'équipement par vaisseau) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_slots (
+            ship_name TEXT,
+            slot_type TEXT,      -- ex: 'WEAPON', 'SHIELD', 'POWER_PLANT'
+            slot_size INTEGER,   -- ex: 3
+            max_quantity INTEGER, -- ex: 3 (pour 3 armes)
+            FOREIGN KEY (ship_name) REFERENCES ships(name)
+        )""")
+
         # --- 4. TABLE LOADOUT (Liaison Vaisseau <-> Composants) ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_loadout (
             ship_name TEXT,

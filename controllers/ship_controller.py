@@ -152,40 +152,77 @@ class ShipController:
         ship = self.load_ship_as_model(name)
         
         if ship:
-            # Assure-toi que ta requête SELECT récupère bien la colonne category
+            # 1. Charger les limites (Capabilities) depuis la DB
+            specs_rows = self.app.query(
+                "SELECT category, max_qty, max_size FROM ship_specs WHERE ship_name = ?", 
+                (ship.name,)
+            )
+            
+            for spec in specs_rows:
+                ship.set_capability(
+                    category=spec[0], 
+                    max_qty=spec[1], 
+                    max_size=spec[2]
+                )
+                
+            # 2. Charger le Loadout actuel (Composants équipés)
             sql = """
                 SELECT c.id, c.name, c.brand, c.type_name, c.category, c.size, c.grade, c.stats 
                 FROM components c
                 JOIN ship_loadout sl ON c.name = sl.component_name
                 WHERE sl.ship_name = ?
             """
-            rows = self.app.query(sql, (ship.name,))
+            comp_rows = self.app.query(sql, (ship.name,))
             
-            for row in rows:
-                # On adapte ici pour correspondre au nouveau __init__ de Component
+            for row in comp_rows:
                 comp = Component(
-                    name=row[1], 
-                    brand=row[2], 
-                    type_name=row[3], 
-                    category=row[4], # C'est l'argument qui manquait !
-                    size=row[5], 
-                    grade=row[6],
+                    name=row[1], brand=row[2], type_name=row[3], 
+                    category=row[4], size=row[5], grade=row[6],
                     stats=row[7] if len(row) > 7 else {}
                 )
-                ship.add_component(comp)
+                # On utilise append direct pour ne pas re-valider ce qui est déjà en DB
+                ship.components.append(comp)
                 
         return ship
-
+    
     def equip_component(self, ship_name: str, component_name: str) -> bool:
-        """Relie un composant à un vaisseau dans la base de données."""
+        """Tente d'équiper un composant en respectant les limites du châssis."""
         try:
-            # On pourrait vérifier ici la taille du composant vs la taille du ship
+            # 1. Charger le vaisseau complet (avec ses composants actuels et ses capacités)
+            ship = self.load_full_ship(ship_name)
+            if not ship:
+                raise Exception("Vaisseau introuvable.")
+
+            # 2. Charger les infos du composant qu'on veut ajouter
+            # On récupère les infos depuis la table components
+            comp_data = self.app.query("SELECT * FROM components WHERE name=?", (component_name.upper(),))
+            if not comp_data:
+                raise Exception("Composant introuvable dans le catalogue.")
+            
+            # Création de l'objet Component pour la validation
+            row = comp_data[0]
+            new_comp = Component(
+                name=row[1], brand=row[2], type_name=row[3], 
+                category=row[4], size=row[5], grade=row[6]
+            )
+
+            # 3. Validation via le modèle Ship
+            allowed, message = ship.can_add_component(new_comp)
+            
+            if not allowed:
+                if hasattr(self.app, "log"):
+                    self.app.log(f"EQUIP REJECTED: {message}", source="FLEET")
+                messagebox.showwarning("UNITOOL - Limitation", message)
+                return False
+
+            # 4. Si c'est valide, on enregistre en base de données
             sql = "INSERT OR REPLACE INTO ship_loadout (ship_name, component_name) VALUES (?, ?)"
-            self.app.commit(sql, (ship_name.upper(), component_name.upper()))
+            self.app.commit(sql, (ship.name, new_comp.name))
             
             if hasattr(self.app, "log"):
-                self.app.log(f"LOADOUT: {component_name} équipé sur {ship_name}", source="FLEET")
+                self.app.log(f"LOADOUT: {new_comp.name} équipé sur {ship.name}", source="FLEET")
             return True
+
         except Exception as e:
             if hasattr(self.app, "log"):
                 self.app.log(f"LOADOUT ERROR: {str(e)}", source="ERROR")
@@ -252,3 +289,20 @@ class ShipController:
             data.get('stats', '{}')
         )
         self.app.commit(sql, params)
+
+    def can_equip(self, ship_name, component):
+        """Vérifie si le vaisseau peut accepter ce composant."""
+        # 1. Vérifier la taille
+        # Si le ship a des slots S2 et que tu essaies un S3 -> Bloqué.
+        
+        # 2. Vérifier la quantité déjà équipée
+        current_loadout = self.load_full_ship(ship_name).components
+        count = sum(1 for c in current_loadout if c.category == component.category)
+        
+        # Exemple de limite fixe (en attendant d'avoir la table ship_slots)
+        limits = {"WEAPON": 4, "SHIELD_GEN": 2, "POWER_PLANT": 1}
+        
+        if count >= limits.get(component.category, 1):
+            return False, "Limite d'emplacements atteinte pour cette catégorie."
+        
+        return True, "OK"
