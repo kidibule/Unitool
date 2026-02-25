@@ -49,8 +49,8 @@ class ShipFrame(ctk.CTkFrame):
         self.tab_loadout = self.tabview.add("LOADOUT")
 
         self.setup_ships_tab()
-        self.setup_components_tab()
         self.setup_loadout_tab()
+        self.setup_components_tab()
 
     # --- ONGLET SHIPS ---
 
@@ -122,49 +122,59 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeButton(self.add_comp_frame, text="SAVE TO DATABASE", 
                     command=self.save_new_component).pack(pady=30, padx=15, fill="x")
+        
+        self.update_selectors()
 
         # Initialisation par défaut
         self.on_category_change("SYSTEMS")
         self.run_component_scan()
 
-    # --- ONGLET LOADOUT ---
+        # --- ONGLET LOADOUT ---
 
     def setup_loadout_tab(self):
         """Interface d'équipement dynamique."""
         self.lo_container = ctk.CTkFrame(self.tab_loadout, fg_color="transparent")
         self.lo_container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Panneau de contrôle (Gauche)
+        # --- PANNEAU DE CONTRÔLE (GAUCHE) ---
         ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_TERMINAL, width=300)
         ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
+        ctrl_panel.pack_propagate(False) # Garde la largeur fixe
 
         ctk.CTkLabel(ctrl_panel, text="LOADOUT CONTROL", font=("Orbitron", 12, "bold"), 
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=10)
+                    text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=10)
 
+        # 1. Sélecteur de vaisseau
         self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=[], command=self.refresh_loadout_view)
         self.lo_ship_selector.pack(pady=5, padx=10)
 
+        # 2. Filtre de catégorie
         self._create_form_label(ctrl_panel, "FILTER BY CAT")
         self.lo_filter_cat = DrakeComboBox(ctrl_panel, values=["ALL", "WEAPON", "SYSTEMS", "PROPULSION"],
-                                           command=self.filter_components_by_cat)
+                                        command=self.filter_components_by_cat)
         self.lo_filter_cat.pack(pady=5, padx=10)
         self.lo_filter_cat.set("ALL")
 
-        self._create_form_label(ctrl_panel, "SELECT COMPONENT")
-        self.lo_comp_selector = DrakeComboBox(ctrl_panel, values=[])
+        # 3. Sélecteur de composant (C'est lui qui manquait !)
+        self._create_form_label(ctrl_panel, "QUICK INSTALL")
+        self.lo_comp_selector = DrakeComboBox(ctrl_panel, values=[]) # Déclaré ICI
         self.lo_comp_selector.pack(pady=5, padx=10)
 
+        # 4. Boutons
         DrakeButton(ctrl_panel, text="INSTALL MODULE", command=self.action_equip).pack(pady=20, padx=10, fill="x")
-        
         DrakeButton(ctrl_panel, text="REFRESH LISTS", command=self.update_selectors).pack(pady=5, padx=10)
-        
-        DrakeButton(ctrl_panel, text="PURGE LOADOUT", command=self.action_clear_loadout,
-                    fg_color="#721c24", hover_color="#a71d2a").pack(pady=10, padx=10)
 
-        # Terminal de visualisation (Droite)
-        self.lo_terminal = DrakeTerminal(self.lo_container)
-        self.lo_terminal.pack(side="right", fill="both", expand=True)
-        
+        # --- PANNEAU DES SLOTS (DROITE) ---
+        self.lo_slots_frame = ctk.CTkScrollableFrame(
+            self.lo_container, 
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text="SHIP HARDPOINTS CONFIGURATION",
+            label_font=("Orbitron", 12),
+            label_text_color=DrakeConfig.ACCENT_PRIMARY
+        )
+        self.lo_slots_frame.pack(side="right", fill="both", expand=True)
+
+        # MAINTENANT on peut appeler update_selectors() car tous les widgets existent
         self.update_selectors()
 
     # --- LOGIQUE ET HELPER METHODS ---
@@ -231,28 +241,7 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_ship_selector.configure(values=ships)
         self.filter_components_by_cat(self.lo_filter_cat.get())
 
-    def refresh_loadout_view(self, ship_name):
-        """Affiche le statut détaillé des slots du vaisseau."""
-        self.lo_terminal.delete("0.0", "end")
-        ship = self.controller.ship.load_full_ship(ship_name)
-        if not ship: return
-
-        self.lo_terminal.insert("end", f" [ CONFIGURATION SYSTEM ] : {ship.name}\n", "ACCENT")
-        self.lo_terminal.insert("end", "="*60 + "\n\n")
-
-        current_loadout = {}
-        for c in ship.components:
-            current_loadout[c.category] = current_loadout.get(c.category, 0) + 1
-
-        for cat, specs in ship.capabilities.items():
-            used = current_loadout.get(cat, 0)
-            max_qty, max_size = specs['max_qty'], specs['max_size']
-            bar = "█" * used + "░" * (max_qty - used)
-            tag = "warning_label" if used >= max_qty else "ACCENT"
-            self.lo_terminal.insert("end", f"   {cat:<12} | {bar} | {used}/{max_qty} Slots (Max S{max_size})\n", tag)
-
     # --- ACTIONS ---
-
     def on_category_change(self, choice):
         new_values = self.mapping_types.get(choice, [])
         self.new_comp_type.configure(values=new_values)
@@ -386,3 +375,74 @@ class ShipFrame(ctk.CTkFrame):
         save_btn = DrakeButton(edit_win, text="APPLY ALL MODIFICATIONS", 
                                command=perform_full_update)
         save_btn.pack(pady=20, padx=40, fill="x")
+
+    def refresh_loadout_view(self, ship_name):
+        """Affiche les slots du vaisseau sous forme de cartes techniques."""
+        # 1. Nettoyage
+        for widget in self.lo_slots_frame.winfo_children():
+            widget.destroy()
+
+        # 2. Chargement des données
+        ship = self.controller.ship.load_full_ship(ship_name)
+        if not ship: return
+
+        # Filtrage par catégorie (si lo_filter_cat est sur "WEAPON" par ex)
+        filter_val = self.lo_filter_cat.get()
+
+        for cat, specs in ship.capabilities.items():
+            if filter_val != "ALL" and filter_val != cat:
+                continue
+
+            # Header de section (ex: --- WEAPONS ---)
+            section_label = ctk.CTkLabel(self.lo_slots_frame, text=f" {cat} SYSTEMS ", 
+                                         font=("Orbitron", 12, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY)
+            section_label.pack(fill="x", pady=(10, 5))
+
+            for i in range(specs['max_qty']):
+                # Création de la Carte de Slot
+                slot_card = ctk.CTkFrame(self.lo_slots_frame, fg_color="#121212", border_width=1, border_color="#222222")
+                slot_card.pack(fill="x", padx=10, pady=3)
+
+                # Icône et Nom du Slot
+                icon = "⚔" if cat == "WEAPON" else "🛡" if cat == "SYSTEMS" else "🚀"
+                ctk.CTkLabel(slot_card, text=f"{icon} SLOT {i+1:02d}", width=100,
+                             font=("Orbitron", 10), text_color="#666666").pack(side="left", padx=10)
+
+                # Récupération des données du slot via le contrôleur
+                available, current = self.controller.ship.get_slot_data(ship.name, cat, specs['max_size'], i)
+
+                # Menu déroulant de l'équipement
+                combo = DrakeComboBox(slot_card, values=["EMPTY"] + available, width=250)
+                combo.set(current)
+                combo.pack(side="right", padx=10, pady=5)
+
+                # Commande de montage automatique
+                combo.configure(command=lambda val, c=cat, idx=i: self.action_mount(c, idx, val))
+
+        # Update du status
+        if hasattr(self, 'status_label'):
+            self.status_label.configure(text=f"HULL: {ship_name}\nSTATUS: SCANNED\nSLOTS: OK")
+    def save_slot_config(self, ship_name, category, slot_index, combo_widget):
+        """Action du bouton SET : Enregistre la config via le contrôleur."""
+        selection = combo_widget.get()
+        if self.controller.ship.mount_component(ship_name, category, slot_index, selection):
+            if hasattr(self.controller.app, "log"):
+                self.controller.app.log(f"LOADOUT SYNC: {ship_name} -> {selection} (Slot {slot_index})")
+        else:
+            messagebox.showerror("DRAKE OS ERROR", "Failed to sync with ship database.")
+        
+    def get_compatible_components(self, category, max_size):
+        """Récupère les composants qui matchent la catégorie et la taille."""
+        # Attention à la casse : "PROPULSION" vs "Propulsion"
+        query = "SELECT name FROM components WHERE UPPER(category) = UPPER(?) AND size <= ?"
+        rows = self.db.query(query, (category, max_size))
+        return [r[0] for r in rows]
+    
+    def action_mount(self, category, slot_index, component_name):
+        ship_name = self.lo_ship_selector.get()
+        success = self.controller.ship.mount_component(ship_name, category, slot_index, component_name)
+        
+        if success:
+            self.status_label.configure(text=f"LOADOUT UPDATED\n{component_name}\nINSTALLED ON SLOT {slot_index+1}")
+        else:
+            messagebox.showerror("DRAKE ERROR", "Installation failed. Check component compatibility.")

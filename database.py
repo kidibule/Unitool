@@ -1,5 +1,7 @@
 import sqlite3
 import time
+import json
+from tkinter import messagebox
 
 
 class Database:
@@ -7,7 +9,13 @@ class Database:
         self.conn = sqlite3.connect(db_name)
         self.cursor = self.conn.cursor()
         self.setup()
-        self.seed_test_ships()  # Seed de vaisseaux pour tests et développement
+        self.seed_test_data()  # Appelle la méthode d'injection de données de test
+
+    def execute(self, query, params=()):
+        """Raccourci pour exécuter et commiter rapidement."""
+        result = self.cursor.execute(query, params)
+        self.conn.commit()
+        return result
 
     def setup(self):
         # --- TABLE TARGETS ---
@@ -179,16 +187,21 @@ class Database:
             FOREIGN KEY (ship_name) REFERENCES ships(name)
         )""")
 
-        # --- 4. TABLE LOADOUT (Liaison Vaisseau <-> Composants) ---
-        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_loadout (
+        # --- 4. TABLE LOADOUT (Version corrigée avec Slots) ---
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS ship_loadout (
             ship_name TEXT,
+            category TEXT,          -- La colonne manquante est ici
+            slot_number INTEGER,    -- Celle-ci aussi
             component_name TEXT,
             quantity INTEGER DEFAULT 1,
             FOREIGN KEY (ship_name) REFERENCES ships(name),
             FOREIGN KEY (component_name) REFERENCES components(name),
-            PRIMARY KEY (ship_name, component_name)
-        )""")
+            PRIMARY KEY (ship_name, category, slot_number)
+            )"""
+        )
 
+        self.conn.commit()
         # Table linking players to multiple ships (used by add_ship/get_ships)
         self.cursor.execute(
             """CREATE TABLE IF NOT EXISTS player_ships (
@@ -210,20 +223,6 @@ class Database:
         )""")
 
         self.conn.commit()
-        self._seed_default_locations()
-
-    def _seed_default_locations(self):
-        """Infection de points de base si vide."""
-        check = self.query("SELECT COUNT(*) FROM locations")
-        if check[0][0] == 0:
-            default_locs = [
-                ('ARC-L1', 150000.0, 25000.0, 0.0, 'STATION'),
-                ('CELLIN', 45000.0, 12000.0, 500.0, 'MOON'),
-                ('DAYMAR', 48000.0, -15000.0, -200.0, 'MOON'),
-                ('YELA', 52000.0, 5000.0, 1200.0, 'MOON')
-            ]
-            for loc in default_locs:
-                self.commit("INSERT INTO locations (name, x, y, z, type) VALUES (?, ?, ?, ?, ?)", loc)
 
     def query(self, sql, params=()):
         self.cursor.execute(sql, params)
@@ -310,50 +309,6 @@ class Database:
                  ON CONFLICT(name) DO UPDATE SET x=excluded.x, y=excluded.y, z=excluded.z, type=excluded.type"""
         self.commit(sql, (name.upper(), x, y, z, loc_type))
 
-    def seed_test_ships(self):
-        """Injecte des vaisseaux de test pour valider l'interface ShipFrame."""
-        ships = [
-            # (name, brand, role, career, size, crew, scm, boost_f, boost_b, nav, pitch, yaw, roll, b_pitch, b_yaw, b_roll, power, decoy, hp, cargo, dim, mass, hydro, qt, fee, claim, expedite)
-            (
-                "CUTLASS BLACK", "DRAKE INTERPLANETARY", "Medium Fighter / Freight", "Combat / Transport", 
-                "Medium", 3, "165", "450", "300", "1115", "35", "35", "115", "45", "45", "150", 
-                "Standard", "48", 32000, "46", "29x26x10m", "226k kg", "550000", "2500", "2500", "12", "4"
-            ),
-            (
-                "GLADIUS", "AEGIS DYNAMICS", "Light Fighter", "Combat", 
-                "Small", 1, "210", "580", "400", "1230", "65", "65", "210", "85", "85", "280", 
-                "High", "32", 12000, "0", "15x17x5m", "48k kg", "120000", "580", "1200", "5", "1"
-            ),
-            (
-                "CARRACK", "ANVIL AEROSPACE", "Expedition", "Exploration", 
-                "Large", 6, "115", "250", "150", "950", "15", "15", "45", "20", "20", "55", 
-                "Extreme", "96", 185000, "456", "126x76x30m", "4M kg", "18M", "44000", "15000", "45", "15"
-            ),
-            (
-                "MERCURY STAR RUNNER", "CRUSADER INDUSTRIES", "Data Runner / Transport", "Transport", 
-                "Medium", 3, "215", "520", "380", "1285", "38", "38", "125", "48", "48", "160", 
-                "Standard", "64", 45000, "114", "40x38x11m", "250k kg", "850000", "3200", "4500", "15", "5"
-            ),
-            (
-                "F7C-M SUPER HORNET", "ANVIL AEROSPACE", "Medium Fighter", "Combat", 
-                "Small", 2, "175", "480", "350", "1215", "45", "45", "135", "55", "55", "180", 
-                "High", "48", 24000, "0", "22x21x6m", "78k kg", "180000", "750", "1800", "8", "2"
-            )
-        ]
-
-        sql = """INSERT OR REPLACE INTO ships (
-            name, brand, role, career, size, crew_size, scm_speed, scm_boost_forward, 
-            scm_boost_backward, nav_max_speed, pitch, yaw, roll, boosted_pitch, 
-            boosted_yaw, boosted_roll, power_consumption, cm_decoy_noise, hp, cargo, 
-            dimensions, mass, hydrogen_capacity, qt_fuel_capacity, expedition_fee, 
-            claim_time, expedite_time
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-
-        for ship in ships:
-            self.commit(sql, ship)
-        
-        print(f"DEBUG: {len(ships)} vaisseaux de test injectés.")
-
     # --- GESTION DES COMPOSANTS ---
 
     def add_component_type(self, name, category):
@@ -381,3 +336,67 @@ class Database:
             WHERE sl.ship_name = ?
         """
         return self.query(sql, (ship_name.upper(),))
+    
+    def seed_test_data(self):
+        """Réinitialise et injecte les configurations de slots."""
+        print("[DATABASE] CLEANING AND INJECTING HARDPOINTS...")
+
+        # Données des Vaisseaux (simplifié pour le test)
+        test_ships = [
+            ("AVENGER TITAN", "AEGIS", "S2", "LIGHT FREIGHTER"),
+            ("CUTLASS BLACK", "DRAKE", "S3", "MEDIUM FREIGHTER"),
+            ("ARROW", "ANVIL", "S1", "LIGHT FIGHTER")
+        ]
+
+        # Données des Slots (ship_name, category, max_qty, max_size)
+        # C'est ICI que l'interface décide de ce qu'elle affiche
+        test_specs = [
+            # AVENGER TITAN
+            ("AVENGER TITAN", "WEAPON", 3, 3),
+            ("AVENGER TITAN", "SYSTEMS", 4, 1), # 2 Shield + 2 Cooler = 4
+            ("AVENGER TITAN", "PROPULSION", 1, 1),
+
+            # CUTLASS BLACK
+            ("CUTLASS BLACK", "WEAPON", 6, 3),
+            ("CUTLASS BLACK", "SYSTEMS", 6, 2),
+            ("CUTLASS BLACK", "PROPULSION", 1, 2),
+
+            # ARROW
+            ("ARROW", "WEAPON", 4, 3),
+            ("ARROW", "SYSTEMS", 3, 1),
+            ("ARROW", "PROPULSION", 1, 1)
+        ]
+
+        try:
+            # 1. Insertion vaisseaux
+            for ship in test_ships:
+                self.cursor.execute("INSERT OR REPLACE INTO ships (name, brand, size, role) VALUES (?, ?, ?, ?)", ship)
+
+            # 2. Vider les anciennes specs pour éviter les résidus qui bloquent l'affichage
+            self.cursor.execute("DELETE FROM ship_specs")
+
+            # 3. Insertion des nouvelles specs
+            for spec in test_specs:
+                self.cursor.execute("""
+                    INSERT INTO ship_specs (ship_name, category, max_qty, max_size) 
+                    VALUES (?, ?, ?, ?)
+                """, spec)
+
+            # 4. Injecter quelques composants pour tester les menus déroulants
+            test_components = [
+                ("FR-66", "SHIBIN", "SHIELD", "SYSTEMS", 1, "A"),
+                ("BULDOG", "KRIG", "REPEATER", "WEAPON", 1, "C"),
+                ("CF-337 PANTHER", "KLAUS", "REPEATER", "WEAPON", 3, "A"),
+                ("ATLAS", "UNKNOWN", "QUANTUM", "PROPULSION", 1, "A")
+            ]
+            for comp in test_components:
+                self.cursor.execute("""
+                    INSERT OR REPLACE INTO components (name, brand, type_name, category, size, grade) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, comp)
+
+            self.conn.commit()
+            print("[DATABASE] SUCCESS: Ship specs fully reloaded.")
+            
+        except Exception as e:
+            print(f"[ERROR] Seeding failed: {e}")
