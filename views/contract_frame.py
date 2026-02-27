@@ -23,6 +23,11 @@ class ContractFrame(ctk.CTkFrame):
                              border_width=1, border_color=DrakeConfig.BORDER_COLOR)
         f_add.pack(pady=5, padx=20, fill="x")
 
+        # Configuration des colonnes pour qu'elles se partagent l'espace
+        # Les colonnes 0, 1 et 2 prendront plus de place si besoin (weight=1)
+        f_add.grid_columnconfigure((0, 1, 2), weight=1) 
+        f_add.grid_columnconfigure((3, 4, 5), weight=0) # Les menus et bouton gardent leur taille
+
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
@@ -32,28 +37,29 @@ class ContractFrame(ctk.CTkFrame):
             "border_width": 1
         }   
         
-        self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", width=150, **entry_kwargs)
-        self.target_in.pack(side="left", padx=10, pady=15)
+        # On utilise .grid() au lieu de .pack()
+        self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", **entry_kwargs)
+        self.target_in.grid(row=0, column=0, padx=5, pady=15, sticky="ew")
         self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
         self.target_in.bind("<FocusOut>", self._on_focus_out)
 
-        self.client_in = ctk.CTkEntry(f_add, placeholder_text="CLIENT ID", width=150, **entry_kwargs)
-        self.client_in.pack(side="left", padx=10, pady=15)
+        self.client_in = ctk.CTkEntry(f_add, placeholder_text="CLIENT ID", **entry_kwargs)
+        self.client_in.grid(row=0, column=1, padx=5, pady=15, sticky="ew")
         self.client_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.client_in))
         self.client_in.bind("<FocusOut>", self._on_focus_out)
         
-        self.reward_in = ctk.CTkEntry(f_add, placeholder_text="REWARD", width=120, **entry_kwargs)
-        self.reward_in.pack(side="left", padx=10, pady=15)
+        self.reward_in = ctk.CTkEntry(f_add, placeholder_text="REWARD", **entry_kwargs)
+        self.reward_in.grid(row=0, column=2, padx=5, pady=15, sticky="ew")
 
         self.type_var = ctk.StringVar(value="TYPE")
         self.type_menu = DrakeComboBox(
             f_add, 
             variable=self.type_var, 
-            width=100,
-            values=[],  # Liste vide initialement
+            width=110,
+            values=[],
             command=self.apply_type,
         )
-        self.type_menu.pack(side="left", padx=5)
+        self.type_menu.grid(row=0, column=3, padx=5, pady=15)
 
         self.prio_var = ctk.StringVar(value="PRORITY")
         self.prio_menu = DrakeComboBox(
@@ -62,9 +68,10 @@ class ContractFrame(ctk.CTkFrame):
             width=100,
             values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
         )
-        self.prio_menu.pack(side="left", padx=5)
+        self.prio_menu.grid(row=0, column=4, padx=5, pady=15)
 
-        DrakeButton(f_add, text="ACCEPT CONTRACT", width=150, command=self.add_contract).pack(side="left", padx=15)
+        # Le bouton "ACCEPT" est maintenant bien ancré à droite
+        DrakeButton(f_add, text="ACCEPT", width=140, command=self.add_contract).grid(row=0, column=5, padx=10, pady=15)
         
           # Gestion des Types (Petit bouton discret)
         ctk.CTkButton(
