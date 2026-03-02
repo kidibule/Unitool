@@ -85,24 +85,24 @@ class ShipFrame(ctk.CTkFrame):
 
         # Terminal de visualisation (Gauche)
         self.comp_list_terminal = DrakeTerminal(self.comp_container)
-        self.comp_list_terminal.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self.comp_list_terminal.pack(side="right", fill="both", expand=True, padx=(0, 10))
         
         # Formulaire d'ajout (Droite)
-        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=280, fg_color=DrakeConfig.BG_TERMINAL)
-        self.add_comp_frame.pack(side="right", fill="y")
+        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=280, fg_color=DrakeConfig.BG_MAIN)
+        self.add_comp_frame.pack(side="left", fill="y")
         
         ctk.CTkLabel(self.add_comp_frame, text="ADD COMPONENT", font=("Orbitron", 14, "bold"), 
                      text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=15)
 
         # Champs du formulaire
         self._create_form_label(self.add_comp_frame, "SLOT CATEGORY")
-        self.new_comp_category = ctk.CTkComboBox(self.add_comp_frame, 
+        self.new_comp_category = DrakeComboBox(self.add_comp_frame, 
                                                 values=list(self.mapping_types.keys()), 
                                                 command=self.on_category_change)
         self.new_comp_category.pack(pady=5, padx=15, fill="x")
 
         self._create_form_label(self.add_comp_frame, "MODULE TYPE")
-        self.new_comp_type = ctk.CTkComboBox(self.add_comp_frame, values=[])
+        self.new_comp_type = DrakeComboBox(self.add_comp_frame, values=[])
         self.new_comp_type.pack(pady=5, padx=15, fill="x")
 
         self.new_comp_name = ctk.CTkEntry(self.add_comp_frame, placeholder_text="MODEL NAME (ex: FR-66)")
@@ -112,11 +112,11 @@ class ShipFrame(ctk.CTkFrame):
         self.new_comp_brand.pack(pady=5, padx=15, fill="x")
 
         self._create_form_label(self.add_comp_frame, "SIZE")
-        self.new_comp_size = ctk.CTkComboBox(self.add_comp_frame, values=["0", "1", "2", "3", "4", "5"])
+        self.new_comp_size = DrakeComboBox(self.add_comp_frame, values=["0", "1", "2", "3", "4", "5"])
         self.new_comp_size.pack(pady=5, padx=15, fill="x")
 
         self._create_form_label(self.add_comp_frame, "GRADE")
-        self.new_comp_grade = ctk.CTkComboBox(self.add_comp_frame, values=["A", "B", "C", "D"])
+        self.new_comp_grade = DrakeComboBox(self.add_comp_frame, values=["A", "B", "C", "D"])
         self.new_comp_grade.set("C")
         self.new_comp_grade.pack(pady=5, padx=15, fill="x")
 
@@ -137,7 +137,7 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # --- PANNEAU DE CONTRÔLE (GAUCHE) ---
-        ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_TERMINAL, width=300)
+        ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_MAIN, width=200)
         ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
         ctrl_panel.pack_propagate(False) # Garde la largeur fixe
 
