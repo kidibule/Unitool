@@ -333,6 +333,10 @@ class LoggerFrame(ctk.CTkFrame):
                 (str(row[12]) == str(losses_val))
             )
             if same:
+                try:
+                    self.controller.logger.sync_ship_to_catalog(ship_val)
+                except Exception:
+                    pass
                 DrakePopup.info("SYSTEMS", f"Aucune modification trouvée pour {h}. Aucune sauvegarde effectuée.", parent=self)
                 try:
                     if hasattr(self.controller, "log"):

@@ -21,8 +21,6 @@ class Component(BaseModel):
         """
         if not row: return None
         
-        # Vérifie bien l'ordre des colonnes dans ta table 'components' !
-        # Si tu as ajouté 'category', l'ordre est probablement celui-ci :
         return cls(
             name=row[1], 
             brand=row[2], 

@@ -22,6 +22,24 @@ class LoggerController:
         """
         self.app = app_controller
 
+    def _sync_ship_to_catalog(self, ship_name: str) -> None:
+        """Ajoute le vaisseau au catalogue principal s'il n'existe pas."""
+        ship = (ship_name or "").strip().upper()
+        if not ship:
+            return
+
+        self.app.commit(
+            """
+            INSERT OR IGNORE INTO ships (name, brand, role, size)
+            VALUES (?, 'UNKNOWN', 'UNKNOWN', 'S?')
+            """,
+            (ship,),
+        )
+
+    def sync_ship_to_catalog(self, ship_name: str) -> None:
+        """API publique pour forcer la synchro d'un ship dans le catalogue."""
+        self._sync_ship_to_catalog(ship_name)
+
     def save_target(
         self,
         pseudo: str,
@@ -78,6 +96,12 @@ class LoggerController:
             losses,
         )
         self.app.commit(sql, params)
+        self._sync_ship_to_catalog(ship)
+        if pseudo and ship:
+            try:
+                self.app.db.add_ship(pseudo.upper(), ship.upper())
+            except Exception:
+                pass
         try:
             if hasattr(self.app, "log"):
                 self.app.log(f"Saved dossier: {pseudo}", source="LOGGER")
@@ -133,6 +157,12 @@ class LoggerController:
                 row.get("alignment", "NEUTRE"),
             )
             self.app.commit(sql, params)
+            self._sync_ship_to_catalog(row.get("ship", ""))
+            if row.get("pseudo") and row.get("ship"):
+                try:
+                    self.app.db.add_ship((row.get("pseudo") or "").upper(), (row.get("ship") or "").upper())
+                except Exception:
+                    pass
             count += 1
         try:
             if hasattr(self.app, "log"):

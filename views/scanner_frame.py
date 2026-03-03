@@ -10,7 +10,21 @@ import csv
 import json
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox
-from utils import format_int_with_dots
+
+
+def format_int_with_dots(value) -> str:
+    """Format integer-like value with '.' thousands separator."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s in ("", "None"):
+        return ""
+    cleaned = s.replace(" ", "").replace(".", "").replace(",", "")
+    try:
+        n = int(cleaned)
+    except Exception:
+        return s
+    return f"{n:,}".replace(",", ".")
 
 
 # Paramètres d'entrée réutilisables pour les widgets

@@ -3,7 +3,21 @@
 import customtkinter as ctk
 import tkinter as tk
 from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton
-from utils import format_int_with_dots
+
+
+def format_int_with_dots(value) -> str:
+    """Format integer-like value with '.' thousands separator."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s in ("", "None"):
+        return ""
+    cleaned = s.replace(" ", "").replace(".", "").replace(",", "")
+    try:
+        n = int(cleaned)
+    except Exception:
+        return s
+    return f"{n:,}".replace(",", ".")
 
 class ContractFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):

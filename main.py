@@ -10,7 +10,7 @@ class App(ctk.CTk):
         self.geometry("1400x800")
 
         # Instancie le contrôleur applicatif (gestion DB + sub-controllers)
-        self.controller = AppController()
+        self.controller = AppController(reset_db_on_start=False)
 
         # Configuration de la fenêtre principale
         self.grid_columnconfigure(0, weight=1)

@@ -25,13 +25,13 @@ class AppController:
     - Communication entre vues et données
     """
 
-    def __init__(self, db_name: str = "unitool_data.db") -> None:
+    def __init__(self, db_name: str = "unitool_data.db", reset_db_on_start: bool = False) -> None:
         """Initialise le contrôleur avec une instance de base de données.
 
         Args:
             db_name: Nom/chemin du fichier de base de données SQLite
         """
-        self.db = Database(db_name)
+        self.db = Database(db_name, reset_on_start=reset_db_on_start)
 
         # Instanciation des sub-controllers
         self.scanner = ScannerController(self)

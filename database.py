@@ -1,15 +1,17 @@
 import sqlite3
 import time
 import json
+import os
 from tkinter import messagebox
 
 
 class Database:
-    def __init__(self, db_name="unitool_data.db"):
+    def __init__(self, db_name="unitool_data.db", reset_on_start: bool = False):
+        if reset_on_start and os.path.exists(db_name):
+            os.remove(db_name)
         self.conn = sqlite3.connect(db_name)
         self.cursor = self.conn.cursor()
         self.setup()
-        self.seed_test_data()  # Appelle la méthode d'injection de données de test
 
     def execute(self, query, params=()):
         """Raccourci pour exécuter et commiter rapidement."""
@@ -150,6 +152,10 @@ class Database:
                 pass
 
                 # --- 2. TABLE DES TYPES (Pour le filtrage) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS component_categories (
+            name TEXT PRIMARY KEY
+        )""")
+
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS component_types (
             name TEXT PRIMARY KEY,  -- ex: LASER_REPEATER, SHIELD_GEN
             category TEXT           -- ex: WEAPON, SYSTEMS, PROPULSION
@@ -178,6 +184,17 @@ class Database:
             PRIMARY KEY (ship_name, category)
         )""")
 
+        # --- TABLE DES SOUS-TYPES (Limites fines par type de composant) ---
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_subtype_specs (
+            ship_name TEXT,
+            category TEXT,       -- WEAPON, SYSTEMS, PROPULSION
+            subtype_name TEXT,   -- ex: SHIELD GENERATOR, QUANTUM DRIVE
+            max_qty INTEGER,
+            max_size INTEGER,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            PRIMARY KEY (ship_name, category, subtype_name)
+        )""")
+
         # --- 4. TABLE DES SLOTS (Limites d'équipement par vaisseau) ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS ship_slots (
             ship_name TEXT,
@@ -191,14 +208,105 @@ class Database:
         self.cursor.execute(
             """CREATE TABLE IF NOT EXISTS ship_loadout (
             ship_name TEXT,
+            profile_name TEXT NOT NULL DEFAULT 'DEFAULT',
             category TEXT,          -- La colonne manquante est ici
+            subtype_name TEXT NOT NULL DEFAULT 'GENERIC',
             slot_number INTEGER,    -- Celle-ci aussi
             component_name TEXT,
             quantity INTEGER DEFAULT 1,
             FOREIGN KEY (ship_name) REFERENCES ships(name),
             FOREIGN KEY (component_name) REFERENCES components(name),
-            PRIMARY KEY (ship_name, category, slot_number)
+            PRIMARY KEY (ship_name, profile_name, category, subtype_name, slot_number)
             )"""
+        )
+
+        # Migration: garantir profile_name + subtype_name dans la clé primaire (legacy DB compat)
+        loadout_cols = [row[1] for row in self.cursor.execute("PRAGMA table_info(ship_loadout)").fetchall()]
+        loadout_pk_cols = [row[1] for row in self.cursor.execute("PRAGMA table_info(ship_loadout)").fetchall() if row[5] > 0]
+        expected_pk = ["ship_name", "profile_name", "category", "subtype_name", "slot_number"]
+
+        if ("profile_name" not in loadout_cols) or ("subtype_name" not in loadout_cols) or (loadout_pk_cols != expected_pk):
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS ship_loadout_new (
+                ship_name TEXT,
+                profile_name TEXT NOT NULL DEFAULT 'DEFAULT',
+                category TEXT,
+                subtype_name TEXT NOT NULL DEFAULT 'GENERIC',
+                slot_number INTEGER,
+                component_name TEXT,
+                quantity INTEGER DEFAULT 1,
+                FOREIGN KEY (ship_name) REFERENCES ships(name),
+                FOREIGN KEY (component_name) REFERENCES components(name),
+                PRIMARY KEY (ship_name, profile_name, category, subtype_name, slot_number)
+                )"""
+            )
+
+            if "profile_name" in loadout_cols and "subtype_name" in loadout_cols:
+                self.cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO ship_loadout_new
+                    (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity)
+                    SELECT ship_name,
+                           COALESCE(NULLIF(profile_name, ''), 'DEFAULT'),
+                           category,
+                           COALESCE(NULLIF(subtype_name, ''), 'GENERIC'),
+                           slot_number,
+                           component_name,
+                           COALESCE(quantity, 1)
+                    FROM ship_loadout
+                    """
+                )
+            elif "profile_name" in loadout_cols:
+                self.cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO ship_loadout_new
+                    (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity)
+                    SELECT sl.ship_name,
+                           COALESCE(NULLIF(sl.profile_name, ''), 'DEFAULT'),
+                           sl.category,
+                           COALESCE(NULLIF(c.type_name, ''), 'GENERIC'),
+                           sl.slot_number,
+                           sl.component_name,
+                           COALESCE(sl.quantity, 1)
+                    FROM ship_loadout sl
+                    LEFT JOIN components c ON c.name = sl.component_name
+                    """
+                )
+            else:
+                self.cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO ship_loadout_new
+                    (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity)
+                    SELECT sl.ship_name,
+                           'DEFAULT',
+                           sl.category,
+                           COALESCE(NULLIF(c.type_name, ''), 'GENERIC'),
+                           sl.slot_number,
+                           sl.component_name,
+                           COALESCE(sl.quantity, 1)
+                    FROM ship_loadout sl
+                    LEFT JOIN components c ON c.name = sl.component_name
+                    """
+                )
+
+            self.cursor.execute("DROP TABLE ship_loadout")
+            self.cursor.execute("ALTER TABLE ship_loadout_new RENAME TO ship_loadout")
+
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS ship_loadout_profiles (
+                ship_name TEXT,
+                profile_name TEXT,
+                PRIMARY KEY (ship_name, profile_name),
+                FOREIGN KEY (ship_name) REFERENCES ships(name)
+            )"""
+        )
+
+        self.cursor.execute(
+            """
+            INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name)
+            SELECT DISTINCT ship_name, COALESCE(NULLIF(profile_name, ''), 'DEFAULT')
+            FROM ship_loadout
+            """
         )
 
         self.conn.commit()
@@ -323,7 +431,11 @@ class Database:
 
     def equip_component_to_ship(self, ship_name, component_name, qty=1):
         """Lien MVC : Le contrôleur appellera cette méthode pour modifier le loadout"""
-        sql = "INSERT OR REPLACE INTO ship_loadout (ship_name, component_name, quantity) VALUES (?, ?, ?)"
+        sql = """
+            INSERT OR REPLACE INTO ship_loadout
+            (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity)
+            VALUES (?, 'DEFAULT', 'LEGACY', 'GENERIC', 0, ?, ?)
+        """
         self.commit(sql, (ship_name.upper(), component_name.upper(), qty))
 
     def get_ship_components(self, ship_name):
@@ -367,6 +479,52 @@ class Database:
             ("ARROW", "PROPULSION", 1, 1)
         ]
 
+        # Limites fines par sous-type
+        test_subtype_specs = [
+            # AVENGER TITAN
+            ("AVENGER TITAN", "SYSTEMS", "SHIELD GENERATOR", 2, 1),
+            ("AVENGER TITAN", "SYSTEMS", "POWER PLANT", 1, 1),
+            ("AVENGER TITAN", "SYSTEMS", "COOLER", 1, 1),
+            ("AVENGER TITAN", "PROPULSION", "QUANTUM DRIVE", 1, 1),
+            ("AVENGER TITAN", "PROPULSION", "HYDROGEN THRUSTER", 1, 1),
+
+            # CUTLASS BLACK
+            ("CUTLASS BLACK", "SYSTEMS", "SHIELD GENERATOR", 2, 2),
+            ("CUTLASS BLACK", "SYSTEMS", "POWER PLANT", 2, 2),
+            ("CUTLASS BLACK", "SYSTEMS", "COOLER", 2, 2),
+            ("CUTLASS BLACK", "PROPULSION", "QUANTUM DRIVE", 1, 2),
+            ("CUTLASS BLACK", "PROPULSION", "HYDROGEN THRUSTER", 1, 2),
+
+            # ARROW
+            ("ARROW", "SYSTEMS", "SHIELD GENERATOR", 1, 1),
+            ("ARROW", "SYSTEMS", "POWER PLANT", 1, 1),
+            ("ARROW", "SYSTEMS", "COOLER", 1, 1),
+            ("ARROW", "PROPULSION", "QUANTUM DRIVE", 1, 1),
+        ]
+
+        test_component_types = [
+            ("SHIELD GENERATOR", "SYSTEMS"),
+            ("POWER PLANT", "SYSTEMS"),
+            ("COOLER", "SYSTEMS"),
+            ("LASER REPEATER", "WEAPON"),
+            ("LASER CANNON", "WEAPON"),
+            ("BALLISTIC REPEATER", "WEAPON"),
+            ("BALLISTIC CANNON", "WEAPON"),
+            ("DISTORTION REPEATER", "WEAPON"),
+            ("QUANTUM DRIVE", "PROPULSION"),
+            ("HYDROGEN THRUSTER", "PROPULSION"),
+            ("MINING LASER", "MODULE"),
+            ("SALVAGE BEAM", "MODULE"),
+            ("TRACTOR BEAM", "MODULE"),
+        ]
+
+        test_component_categories = [
+            ("SYSTEMS",),
+            ("WEAPON",),
+            ("PROPULSION",),
+            ("MODULE",),
+        ]
+
         try:
             # 1. Insertion vaisseaux
             for ship in test_ships:
@@ -374,6 +532,7 @@ class Database:
 
             # 2. Vider les anciennes specs pour éviter les résidus qui bloquent l'affichage
             self.cursor.execute("DELETE FROM ship_specs")
+            self.cursor.execute("DELETE FROM ship_subtype_specs")
 
             # 3. Insertion des nouvelles specs
             for spec in test_specs:
@@ -381,6 +540,33 @@ class Database:
                     INSERT INTO ship_specs (ship_name, category, max_qty, max_size) 
                     VALUES (?, ?, ?, ?)
                 """, spec)
+
+            for subtype_spec in test_subtype_specs:
+                self.cursor.execute(
+                    """
+                    INSERT INTO ship_subtype_specs (ship_name, category, subtype_name, max_qty, max_size)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    subtype_spec,
+                )
+
+            for component_type in test_component_types:
+                self.cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO component_types (name, category)
+                    VALUES (?, ?)
+                    """,
+                    component_type,
+                )
+
+            for component_category in test_component_categories:
+                self.cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO component_categories (name)
+                    VALUES (?)
+                    """,
+                    component_category,
+                )
 
             # 4. Injecter quelques composants pour tester les menus déroulants
             test_components = [

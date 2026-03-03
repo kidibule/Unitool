@@ -12,6 +12,32 @@ class ShipController:
     def __init__(self, app_controller):
         self.app = app_controller
 
+    def _normalize_profile(self, profile_name: str | None) -> str:
+        profile = (profile_name or "DEFAULT").strip().upper()
+        return profile or "DEFAULT"
+
+    def _sync_ship_specs_from_subtypes(self, ship_name: str) -> None:
+        ship = ship_name.upper()
+        rows = self.app.query(
+            """
+            SELECT category, SUM(max_qty), MAX(max_size)
+            FROM ship_subtype_specs
+            WHERE ship_name = ?
+            GROUP BY category
+            """,
+            (ship,),
+        )
+
+        self.app.commit("DELETE FROM ship_specs WHERE ship_name = ?", (ship,))
+        for category, total_qty, max_size in rows:
+            self.app.commit(
+                """
+                INSERT OR REPLACE INTO ship_specs (ship_name, category, max_qty, max_size)
+                VALUES (?, ?, ?, ?)
+                """,
+                (ship, category, int(total_qty or 0), int(max_size or 0)),
+            )
+
     def _safe_int(self, value, default=0):
         try:
             return int(float(value)) if value not in (None, "") else default
@@ -200,35 +226,256 @@ class ShipController:
         sql = "SELECT name, brand, type_name, category, size, grade FROM components ORDER BY category, name"
         return self.app.query(sql)
 
+    def list_component_categories(self) -> list[str]:
+        rows = self.app.query(
+            """
+            SELECT name AS category FROM component_categories
+            UNION
+            SELECT DISTINCT category FROM component_types
+            UNION
+            SELECT DISTINCT category FROM components
+            ORDER BY category
+            """
+        )
+        return [r[0] for r in rows if r and r[0]]
+
+    def create_component_category(self, category_name: str) -> None:
+        category = (category_name or "").strip().upper()
+        if not category:
+            raise ValueError("TYPE requis.")
+        self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", (category,))
+
+    def delete_component_category(self, category_name: str) -> None:
+        category = (category_name or "").strip().upper()
+        if not category:
+            return
+        self.app.commit("DELETE FROM component_categories WHERE name = ?", (category,))
+
+    def list_component_subtypes(self, category: str) -> list[str]:
+        rows = self.app.query(
+            """
+            SELECT name
+            FROM component_types
+            WHERE UPPER(category) = UPPER(?)
+            ORDER BY name
+            """,
+            (category,),
+        )
+        return [r[0] for r in rows if r and r[0]]
+
+    def create_component_subtype(self, category: str, subtype_name: str) -> None:
+        cat = (category or "").strip().upper()
+        subtype = (subtype_name or "").strip().upper()
+        if not cat or not subtype:
+            raise ValueError("CATEGORY et SUBTYPE requis.")
+
+        self.app.commit(
+            "INSERT OR IGNORE INTO component_categories (name) VALUES (?)",
+            (cat,),
+        )
+
+        self.app.commit(
+            "INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)",
+            (subtype, cat),
+        )
+
+    def delete_component_subtype(self, category: str, subtype_name: str) -> None:
+        cat = (category or "").strip().upper()
+        subtype = (subtype_name or "").strip().upper()
+        if not cat or not subtype:
+            return
+
+        self.app.commit(
+            "DELETE FROM component_types WHERE name = ? AND category = ?",
+            (subtype, cat),
+        )
+
+    def list_subtype_specs(self, ship_name: str) -> list[tuple]:
+        return self.app.query(
+            """
+            SELECT category, subtype_name, max_qty, max_size
+            FROM ship_subtype_specs
+            WHERE ship_name = ?
+            ORDER BY category, subtype_name
+            """,
+            (ship_name.upper(),),
+        )
+
+    def upsert_subtype_spec(
+        self,
+        ship_name: str,
+        category: str,
+        subtype_name: str,
+        max_qty: int,
+        max_size: int,
+    ) -> None:
+        ship = ship_name.upper()
+        cat = (category or "").strip().upper()
+        subtype = (subtype_name or "").strip().upper()
+        qty = self._safe_int(max_qty, 0)
+        size = self._safe_int(max_size, 0)
+
+        if not ship or not cat or not subtype:
+            raise ValueError("Paramètres invalides pour le slot de sous-type.")
+        if qty <= 0 or size <= 0:
+            raise ValueError("max_qty et max_size doivent être > 0.")
+
+        self.app.commit(
+            """
+            INSERT OR REPLACE INTO ship_subtype_specs (ship_name, category, subtype_name, max_qty, max_size)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (ship, cat, subtype, qty, size),
+        )
+        self._sync_ship_specs_from_subtypes(ship)
+
+    def delete_subtype_spec(self, ship_name: str, category: str, subtype_name: str) -> None:
+        ship = ship_name.upper()
+        cat = (category or "").strip().upper()
+        subtype = (subtype_name or "").strip().upper()
+
+        self.app.commit(
+            "DELETE FROM ship_subtype_specs WHERE ship_name = ? AND category = ? AND subtype_name = ?",
+            (ship, cat, subtype),
+        )
+        self._sync_ship_specs_from_subtypes(ship)
+
     def get_compatible_components(self, category, max_size):
         query = "SELECT name FROM components WHERE UPPER(category) = UPPER(?) AND size <= ? ORDER BY name"
         rows = self.app.query(query, (category, max_size))
         return [r[0] for r in rows]
 
-    def get_slot_data(self, ship_name, category, max_size, slot_index):
-        available = self.get_compatible_components(category, max_size)
+    def get_compatible_components_by_subtype(self, category, subtype_name, max_size):
+        query = """
+            SELECT name
+            FROM components
+            WHERE UPPER(category) = UPPER(?)
+              AND UPPER(type_name) = UPPER(?)
+              AND size <= ?
+            ORDER BY name
+        """
+        rows = self.app.query(query, (category, subtype_name, max_size))
+        return [r[0] for r in rows]
+
+    def get_ship_slot_specs(self, ship_name: str) -> list[dict]:
+        ship = ship_name.upper()
+
+        subtype_rows = self.app.query(
+            """
+            SELECT category, subtype_name, max_qty, max_size
+            FROM ship_subtype_specs
+            WHERE ship_name = ?
+            ORDER BY category, subtype_name
+            """,
+            (ship,),
+        )
+        if subtype_rows:
+            return [
+                {
+                    "category": row[0],
+                    "subtype_name": row[1],
+                    "max_qty": int(row[2] or 0),
+                    "max_size": int(row[3] or 0),
+                }
+                for row in subtype_rows
+            ]
+
+        # Fallback legacy: une ligne générique par catégorie
+        rows = self.app.query(
+            """
+            SELECT category, max_qty, max_size
+            FROM ship_specs
+            WHERE ship_name = ?
+            ORDER BY category
+            """,
+            (ship,),
+        )
+        legacy_specs = [
+            {
+                "category": row[0],
+                "subtype_name": "GENERIC",
+                "max_qty": int(row[1] or 0),
+                "max_size": int(row[2] or 0),
+            }
+            for row in rows
+        ]
+
+        if legacy_specs:
+            return legacy_specs
+
+        # Fallback dev-friendly: permettre la création de loadout même sans specs.
+        return [
+            {
+                "category": "WEAPON",
+                "subtype_name": "GENERIC",
+                "max_qty": 1,
+                "max_size": 1,
+            }
+        ]
+
+    def get_slot_data(self, ship_name, profile_name, category, subtype_name, max_size, slot_index):
+        profile = self._normalize_profile(profile_name)
+        subtype = (subtype_name or "GENERIC").strip().upper()
+        if subtype == "GENERIC":
+            available = self.get_compatible_components(category, max_size)
+        else:
+            available = self.get_compatible_components_by_subtype(category, subtype, max_size)
         sql = """
             SELECT component_name FROM ship_loadout
-            WHERE ship_name = ? AND category = ? AND slot_number = ?
+            WHERE ship_name = ? AND profile_name = ? AND category = ? AND subtype_name = ? AND slot_number = ?
         """
-        result = self.app.query(sql, (ship_name.upper(), category.upper(), slot_index))
+        result = self.app.query(sql, (ship_name.upper(), profile, category.upper(), subtype, slot_index))
         current = result[0][0] if result else "EMPTY"
         return available, current
 
-    def mount_component(self, ship_name, category, slot_index, component_name):
+    def mount_component(self, ship_name, category, subtype_name, slot_index, component_name, profile_name="DEFAULT"):
+        profile = self._normalize_profile(profile_name)
+        subtype = (subtype_name or "GENERIC").strip().upper()
+        ship = ship_name.upper()
+        category_up = category.upper()
         try:
+            self.app.commit(
+                "INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name) VALUES (?, ?)",
+                (ship, profile),
+            )
+
             if component_name == "EMPTY":
                 self.app.commit(
-                    "DELETE FROM ship_loadout WHERE ship_name = ? AND category = ? AND slot_number = ?",
-                    (ship_name.upper(), category.upper(), slot_index),
+                    "DELETE FROM ship_loadout WHERE ship_name = ? AND profile_name = ? AND category = ? AND subtype_name = ? AND slot_number = ?",
+                    (ship, profile, category_up, subtype, slot_index),
                 )
             else:
+                comp_rows = self.app.query(
+                    "SELECT category, type_name, size FROM components WHERE name = ?",
+                    (component_name.upper(),),
+                )
+                if not comp_rows:
+                    return False
+
+                comp_cat, comp_type, comp_size = comp_rows[0]
+                if (comp_cat or "").upper() != category_up:
+                    return False
+                if subtype != "GENERIC" and (comp_type or "").upper() != subtype:
+                    return False
+
+                spec_rows = self.app.query(
+                    """
+                    SELECT max_size FROM ship_subtype_specs
+                    WHERE ship_name = ? AND category = ? AND subtype_name = ?
+                    """,
+                    (ship, category_up, subtype),
+                )
+                if spec_rows:
+                    max_size = int(spec_rows[0][0] or 0)
+                    if int(comp_size or 0) > max_size:
+                        return False
+
                 self.app.commit(
                     """
-                    INSERT OR REPLACE INTO ship_loadout (ship_name, category, slot_number, component_name)
-                    VALUES (?, ?, ?, ?)
+                    INSERT OR REPLACE INTO ship_loadout (ship_name, profile_name, category, subtype_name, slot_number, component_name)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (ship_name.upper(), category.upper(), slot_index, component_name.upper()),
+                    (ship, profile, category_up, subtype, slot_index, component_name.upper()),
                 )
             return True
         except Exception as e:
@@ -236,39 +483,107 @@ class ShipController:
                 self.app.log(f"Loadout sync error: {e}", source="ERROR")
             return False
 
-    def clear_ship_loadout(self, ship_name: str) -> None:
-        self.app.commit("DELETE FROM ship_loadout WHERE ship_name = ?", (ship_name.upper(),))
+    def clear_ship_loadout(self, ship_name: str, profile_name: str = "DEFAULT") -> None:
+        profile = self._normalize_profile(profile_name)
+        self.app.commit(
+            "DELETE FROM ship_loadout WHERE ship_name = ? AND profile_name = ?",
+            (ship_name.upper(), profile),
+        )
 
     def list_loadout_profiles(self, ship_name: str) -> list[str]:
         try:
+            ship = ship_name.upper()
+            self.app.commit(
+                "INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name) VALUES (?, 'DEFAULT')",
+                (ship,),
+            )
             rows = self.app.query(
-                "SELECT DISTINCT profile_name FROM ship_loadout WHERE ship_name = ? AND profile_name IS NOT NULL",
-                (ship_name.upper(),),
+                """
+                SELECT profile_name
+                FROM ship_loadout_profiles
+                WHERE ship_name = ?
+                UNION
+                SELECT DISTINCT profile_name
+                FROM ship_loadout
+                WHERE ship_name = ? AND profile_name IS NOT NULL
+                ORDER BY profile_name
+                """,
+                (ship, ship),
             )
             profiles = [r[0] for r in rows if r and r[0]]
             return ["DEFAULT", *profiles] if "DEFAULT" not in profiles else profiles
         except Exception:
             return ["DEFAULT"]
 
-    def load_full_ship(self, name: str) -> Ship | None:
+    def create_loadout_profile(
+        self,
+        ship_name: str,
+        profile_name: str,
+        source_profile: str = "DEFAULT",
+        overwrite: bool = False,
+    ) -> bool:
+        try:
+            ship = ship_name.upper()
+            target = self._normalize_profile(profile_name)
+            source = self._normalize_profile(source_profile)
+
+            if not target:
+                return False
+
+            exists = self.app.query(
+                "SELECT 1 FROM ship_loadout_profiles WHERE ship_name = ? AND profile_name = ?",
+                (ship, target),
+            )
+            if exists and not overwrite:
+                return False
+
+            self.app.commit(
+                "INSERT OR REPLACE INTO ship_loadout_profiles (ship_name, profile_name) VALUES (?, ?)",
+                (ship, target),
+            )
+
+            if overwrite:
+                self.app.commit(
+                    "DELETE FROM ship_loadout WHERE ship_name = ? AND profile_name = ?",
+                    (ship, target),
+                )
+
+            self.app.commit(
+                """
+                INSERT OR IGNORE INTO ship_loadout (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity)
+                SELECT ship_name, ?, category, subtype_name, slot_number, component_name, quantity
+                FROM ship_loadout
+                WHERE ship_name = ? AND profile_name = ?
+                """,
+                (target, ship, source),
+            )
+            return True
+        except Exception:
+            return False
+
+    def load_full_ship(self, name: str, profile_name: str = "DEFAULT") -> Ship | None:
+        profile = self._normalize_profile(profile_name)
         ship = self.load_ship_as_model(name)
         if not ship:
             return None
 
-        specs_rows = self.app.query(
-            "SELECT category, max_qty, max_size FROM ship_specs WHERE ship_name = ?",
-            (ship.name,),
-        )
-        for spec in specs_rows:
-            ship.set_capability(category=spec[0], max_qty=spec[1], max_size=spec[2])
+        subtype_specs = self.get_ship_slot_specs(ship.name)
+        aggregated_caps = {}
+        for spec in subtype_specs:
+            category = spec["category"]
+            aggregated_caps.setdefault(category, {"max_qty": 0, "max_size": 0})
+            aggregated_caps[category]["max_qty"] += int(spec["max_qty"])
+            aggregated_caps[category]["max_size"] = max(aggregated_caps[category]["max_size"], int(spec["max_size"]))
+        for category, cap in aggregated_caps.items():
+            ship.set_capability(category=category, max_qty=cap["max_qty"], max_size=cap["max_size"])
 
         sql = """
             SELECT c.id, c.name, c.brand, c.type_name, c.category, c.size, c.grade, c.stats
             FROM components c
             JOIN ship_loadout sl ON c.name = sl.component_name
-            WHERE sl.ship_name = ?
+            WHERE sl.ship_name = ? AND sl.profile_name = ?
         """
-        comp_rows = self.app.query(sql, (ship.name,))
+        comp_rows = self.app.query(sql, (ship.name, profile))
         for row in comp_rows:
             ship.components.append(
                 Component(
@@ -284,9 +599,10 @@ class ShipController:
 
         return ship
 
-    def equip_component(self, ship_name: str, component_name: str) -> bool:
+    def equip_component(self, ship_name: str, component_name: str, profile_name: str = "DEFAULT") -> bool:
         try:
-            ship = self.load_full_ship(ship_name)
+            profile = self._normalize_profile(profile_name)
+            ship = self.load_full_ship(ship_name, profile)
             if not ship:
                 raise Exception("Vaisseau introuvable.")
 
@@ -317,24 +633,49 @@ class ShipController:
             if not cap:
                 return False
 
+            slot_specs = self.get_ship_slot_specs(ship.name)
+            matching_specs = [
+                spec
+                for spec in slot_specs
+                if spec["category"] == new_comp.category.upper()
+                and (spec["subtype_name"] == "GENERIC" or spec["subtype_name"] == new_comp.type_name.upper())
+                and int(new_comp.size) <= int(spec["max_size"])
+            ]
+
+            chosen_spec = matching_specs[0] if matching_specs else None
+            if not chosen_spec:
+                if hasattr(self.app, "log"):
+                    self.app.log("EQUIP REJECTED: Aucun slot compatible.", source="FLEET")
+                return False
+
             used_rows = self.app.query(
-                "SELECT slot_number FROM ship_loadout WHERE ship_name = ? AND category = ?",
-                (ship.name, new_comp.category.upper()),
+                """
+                SELECT slot_number FROM ship_loadout
+                WHERE ship_name = ? AND profile_name = ? AND category = ? AND subtype_name = ?
+                """,
+                (ship.name, profile, chosen_spec["category"], chosen_spec["subtype_name"]),
             )
             used_slots = {int(r[0]) for r in used_rows if r and r[0] is not None}
 
             slot_index = None
-            for idx in range(int(cap["max_qty"])):
+            for idx in range(int(chosen_spec["max_qty"])):
                 if idx not in used_slots:
                     slot_index = idx
                     break
 
             if slot_index is None:
                 if hasattr(self.app, "log"):
-                    self.app.log("EQUIP REJECTED: Aucun slot libre.", source="FLEET")
+                    self.app.log("EQUIP REJECTED: Limite du sous-type atteinte.", source="FLEET")
                 return False
 
-            saved = self.mount_component(ship.name, new_comp.category, slot_index, new_comp.name)
+            saved = self.mount_component(
+                ship.name,
+                new_comp.category,
+                chosen_spec["subtype_name"],
+                slot_index,
+                new_comp.name,
+                profile,
+            )
             if saved and hasattr(self.app, "log"):
                 self.app.log(f"LOADOUT: {new_comp.name} équipé sur {ship.name}", source="FLEET")
             return saved

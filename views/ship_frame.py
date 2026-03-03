@@ -47,10 +47,21 @@ class ShipFrame(ctk.CTkFrame):
         self.tab_ships = self.tabview.add("SHIPS")
         self.tab_components = self.tabview.add("COMPONENTS")
         self.tab_loadout = self.tabview.add("LOADOUT")
+        self.tab_config = self.tabview.add("CONFIG")
 
         self.setup_ships_tab()
         self.setup_loadout_tab()
         self.setup_components_tab()
+        self.setup_config_tab()
+
+    def refresh(self):
+        """Rafraîchissement appelé quand la page SHIPS est affichée."""
+        try:
+            self.update_selectors()
+            if hasattr(self, "cfg_slot_ship"):
+                self.refresh_config_tab()
+        except Exception:
+            pass
 
     # --- ONGLET SHIPS ---
 
@@ -96,8 +107,9 @@ class ShipFrame(ctk.CTkFrame):
 
         # Champs du formulaire
         self._create_form_label(self.add_comp_frame, "SLOT CATEGORY")
+        categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
         self.new_comp_category = DrakeComboBox(self.add_comp_frame, 
-                                                values=list(self.mapping_types.keys()), 
+                            values=categories, 
                                                 command=self.on_category_change)
         self.new_comp_category.pack(pady=5, padx=15, fill="x")
 
@@ -126,7 +138,9 @@ class ShipFrame(ctk.CTkFrame):
         self.update_selectors()
 
         # Initialisation par défaut
-        self.on_category_change("SYSTEMS")
+        default_cat = categories[0] if categories else "SYSTEMS"
+        self.new_comp_category.set(default_cat)
+        self.on_category_change(default_cat)
         self.run_component_scan()
 
         # --- ONGLET LOADOUT ---
@@ -145,7 +159,7 @@ class ShipFrame(ctk.CTkFrame):
                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(15, 5))
 
         # Sélecteur de vaisseau
-        self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=[], command=self.refresh_loadout_view)
+        self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=[], command=self.on_ship_selected)
         self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
 
         ctk.CTkLabel(ctrl_panel, text="LOADOUT PROFILE", font=("Orbitron", 10), 
@@ -159,6 +173,11 @@ class ShipFrame(ctk.CTkFrame):
         )
         self.lo_profile_selector.set("DEFAULT")
         self.lo_profile_selector.pack(pady=5, padx=15, fill="x")
+
+        self.lo_new_profile = ctk.CTkEntry(ctrl_panel, placeholder_text="NEW PROFILE NAME")
+        self.lo_new_profile.pack(pady=(8, 5), padx=15, fill="x")
+
+        DrakeButton(ctrl_panel, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
 
         # Terminal de résumé
         ctk.CTkLabel(ctrl_panel, text="CURRENT CONFIGURATION", font=("Orbitron", 10), text_color="#666666").pack(pady=(20, 0))
@@ -180,6 +199,110 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_slots_frame.pack(side="right", fill="both", expand=True)
 
         self.update_selectors()
+
+    def setup_config_tab(self):
+        """Onglet dédié à la création de sous-types et de slots par sous-type."""
+        root = ctk.CTkFrame(self.tab_config, fg_color="transparent")
+        root.pack(fill="both", expand=True, padx=12, pady=12)
+
+        left = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_MAIN, width=340)
+        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack_propagate(False)
+
+        right = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_TERMINAL)
+        right.pack(side="right", fill="both", expand=True)
+
+        ctk.CTkLabel(left, text="CONFIGURATION CATEGORIES / TYPES", font=("Orbitron", 12, "bold"),
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(12, 8))
+
+        ctk.CTkLabel(left, text="--- CATEGORIES ---", font=("Orbitron", 10, "bold"),
+                 text_color="#9a9a9a").pack(pady=(4, 2), padx=12, anchor="w")
+
+        self._create_form_label(left, "NEW CATEGORY")
+        self.cfg_type_new_category = ctk.CTkEntry(left, placeholder_text="ex: DEFENSE")
+        self.cfg_type_new_category.pack(pady=4, padx=12, fill="x")
+
+        type_category_actions = ctk.CTkFrame(left, fg_color="transparent")
+        type_category_actions.pack(pady=(4, 6), padx=10, fill="x")
+        DrakeButton(type_category_actions, text="ADD CATEGORY", command=self.action_add_category).pack(side="left", padx=4)
+
+        ctk.CTkFrame(left, fg_color="#2a2a2a", height=1).pack(fill="x", padx=12, pady=(6, 8))
+
+        ctk.CTkLabel(left, text="--- TYPES (PAR CATEGORIE) ---", font=("Orbitron", 10, "bold"),
+                 text_color="#9a9a9a").pack(pady=(0, 2), padx=12, anchor="w")
+
+        categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+        self._create_form_label(left, "CATÉGORIE")
+        self.cfg_type_category = DrakeComboBox(left, values=categories, command=self.on_cfg_type_category_change)
+        self.cfg_type_category.pack(pady=4, padx=12, fill="x")
+
+        self._create_form_label(left, "NEW TYPE")
+        self.cfg_type_entry = ctk.CTkEntry(left, placeholder_text="ex: SHIELD GENERATOR")
+        self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
+
+        self._create_form_label(left, "EXISTING TYPES")
+        self.cfg_type_selector = DrakeComboBox(left, values=[])
+        self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
+
+        type_actions = ctk.CTkFrame(left, fg_color="transparent")
+        type_actions.pack(pady=10, padx=10, fill="x")
+        DrakeButton(type_actions, text="ADD TYPE", command=self.action_add_subtype).pack(side="left", padx=4)
+        DrakeButton(type_actions, text="DELETE TYPE", command=self.action_delete_subtype,
+                    fg_color="#550000", hover_color="#770000").pack(side="left", padx=4)
+
+        self.cfg_type_terminal = DrakeTerminal(left, height=220)
+        self.cfg_type_terminal.pack(pady=8, padx=12, fill="x")
+
+        ctk.CTkLabel(right, text="SLOT CREATION", font=("Orbitron", 12, "bold"),
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(12, 8))
+
+        ship_values = self.controller.ship.list_ship_names()
+        row1 = ctk.CTkFrame(right, fg_color="transparent")
+        row1.pack(fill="x", padx=12)
+
+        self._create_form_label(row1, "SHIP")
+        self.cfg_slot_ship = DrakeComboBox(row1, values=ship_values, command=self.on_cfg_slot_ship_change)
+        self.cfg_slot_ship.pack(pady=4, fill="x")
+
+        self._create_form_label(row1, "CATÉGORIE")
+        self.cfg_slot_category = DrakeComboBox(row1, values=categories, command=self.on_cfg_slot_category_change)
+        self.cfg_slot_category.pack(pady=4, fill="x")
+
+        self._create_form_label(row1, "TYPE")
+        self.cfg_slot_subtype = DrakeComboBox(row1, values=[])
+        self.cfg_slot_subtype.pack(pady=4, fill="x")
+
+        self._create_form_label(row1, "MAX QTY")
+        self.cfg_slot_qty = ctk.CTkEntry(row1, placeholder_text="ex: 2")
+        self.cfg_slot_qty.pack(pady=4, fill="x")
+
+        self._create_form_label(row1, "MAX SIZE")
+        self.cfg_slot_size = ctk.CTkEntry(row1, placeholder_text="ex: 1")
+        self.cfg_slot_size.pack(pady=4, fill="x")
+
+        self._create_form_label(row1, "EXISTING SLOTS")
+        self.cfg_slot_selector = DrakeComboBox(row1, values=[], command=self.on_cfg_slot_pick)
+        self.cfg_slot_selector.pack(pady=4, fill="x")
+
+        slot_actions = ctk.CTkFrame(right, fg_color="transparent")
+        slot_actions.pack(pady=10, padx=12, fill="x")
+        DrakeButton(slot_actions, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
+        DrakeButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec,
+                    fg_color="#550000", hover_color="#770000").pack(side="left", padx=4)
+        DrakeButton(slot_actions, text="REFRESH", command=self.refresh_config_tab).pack(side="left", padx=4)
+
+        self.cfg_slot_terminal = DrakeTerminal(right)
+        self.cfg_slot_terminal.pack(padx=12, pady=8, fill="both", expand=True)
+
+        if categories:
+            self.cfg_type_category.set(categories[0])
+            self.cfg_slot_category.set(categories[0])
+            self.on_cfg_type_category_change(categories[0])
+            self.on_cfg_slot_category_change(categories[0])
+        if ship_values:
+            self.cfg_slot_ship.set(ship_values[0])
+            self.on_cfg_slot_ship_change(ship_values[0])
+        self.refresh_config_tab()
 
     # --- LOGIQUE ET HELPER METHODS ---
 
@@ -246,7 +369,9 @@ class ShipFrame(ctk.CTkFrame):
 
     # --- ACTIONS ---
     def on_category_change(self, choice):
-        new_values = self.mapping_types.get(choice, [])
+        new_values = self.controller.ship.list_component_subtypes(choice)
+        if not new_values:
+            new_values = self.mapping_types.get(choice, [])
         self.new_comp_type.configure(values=new_values)
         if new_values: self.new_comp_type.set(new_values[0])
 
@@ -376,32 +501,64 @@ class ShipFrame(ctk.CTkFrame):
 
     def refresh_loadout_view(self, ship_name):
         """Affiche les slots à droite et met à jour le terminal à gauche."""
+        if not ship_name:
+            ship_name = self.lo_ship_selector.get()
+        if not ship_name:
+            return
+
+        profile_name = self._get_active_profile()
+
         # 1. Nettoyage de l'existant
         for widget in self.lo_slots_frame.winfo_children():
             widget.destroy()
         self.lo_status_terminal.delete("0.0", "end")
 
         # 2. Chargement des données du vaisseau
-        ship = self.controller.ship.load_full_ship(ship_name)
-        if not ship: return
+        ship = self.controller.ship.load_full_ship(ship_name, profile_name)
+        if not ship:
+            return
 
-        self.lo_status_terminal.insert("end", f"> ANALYZING {ship_name}...\n", "ACCENT")
-        
-        # 3. Création des lignes par catégorie
-        for cat, specs in ship.capabilities.items():
+        slot_specs = self.controller.ship.get_ship_slot_specs(ship_name)
+        if not slot_specs:
+            self.lo_status_terminal.insert("end", "> NO SLOT SPECS FOUND FOR THIS SHIP.\n")
+            return
+
+        self.lo_status_terminal.insert("end", f"> ANALYZING {ship_name} [{profile_name}]...\n", "ACCENT")
+
+        # 3. Création des lignes par catégorie + sous-type
+        current_cat = None
+        for spec in slot_specs:
+            cat = spec["category"]
+            subtype = spec["subtype_name"]
+            max_qty = int(spec["max_qty"])
+            max_size = int(spec["max_size"])
+
             # Titre de catégorie
-            ctk.CTkLabel(self.lo_slots_frame, text=f"--- {cat} ---", 
-                        font=("Orbitron", 11, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(10, 5))
+            if current_cat != cat:
+                ctk.CTkLabel(self.lo_slots_frame, text=f"--- {cat} ---", 
+                            font=("Orbitron", 11, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(10, 5))
+                current_cat = cat
 
-            for i in range(specs['max_qty']):
+            subtype_label = subtype if subtype != "GENERIC" else "ALL TYPES"
+            ctk.CTkLabel(self.lo_slots_frame, text=f"{subtype_label} (MAX {max_qty})",
+                         font=("Orbitron", 10), text_color="#AAAAAA").pack(pady=(2, 2), padx=12, anchor="w")
+
+            for i in range(max_qty):
                 # Récupère les composants compatibles et l'actuel
-                available, current = self.controller.ship.get_slot_data(ship.name, cat, specs['max_size'], i)
+                available, current = self.controller.ship.get_slot_data(
+                    ship.name,
+                    profile_name,
+                    cat,
+                    subtype,
+                    max_size,
+                    i,
+                )
                 
                 # Carte de ligne (Slot)
                 card = ctk.CTkFrame(self.lo_slots_frame, fg_color="#121212", border_width=1, border_color="#333333")
                 card.pack(fill="x", padx=10, pady=2)
 
-                ctk.CTkLabel(card, text=f"S{specs['max_size']} Slot {i+1}", width=80, font=("Orbitron", 10)).pack(side="left", padx=10)
+                ctk.CTkLabel(card, text=f"S{max_size} Slot {i+1}", width=80, font=("Orbitron", 10)).pack(side="left", padx=10)
                 
                 # Menu de sélection
                 combo = DrakeComboBox(card, values=["EMPTY"] + available, width=220)
@@ -410,28 +567,30 @@ class ShipFrame(ctk.CTkFrame):
 
                 # Bouton de sauvegarde INDIVIDUEL
                 save_btn = DrakeButton(card, text="SAVE", width=60, 
-                                    command=lambda c=combo, ct=cat, idx=i: self.action_mount(ct, idx, c.get()))
+                                    command=lambda c=combo, ct=cat, st=subtype, idx=i: self.action_mount(ct, st, idx, c.get()))
                 save_btn.pack(side="right", padx=10)
 
                 # Ajout au terminal de gauche pour le récapitulatif
-                self.lo_status_terminal.insert("end", f"[{cat}] SLT{i+1}: {current}\n")
+                self.lo_status_terminal.insert("end", f"[{cat}::{subtype_label}] SLT{i+1}: {current}\n")
 
-    def save_slot_config(self, ship_name, category, slot_index, combo_widget):
+    def save_slot_config(self, ship_name, category, subtype_name, slot_index, combo_widget):
         """Action du bouton SET : Enregistre la config via le contrôleur."""
         selection = combo_widget.get()
-        if self.controller.ship.mount_component(ship_name, category, slot_index, selection):
+        profile_name = self._get_active_profile()
+        if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, selection, profile_name):
             if hasattr(self.controller.app, "log"):
                 self.controller.app.log(f"LOADOUT SYNC: {ship_name} -> {selection} (Slot {slot_index})")
         else:
             self.controller.app.log("DRAKE OS ERROR", "Failed to sync with ship database.")
         
-    def action_mount(self, category, slot_index, component_name):
+    def action_mount(self, category, subtype_name, slot_index, component_name):
         """Enregistre le composant sélectionné en base de données."""
         ship_name = self.lo_ship_selector.get()
+        profile_name = self._get_active_profile()
         if not ship_name: return
 
         # Appel au contrôleur pour sauvegarder en DB
-        if self.controller.ship.mount_component(ship_name, category, slot_index, component_name):
+        if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, component_name, profile_name):
             # On rafraîchit TOUTE la vue pour mettre à jour le terminal de gauche
             self.refresh_loadout_view(ship_name)
         else:
@@ -440,10 +599,11 @@ class ShipFrame(ctk.CTkFrame):
     def action_clear_loadout(self):
         """Supprime tous les composants installés sur le vaisseau actuel."""
         ship_name = self.lo_ship_selector.get()
+        profile_name = self._get_active_profile()
         if not ship_name: return
         
-        if messagebox.askyesno("DRAKE OS", f"WIPE ALL DATA FOR {ship_name}?"):
-            self.controller.ship.clear_ship_loadout(ship_name)
+        if messagebox.askyesno("DRAKE OS", f"WIPE PROFILE [{profile_name}] FOR {ship_name}?"):
+            self.controller.ship.clear_ship_loadout(ship_name, profile_name)
             # Rafraîchissement de l'interface
             self.refresh_loadout_view(ship_name)
     
@@ -453,30 +613,288 @@ class ShipFrame(ctk.CTkFrame):
             ships = self.controller.ship.list_ship_names()
             # On configure le ComboBox avec ces noms
             self.lo_ship_selector.configure(values=ships)
+            if ships and self.lo_ship_selector.get() not in ships:
+                self.lo_ship_selector.set(ships[0])
+                self.on_ship_selected(ships[0])
+
+            if hasattr(self, "cfg_slot_ship"):
+                self.cfg_slot_ship.configure(values=ships)
+                if ships and self.cfg_slot_ship.get() not in ships:
+                    self.cfg_slot_ship.set(ships[0])
+                    self.on_cfg_slot_ship_change(ships[0])
+
+            if hasattr(self, "cfg_type_category"):
+                categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+                self.cfg_type_category.configure(values=categories)
+                self.cfg_slot_category.configure(values=categories)
+
+            if hasattr(self, "new_comp_category"):
+                categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+                self.new_comp_category.configure(values=categories)
         except Exception as e:
             print(f"Update error: {e}")
+
+    def on_cfg_type_category_change(self, category):
+        subtypes = self.controller.ship.list_component_subtypes(category)
+        if not subtypes:
+            subtypes = self.mapping_types.get(category, [])
+        self.cfg_type_selector.configure(values=subtypes if subtypes else ["NO DATA"])
+        if subtypes:
+            self.cfg_type_selector.set(subtypes[0])
+        else:
+            self.cfg_type_selector.set("NO DATA")
+        self.refresh_type_terminal()
+
+    def action_add_type(self):
+        category = self.cfg_type_new_category.get().strip().upper()
+        if not category:
+            messagebox.showwarning("DRAKE OS", "TYPE requis")
+            return
+        try:
+            self.controller.ship.create_component_category(category)
+            self.cfg_type_new_category.delete(0, "end")
+            self.update_selectors()
+            self.cfg_type_category.set(category)
+            self.cfg_slot_category.set(category)
+            self.on_cfg_type_category_change(category)
+            self.on_cfg_slot_category_change(category)
+        except Exception as e:
+            messagebox.showerror("DRAKE OS", str(e))
+
+    def refresh_type_terminal(self):
+        category = self.cfg_type_category.get().strip().upper() if hasattr(self, "cfg_type_category") else ""
+        if not hasattr(self, "cfg_type_terminal"):
+            return
+        self.cfg_type_terminal.delete("0.0", "end")
+        if not category:
+            return
+        subtypes = self.controller.ship.list_component_subtypes(category)
+        self.cfg_type_terminal.insert("end", f"> TYPES - {category}\n", "ACCENT")
+        for subtype in subtypes:
+            self.cfg_type_terminal.insert("end", f"- {subtype}\n")
+
+    def action_add_category(self):
+        category = self.cfg_type_new_category.get().strip().upper()
+        if not category:
+            messagebox.showwarning("DRAKE OS", "CATÉGORIE requise")
+            return
+        try:
+            self.controller.ship.create_component_category(category)
+            self.cfg_type_new_category.delete(0, "end")
+            self.update_selectors()
+            self.cfg_type_category.set(category)
+            self.cfg_slot_category.set(category)
+            self.on_cfg_type_category_change(category)
+            self.on_cfg_slot_category_change(category)
+        except Exception as e:
+            messagebox.showerror("DRAKE OS", str(e))
+
+    def action_add_subtype(self):
+        category = self.cfg_type_category.get().strip().upper()
+        subtype = self.cfg_type_entry.get().strip().upper()
+        if not category or not subtype:
+            messagebox.showwarning("DRAKE OS", "CATÉGORIE et TYPE requis")
+            return
+        try:
+            self.controller.ship.create_component_subtype(category, subtype)
+            self.cfg_type_entry.delete(0, "end")
+            self.on_cfg_type_category_change(category)
+            self.on_cfg_slot_category_change(self.cfg_slot_category.get())
+            self.on_category_change(self.new_comp_category.get())
+        except Exception as e:
+            messagebox.showerror("DRAKE OS", str(e))
+
+    def action_delete_subtype(self):
+        category = self.cfg_type_category.get().strip().upper()
+        subtype = self.cfg_type_selector.get().strip().upper()
+        if not subtype or subtype == "NO DATA":
+            return
+        if not messagebox.askyesno("DRAKE OS", f"DELETE TYPE {subtype} ?"):
+            return
+        self.controller.ship.delete_component_subtype(category, subtype)
+        self.on_cfg_type_category_change(category)
+        self.on_cfg_slot_category_change(self.cfg_slot_category.get())
+        self.on_category_change(self.new_comp_category.get())
+
+    def on_cfg_slot_ship_change(self, _ship_name):
+        self.refresh_slot_terminal()
+
+    def _set_slot_type_locked(self, locked: bool):
+        if not hasattr(self, "cfg_slot_subtype"):
+            return
+        if locked:
+            self.cfg_slot_subtype.entry.configure(
+                command=lambda: None,
+                text_color="#6f6f6f",
+                hover_color=DrakeConfig.BG_TERMINAL,
+            )
+            self.cfg_slot_subtype.button.configure(
+                command=lambda: None,
+                fg_color="#4a4a4a",
+                hover_color="#4a4a4a",
+                text_color="#9a9a9a",
+            )
+        else:
+            self.cfg_slot_subtype.entry.configure(
+                command=self.cfg_slot_subtype.toggle_dropdown,
+                text_color=DrakeConfig.TEXT_MAIN,
+                hover_color=DrakeConfig.BG_TERMINAL,
+            )
+            self.cfg_slot_subtype.button.configure(
+                command=self.cfg_slot_subtype.toggle_dropdown,
+                fg_color=DrakeConfig.ACCENT_PRIMARY,
+                hover_color=DrakeConfig.ACCENT_HOVER,
+                text_color="#000000",
+            )
+
+    def on_cfg_slot_category_change(self, category):
+        if (category or "").strip().upper() == "WEAPON":
+            self.cfg_slot_subtype.configure(values=["GENERIC"])
+            self.cfg_slot_subtype.set("GENERIC")
+            self._set_slot_type_locked(True)
+            return
+
+        self._set_slot_type_locked(False)
+
+        subtypes = self.controller.ship.list_component_subtypes(category)
+        if not subtypes:
+            subtypes = self.mapping_types.get(category, [])
+        self.cfg_slot_subtype.configure(values=subtypes if subtypes else ["GENERIC"])
+        if subtypes:
+            self.cfg_slot_subtype.set(subtypes[0])
+        else:
+            self.cfg_slot_subtype.set("GENERIC")
+
+    def refresh_slot_terminal(self):
+        if not hasattr(self, "cfg_slot_terminal"):
+            return
+        ship_name = self.cfg_slot_ship.get().strip().upper() if hasattr(self, "cfg_slot_ship") else ""
+        self.cfg_slot_terminal.delete("0.0", "end")
+        if not ship_name:
+            return
+        specs = self.controller.ship.list_subtype_specs(ship_name)
+        self.cfg_slot_terminal.insert("end", f"> SLOT SPECS - {ship_name}\n", "ACCENT")
+        keys = []
+        for cat, subtype, qty, size in specs:
+            key = f"{cat}::{subtype}"
+            keys.append(key)
+            self.cfg_slot_terminal.insert("end", f"[{cat}] {subtype:<20} | QTY={qty} | SIZE=S{size}\n")
+
+        self.cfg_slot_selector.configure(values=keys if keys else ["NO DATA"])
+        if keys:
+            self.cfg_slot_selector.set(keys[0])
+        else:
+            self.cfg_slot_selector.set("NO DATA")
+
+    def on_cfg_slot_pick(self, selection):
+        if not selection or selection == "NO DATA" or "::" not in selection:
+            return
+        ship_name = self.cfg_slot_ship.get().strip().upper()
+        cat, subtype = selection.split("::", 1)
+        self.cfg_slot_category.set(cat)
+        self.on_cfg_slot_category_change(cat)
+        self.cfg_slot_subtype.set(subtype)
+
+        specs = self.controller.ship.list_subtype_specs(ship_name)
+        for c, st, qty, size in specs:
+            if c == cat and st == subtype:
+                self.cfg_slot_qty.delete(0, "end")
+                self.cfg_slot_qty.insert(0, str(qty))
+                self.cfg_slot_size.delete(0, "end")
+                self.cfg_slot_size.insert(0, str(size))
+                break
+
+    def action_save_slot_spec(self):
+        ship_name = self.cfg_slot_ship.get().strip().upper()
+        category = self.cfg_slot_category.get().strip().upper()
+        subtype = self.cfg_slot_subtype.get().strip().upper()
+        if category == "WEAPON":
+            subtype = "GENERIC"
+        if not ship_name or not category or not subtype:
+            messagebox.showwarning("DRAKE OS", "SHIP / CATEGORY / SUBTYPE requis")
+            return
+        try:
+            qty = int(self.cfg_slot_qty.get().strip())
+            max_size = int(self.cfg_slot_size.get().strip())
+            self.controller.ship.upsert_subtype_spec(ship_name, category, subtype, qty, max_size)
+            self.refresh_slot_terminal()
+            if self.lo_ship_selector.get().strip().upper() == ship_name:
+                self.refresh_loadout_view(ship_name)
+        except Exception as e:
+            messagebox.showerror("DRAKE OS", str(e))
+
+    def action_delete_slot_spec(self):
+        ship_name = self.cfg_slot_ship.get().strip().upper()
+        selection = self.cfg_slot_selector.get().strip().upper()
+        if not ship_name or not selection or selection == "NO DATA" or "::" not in selection:
+            return
+        cat, subtype = selection.split("::", 1)
+        if not messagebox.askyesno("DRAKE OS", f"DELETE SLOT SPEC {cat}::{subtype} ?"):
+            return
+        self.controller.ship.delete_subtype_spec(ship_name, cat, subtype)
+        self.refresh_slot_terminal()
+        if self.lo_ship_selector.get().strip().upper() == ship_name:
+            self.refresh_loadout_view(ship_name)
+
+    def refresh_config_tab(self):
+        if hasattr(self, "cfg_type_category"):
+            self.on_cfg_type_category_change(self.cfg_type_category.get())
+        if hasattr(self, "cfg_slot_ship"):
+            self.refresh_slot_terminal()
     
-    def update_profile_list(self, ship_name):
+    def update_profile_list(self, ship_name, selected_profile=None):
         """Récupère les profils de loadout disponibles pour le vaisseau sélectionné."""
         try:
             profiles = self.controller.ship.list_loadout_profiles(ship_name)
                 
             self.lo_profile_selector.configure(values=profiles)
-            # On ne change le set que si nécessaire pour éviter les boucles infinies
-            if self.lo_profile_selector.get() not in profiles:
-                self.lo_profile_selector.set("DEFAULT")
+            current = (selected_profile or self.lo_profile_selector.get() or "DEFAULT").upper()
+            if current not in profiles:
+                current = "DEFAULT"
+            self.lo_profile_selector.set(current)
                 
         except Exception as e:
             print(f"Error updating profiles: {e}")
 
+    def _get_active_profile(self):
+        profile = (self.lo_profile_selector.get() or "DEFAULT").strip().upper()
+        return profile or "DEFAULT"
+
+    def on_ship_selected(self, ship_name):
+        if not ship_name:
+            return
+        self.update_profile_list(ship_name)
+        self.refresh_loadout_view(ship_name)
+
+    def action_create_profile(self):
+        ship_name = self.lo_ship_selector.get()
+        if not ship_name:
+            messagebox.showwarning("DRAKE OS", "SELECT A SHIP FIRST.")
+            return
+
+        new_profile = self.lo_new_profile.get().strip().upper()
+        if not new_profile:
+            messagebox.showwarning("DRAKE OS", "ENTER A PROFILE NAME.")
+            return
+
+        source_profile = self._get_active_profile()
+        created = self.controller.ship.create_loadout_profile(
+            ship_name,
+            new_profile,
+            source_profile=source_profile,
+            overwrite=False,
+        )
+        if not created:
+            messagebox.showwarning("DRAKE OS", f"PROFILE {new_profile} ALREADY EXISTS.")
+            return
+
+        self.lo_new_profile.delete(0, "end")
+        self.update_profile_list(ship_name, selected_profile=new_profile)
+        self.refresh_loadout_view(ship_name)
+
     def action_load_profile(self, profile_name):
         """Charge la configuration d'un profil spécifique."""
         ship_name = self.lo_ship_selector.get()
-        if not ship_name or ship_name == "": return
-        
-        # Pour l'instant, on log le changement
-        if hasattr(self.controller, "log"):
-            self.controller.log("DRAKE OS", f"LOADING PROFILE: {profile_name} FOR {ship_name}")
-            
-        # On rafraîchit la vue (tu pourras plus tard filtrer ta requête SQL par profile_name)
+        if not ship_name or ship_name == "":
+            return
         self.refresh_loadout_view(ship_name)
