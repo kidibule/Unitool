@@ -1,6 +1,6 @@
 from tkinter import messagebox
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox,DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
@@ -27,12 +27,10 @@ class ShipFrame(ctk.CTkFrame):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
 
-        self.title_label = ctk.CTkLabel(
-            header, text="FLEET DATABASE", 
-            font=("Orbitron", 16, "bold"), 
-            text_color=DrakeConfig.ACCENT_PRIMARY
+        self.title_label = DrakeTitle1(
+            header, text="FLEET DATABASE"
         )
-        self.title_label.pack(side="left", expand=True, padx=(100, 0))
+        self.title_label.pack(expand=True, padx=(0, 0))
 
         # Onglets principaux
         self.tabview = ctk.CTkTabview(
@@ -99,18 +97,17 @@ class ShipFrame(ctk.CTkFrame):
         self.add_comp_frame.pack(side="left", fill="y", padx=(0, 10))
         self.add_comp_frame.pack_propagate(False)
         
-        ctk.CTkLabel(self.add_comp_frame, text="ADD COMPONENT", font=("Orbitron", 14, "bold"), 
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=15)
+        DrakeTitle2(self.add_comp_frame, text="ADD COMPONENT").pack(pady=15)
 
         # Champs du formulaire
-        self._create_form_label(self.add_comp_frame, "SLOT CATEGORY")
+        DrakeTitle4(self.add_comp_frame, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
         categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
         self.new_comp_category = DrakeComboBox(self.add_comp_frame, 
                             values=categories, 
                                                 command=self.on_category_change)
         self.new_comp_category.pack(pady=5, padx=15, fill="x")
 
-        self._create_form_label(self.add_comp_frame, "MODULE TYPE")
+        DrakeTitle4(self.add_comp_frame, "MODULE TYPE").pack(pady=(0, 2), padx=10)
         self.new_comp_type = DrakeComboBox(self.add_comp_frame, values=[])
         self.new_comp_type.pack(pady=5, padx=15, fill="x")
 
@@ -120,17 +117,17 @@ class ShipFrame(ctk.CTkFrame):
         self.new_comp_brand = ctk.CTkEntry(self.add_comp_frame, placeholder_text="MANUFACTURER (ex: AEGIS)")
         self.new_comp_brand.pack(pady=5, padx=15, fill="x")
 
-        self._create_form_label(self.add_comp_frame, "SIZE")
+        DrakeTitle4(self.add_comp_frame, "SIZE").pack(pady=(0, 2), padx=10)
         self.new_comp_size = DrakeComboBox(self.add_comp_frame, values=["0", "1", "2", "3", "4", "5"])
         self.new_comp_size.pack(pady=5, padx=15, fill="x")
 
-        self._create_form_label(self.add_comp_frame, "GRADE")
+        DrakeTitle4(self.add_comp_frame, "GRADE").pack(pady=(0, 2), padx=10)
         self.new_comp_grade = DrakeComboBox(self.add_comp_frame, values=["A", "B", "C", "D"])
         self.new_comp_grade.set("C")
         self.new_comp_grade.pack(pady=5, padx=15, fill="x")
 
         DrakeButton(self.add_comp_frame, text="SAVE TO DATABASE", 
-                    command=self.save_new_component).pack(pady=30, padx=15, fill="x")
+                    command=self.save_new_component).pack(pady=(0, 8), padx=15, fill="x")
         
         self.update_selectors()
 
@@ -166,15 +163,13 @@ class ShipFrame(ctk.CTkFrame):
         ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
         ctrl_panel.pack_propagate(False)
 
-        ctk.CTkLabel(ctrl_panel, text="SHIP SELECTION", font=("Orbitron", 12, "bold"), 
-                    text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(15, 5))
+        DrakeTitle2(ctrl_panel, text="SHIP SELECTION").pack(pady=(15, 5))
 
         # Sélecteur de vaisseau
-        self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=[], command=self.on_ship_selected)
+        self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=["SHIP"], command=self.on_ship_selected)
         self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
 
-        ctk.CTkLabel(ctrl_panel, text="LOADOUT PROFILE", font=("Orbitron", 10), 
-            text_color="#666666").pack(pady=(15, 0))
+        DrakeTitle4(ctrl_panel, text="LOADOUT PROFILE").pack(pady=(15, 0))
 
         # Nouveau sélecteur de profils
         self.lo_profile_selector = DrakeComboBox(
@@ -191,7 +186,7 @@ class ShipFrame(ctk.CTkFrame):
         DrakeButton(ctrl_panel, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
 
         # Terminal de résumé
-        ctk.CTkLabel(ctrl_panel, text="CURRENT CONFIGURATION", font=("Orbitron", 10), text_color="#666666").pack(pady=(20, 0))
+        DrakeTitle4(ctrl_panel, text="CURRENT CONFIGURATION").pack(pady=(20, 0), padx=15)
         self.lo_status_terminal = DrakeTerminal(ctrl_panel, height=250)
         self.lo_status_terminal.pack(pady=5, padx=15, fill="x")
 
@@ -229,84 +224,78 @@ class ShipFrame(ctk.CTkFrame):
         )
         right.pack(side="right", fill="both", expand=True)
 
-        ctk.CTkLabel(left, text="CONFIGURATION CATEGORIES / TYPES", font=("Orbitron", 12, "bold"),
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(12, 8))
+        DrakeTitle2(left, text="CONFIGURATION").pack(pady=(12, 0))
+        
+        DrakeTitle3(left, text="CATEGORY / TYPES").pack(pady=(2, 8))
 
-        ctk.CTkLabel(left, text="--- CATEGORIES ---", font=("Orbitron", 10, "bold"),
-                 text_color="#9a9a9a").pack(pady=(4, 2), padx=12, anchor="w")
+        DrakeTitle4(left, text="--- CATEGORY ---").pack(pady=(4, 2), padx=12)
 
-        self._create_form_label(left, "NEW CATEGORY")
-        self.cfg_type_new_category = ctk.CTkEntry(left, placeholder_text="ex: DEFENSE")
+        self.cfg_type_new_category = ctk.CTkEntry(left, placeholder_text="NEW CATEGORY NAME (ex: WEAPON)")
         self.cfg_type_new_category.pack(pady=4, padx=12, fill="x")
 
-        type_category_actions = ctk.CTkFrame(left, fg_color="transparent")
-        type_category_actions.pack(pady=(4, 6), padx=10, fill="x")
-        DrakeButton(type_category_actions, text="ADD CATEGORY", command=self.action_add_category).pack(side="left", padx=4)
+        DrakeButton(left, text="ADD CATEGORY", command=self.action_add_category).pack(pady=(0, 4), padx=12, fill="x")
 
         ctk.CTkFrame(left, fg_color="#2a2a2a", height=1).pack(fill="x", padx=12, pady=(6, 8))
 
-        ctk.CTkLabel(left, text="--- TYPES (PAR CATEGORIE) ---", font=("Orbitron", 10, "bold"),
-                 text_color="#9a9a9a").pack(pady=(0, 2), padx=12, anchor="w")
+        DrakeTitle4(left, text="--- TYPES (BY CATEGORY) ---").pack(pady=(0, 2), padx=12)
 
         categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
-        self._create_form_label(left, "CATÉGORIE")
+
+        self.cfg_type_entry = ctk.CTkEntry(left, placeholder_text="NEW TYPE NAME (ex: SHIELD GENERATOR)")
+        self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
+
+        DrakeTitle4(left, text="CATEGORY").pack(pady=(0, 2), padx=12)
         self.cfg_type_category = DrakeComboBox(left, values=categories, command=self.on_cfg_type_category_change)
         self.cfg_type_category.pack(pady=4, padx=12, fill="x")
 
-        self._create_form_label(left, "NEW TYPE")
-        self.cfg_type_entry = ctk.CTkEntry(left, placeholder_text="ex: SHIELD GENERATOR")
-        self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
+        DrakeButton(left, text="SAVE", command=self.action_add_subtype).pack(pady=(0, 4), padx=12, fill="x")
 
-        self._create_form_label(left, "EXISTING TYPES")
+        self.cfg_type_terminal = DrakeTerminal(left, height=220)
+        self.cfg_type_terminal.pack(pady=(8, 20), padx=12, fill="x")
+
+        DrakeTitle4(left, text="EXISTING TYPES").pack(pady=(0, 2), padx=12)
         self.cfg_type_selector = DrakeComboBox(left, values=[])
         self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
 
-        type_actions = ctk.CTkFrame(left, fg_color="transparent")
-        type_actions.pack(pady=10, padx=10, fill="x")
-        DrakeButton(type_actions, text="ADD TYPE", command=self.action_add_subtype).pack(side="left", padx=4)
-        DrakeButton(type_actions, text="DELETE TYPE", command=self.action_delete_subtype,
-                    fg_color="#550000", hover_color="#770000").pack(side="left", padx=4)
+        DrakeButton(left, text="DELETE", command=self.action_delete_subtype,
+                    fg_color="#550000", hover_color="#770000").pack(pady=(0, 4), padx=12, fill="x")
 
-        self.cfg_type_terminal = DrakeTerminal(left, height=220)
-        self.cfg_type_terminal.pack(pady=8, padx=12, fill="x")
-
-        ctk.CTkLabel(right, text="SLOT CREATION", font=("Orbitron", 12, "bold"),
-                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(12, 8))
+        DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
 
         ship_values = self.controller.ship.list_ship_names()
         row1 = ctk.CTkFrame(right, fg_color="transparent")
         row1.pack(fill="x", padx=12)
 
-        self._create_form_label(row1, "SHIP")
+        DrakeTitle4(row1, text="SHIP").pack(pady=(0, 4))
         self.cfg_slot_ship = DrakeComboBox(row1, values=ship_values, command=self.on_cfg_slot_ship_change)
         self.cfg_slot_ship.pack(pady=4, fill="x")
 
-        self._create_form_label(row1, "CATÉGORIE")
+        DrakeTitle4(row1, text="CATÉGORIE").pack(pady=(0, 4))
         self.cfg_slot_category = DrakeComboBox(row1, values=categories, command=self.on_cfg_slot_category_change)
         self.cfg_slot_category.pack(pady=4, fill="x")
 
-        self._create_form_label(row1, "TYPE")
+        DrakeTitle4(row1, text="TYPE").pack(pady=(0, 4))
         self.cfg_slot_subtype = DrakeComboBox(row1, values=[])
         self.cfg_slot_subtype.pack(pady=4, fill="x")
 
-        self._create_form_label(row1, "MAX QTY")
+        DrakeTitle4(row1, text="MAX QTY").pack(pady=(0, 4))
         self.cfg_slot_qty = ctk.CTkEntry(row1, placeholder_text="ex: 2")
         self.cfg_slot_qty.pack(pady=4, fill="x")
 
-        self._create_form_label(row1, "MAX SIZE")
+        DrakeTitle4(row1, text="MAX SIZE").pack(pady=(0, 4))
         self.cfg_slot_size = ctk.CTkEntry(row1, placeholder_text="ex: 1")
         self.cfg_slot_size.pack(pady=4, fill="x")
 
-        self._create_form_label(row1, "EXISTING SLOTS")
+        DrakeTitle4(row1, text="EXISTING SLOTS").pack(pady=(0, 4))
         self.cfg_slot_selector = DrakeComboBox(row1, values=[], command=self.on_cfg_slot_pick)
         self.cfg_slot_selector.pack(pady=4, fill="x")
 
         slot_actions = ctk.CTkFrame(right, fg_color="transparent")
         slot_actions.pack(pady=10, padx=12, fill="x")
         DrakeButton(slot_actions, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
-        DrakeButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec,
-                    fg_color="#550000", hover_color="#770000").pack(side="left", padx=4)
         DrakeButton(slot_actions, text="REFRESH", command=self.refresh_config_tab).pack(side="left", padx=4)
+        DrakeButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec,
+                    fg_color="#550000", hover_color="#770000").pack(side="right", padx=4)
 
         self.cfg_slot_terminal = DrakeTerminal(right)
         self.cfg_slot_terminal.pack(padx=12, pady=8, fill="both", expand=True)
@@ -349,7 +338,7 @@ class ShipFrame(ctk.CTkFrame):
             
             # Affichage des composants équipés
             if ship.components:
-                self.ship_results.insert("end", "   🛰️ LOADOUT:\n", "ACCENT")
+                self.ship_results.insert("end", "   LOADOUT:\n", "ACCENT")
                 for c in ship.components:
                     self.ship_results.insert("end", f"     • [{c.category}] {c.brand} {c.name} (S{c.size})\n")
             

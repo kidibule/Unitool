@@ -567,3 +567,51 @@ class DrakeComboBox(ctk.CTkFrame):
             self.entry.configure(text_color=color)
 
         super().configure(**kwargs)
+
+class DrakeTitle1(ctk.CTkLabel):
+    """Titre de niveau 1 stylisé pour les sections principales."""
+
+    def __init__(self, master, text: str, **kwargs):
+        super().__init__(
+            master,
+            text=text.upper(),
+            font=DrakeConfig.FONT_TITLE,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            **kwargs
+        )
+
+class DrakeTitle2(ctk.CTkLabel):
+    """Titre de niveau 2 stylisé pour les sous-sections."""
+
+    def __init__(self, master, text: str, **kwargs):
+        super().__init__(
+            master,
+            text=text.upper(),
+            font=("Orbitron", 14, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            **kwargs
+        )
+
+class DrakeTitle3(ctk.CTkLabel):
+    """Titre de niveau 3 stylisé pour les titres de configuration."""
+
+    def __init__(self, master, text: str, **kwargs):
+        super().__init__(
+            master,
+            text=text.upper(),
+            font=("Orbitron", 12, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            **kwargs
+        )
+
+class DrakeTitle4(ctk.CTkLabel):
+    """Titre de niveau 4 stylisé pour les titres de catégorie."""
+
+    def __init__(self, master, text: str, **kwargs):
+        super().__init__(
+            master,
+            text=text.upper(),
+            font=("Orbitron", 10, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            **kwargs
+        )
