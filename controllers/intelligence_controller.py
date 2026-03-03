@@ -72,6 +72,32 @@ class IntelligenceController:
         """Récupère tous les targets pour analyse."""
         return self.app.query("SELECT * FROM targets")
 
+    def get_target_snapshot(self, handle: str):
+        """Retourne l'état local utilisé pour comparer avant upsert."""
+        rows = self.app.query(
+            """
+            SELECT org, sid, org_rank, enlisted_date, language, affiliates
+            FROM targets
+            WHERE pseudo = ?
+            """,
+            (handle.upper(),),
+        )
+        return rows[0] if rows else None
+
+    def save_org_snapshot(self, sid: str, name: str, data_payload: dict) -> str:
+        """Met à jour ou crée un dossier org depuis les données scannées."""
+        existing_org = self.app.org.get_org_model(sid)
+        if existing_org:
+            self.app.org.update_org(sid, **data_payload)
+            return "UPDATED"
+
+        columns = ["sid", "name"] + list(data_payload.keys())
+        placeholders = ", ".join(["?"] * len(columns))
+        sql = f"INSERT INTO organizations ({', '.join(columns)}) VALUES ({placeholders})"
+        params = [sid.upper(), name] + list(data_payload.values())
+        self.app.commit(sql, tuple(params))
+        return "ARCHIVED"
+
     def save_organization_roster(self, org_sid: str, members: list) -> None:
         """Bulk insert des membres d'une organisation.
 

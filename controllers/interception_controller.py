@@ -4,8 +4,12 @@ class InterceptionController:
     def __init__(self, master):
         self.master = master 
 
+    def get_location_names(self):
+        rows = self.master.query("SELECT name FROM locations ORDER BY name ASC")
+        return [row[0] for row in rows]
+
     def get_coords_from_db(self, name):
-        res = self.master.db.query("SELECT x, y, z FROM locations WHERE name = ?", (name,))
+        res = self.master.query("SELECT x, y, z FROM locations WHERE name = ?", (name,))
         if res:
             return np.array(res[0])
         return None

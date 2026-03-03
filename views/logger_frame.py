@@ -124,29 +124,19 @@ class LoggerFrame(ctk.CTkFrame):
             self.controller.log("ERROR", "SID and Name are mandatory for registration.")
             return
 
-        sql = """INSERT INTO organizations (sid, name, tag, description, org_type, specialization, allies, enemies, alignment, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(sid) DO UPDATE SET 
-                 name=excluded.name, tag=excluded.tag, description=excluded.description, 
-                 org_type=excluded.org_type, specialization=excluded.specialization,
-                 allies=excluded.allies, enemies=excluded.enemies,
-                 alignment=excluded.alignment, updated_at=excluded.updated_at"""
-        
-        params = (
-            sid, 
-            name, 
-            self.org_tag.get().upper(),
-            self.org_desc.get("0.0", "end").strip(),
-            self.org_type.get(),
-            self.org_spec.get().upper() or "GENERAL",
-            self.org_allies.get().upper(),
-            self.org_enemies.get().upper(),
-            self.org_align.get(),
-            datetime.now().strftime("%d/%m/%Y")
-        )
-
         try:
-            self.controller.db.commit(sql, params)
+            self.controller.logger.save_organization(
+                sid=sid,
+                name=name,
+                tag=self.org_tag.get(),
+                description=self.org_desc.get("0.0", "end").strip(),
+                org_type=self.org_type.get(),
+                specialization=self.org_spec.get(),
+                allies=self.org_allies.get(),
+                enemies=self.org_enemies.get(),
+                alignment=self.org_align.get(),
+                updated_at=datetime.now().strftime("%d/%m/%Y"),
+            )
             self.controller.log("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="LOGGER")
@@ -161,9 +151,7 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
-                for row in reader:
-                    sql = "INSERT OR REPLACE INTO organizations (sid, name, tag, alignment) VALUES (?,?,?,?)"
-                    self.controller.db.commit(sql, (row["sid"].upper(), row["name"], row["tag"].upper(), row["alignment"]))
+                self.controller.logger.import_organizations_csv(list(reader))
             self.controller.log("SUCCESS", "Import des organisations terminé.")
         except Exception as e:
             self.controller.log("IMPORT ERROR", str(e))
@@ -172,7 +160,7 @@ class LoggerFrame(ctk.CTkFrame):
         """Exportation CSV pour les organisations"""
         path = filedialog.asksaveasfilename(defaultextension=".csv")
         if not path: return
-        data = self.controller.db.query("SELECT sid, name, tag, alignment FROM organizations")
+        data = self.controller.logger.export_organizations_csv()
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(["sid", "name", "tag", "alignment"])
@@ -325,13 +313,10 @@ class LoggerFrame(ctk.CTkFrame):
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, "0")
 
-        existing = self.controller.db.query(
-            "SELECT org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, threat, wins, losses FROM targets WHERE pseudo = ?",
-            (h,)
-        )
+        existing = self.controller.logger.get_target_comparison_row(h)
 
         if existing:
-            row = existing[0]
+            row = existing
             same = (
                 ((row[0] or "").upper() == org_val) and
                 ((row[1] or "").upper() == sid_val) and
@@ -360,31 +345,22 @@ class LoggerFrame(ctk.CTkFrame):
                 if not confirm:
                     return
 
-        sql = """INSERT INTO targets (pseudo, org, sid, org_rank, language, affiliates, alignment, ship, pvp_lvl, activity, notes, date, threat, wins, losses)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                 ON CONFLICT(pseudo) DO UPDATE SET org=excluded.org, sid=excluded.sid, org_rank=excluded.org_rank, language=excluded.language, 
-                 affiliates=excluded.affiliates, alignment=excluded.alignment, ship=excluded.ship, pvp_lvl=excluded.pvp_lvl, 
-                 activity=excluded.activity, notes=excluded.notes, date=excluded.date, threat=excluded.threat, wins=excluded.wins, losses=excluded.losses"""
-
-        params = (
-            h,
-            org_val,
-            sid_val,
-            rank_val,
-            lang_val,
-            aff_val,
-            align_val,
-            ship_val,
-            pvp_val,
-            act_val,
-            notes_val,
-            date_val,
-            threat_val,
-            wins_val,
-            losses_val,
+        self.controller.logger.save_target(
+            pseudo=h,
+            org=org_val,
+            sid=sid_val,
+            org_rank=rank_val,
+            language=lang_val,
+            affiliates=aff_val,
+            alignment=align_val,
+            ship=ship_val,
+            pvp_lvl=pvp_val,
+            activity=act_val,
+            notes=notes_val,
+            threat=threat_val,
+            wins=wins_val,
+            losses=losses_val,
         )
-
-        self.controller.db.commit(sql, params)
         DrakePopup.info("SYSTEMS", f"Dossier {h} synchronisé.", parent=self)
         try:
             if hasattr(self.controller, "log"):
@@ -394,11 +370,8 @@ class LoggerFrame(ctk.CTkFrame):
 
     def load_target(self, event=None):
         pseudo = self.p_in.get().strip().upper()
-        rows = self.controller.db.query(
-            "SELECT * FROM targets WHERE pseudo = ?", (pseudo,)
-        )
-        if rows:
-            r = rows[0]
+        r = self.controller.logger.load_target_row(pseudo)
+        if r:
             self.o_in.delete(0, "end")
             self.o_in.insert(0, r[1] or "")
             self.s_in.delete(0, "end")
@@ -424,18 +397,7 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
-                for row in reader:
-                    self.controller.db.commit(
-                        "INSERT OR REPLACE INTO targets (pseudo, org, ship, threat, notes, alignment) VALUES (?,?,?,?,?,?)",
-                        (
-                            row["pseudo"].upper(),
-                            row["org"],
-                            row["ship"],
-                            row["threat"],
-                            row["notes"],
-                            row["alignment"],
-                        ),
-                    )
+                self.controller.logger.import_targets_csv(list(reader))
                 self.controller.log("SUCCESS", "Import terminé.", parent=self)
             try:
                 if hasattr(self.controller, "log"):
@@ -449,7 +411,7 @@ class LoggerFrame(ctk.CTkFrame):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
         if not path:
             return
-        data = self.controller.db.query("SELECT * FROM targets")
+        data = self.controller.logger.export_targets_csv()
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(

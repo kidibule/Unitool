@@ -184,26 +184,10 @@ class MainView(ctk.CTkFrame):
     def refresh_intel(self):
         """Mise à jour des données temps réel du panel de droite"""
         try:
-            rows = self.controller.db.query("SELECT alignment, ship FROM targets")
-
-            total = len(rows)
-
-            # Count open contracts in the system (status not CLOSED)
-            open_contracts = 0
-            try:
-                res = self.controller.db.query("SELECT COUNT(*) FROM contracts WHERE status!='CLOSED'")
-                if res and len(res) > 0:
-                    open_contracts = int(res[0][0])
-            except Exception:
-                open_contracts = 0
-            known_orgs = 0
-            try:
-                # On interroge la nouvelle table organizations
-                res_org = self.controller.db.query("SELECT COUNT(*) FROM organizations")
-                if res_org:
-                    known_orgs = int(res_org[0][0])
-            except Exception:
-                known_orgs = 0
+            stats = self.controller.get_dashboard_stats()
+            total = stats.get("targets", 0)
+            open_contracts = stats.get("active_contracts", 0)
+            known_orgs = stats.get("organizations", 0)
 
             self.stat_targets.configure(text=f"{total:03d}")  # Format 001, 002...
             self.stat_active_contracts.configure(

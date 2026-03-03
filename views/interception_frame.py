@@ -71,7 +71,7 @@ class InterceptionFrame(ctk.CTkFrame):
     def get_location_names(self):
         """Récupère proprement les noms pour les menus."""
         try:
-            names = self.controller.db.get_all_location_names()
+            names = self.controller.interception.get_location_names()
             return names if names else ["NO DATA"]
         except:
             return ["NO DATA"]

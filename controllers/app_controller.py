@@ -12,7 +12,6 @@ from .intelligence_controller import IntelligenceController
 from .ship_controller import ShipController
 from .org_controller import OrgController
 from .interception_controller import InterceptionController
-from controllers.org_controller import OrgController
 import logging
 import os
 
@@ -150,3 +149,20 @@ class AppController:
     def get_target_by_handle(self, handle: str) -> dict:
         """Récupère les infos d'un joueur pour la preview."""
         return self.db.get_target_by_handle(handle)
+
+    def get_dashboard_stats(self) -> dict:
+        """Retourne les compteurs affichés dans le panneau intel principal."""
+        try:
+            targets_count = self.query("SELECT COUNT(*) FROM targets")
+            active_contracts = self.query(
+                "SELECT COUNT(*) FROM contracts WHERE status != 'CLOSED'"
+            )
+            organizations_count = self.query("SELECT COUNT(*) FROM organizations")
+
+            return {
+                "targets": int(targets_count[0][0]) if targets_count else 0,
+                "active_contracts": int(active_contracts[0][0]) if active_contracts else 0,
+                "organizations": int(organizations_count[0][0]) if organizations_count else 0,
+            }
+        except Exception:
+            return {"targets": 0, "active_contracts": 0, "organizations": 0}

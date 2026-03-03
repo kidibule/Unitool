@@ -639,10 +639,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                 raise ValueError("Missing handle in scanned data")
 
             # Check existing entry
-            existing = self.controller.db.query(
-                "SELECT org, sid, org_rank, enlisted_date, language, affiliates FROM targets WHERE pseudo = ?",
-                (handle,)
-            )
+            existing = self.controller.intelligence.get_target_snapshot(handle)
 
             # Prepare scanned values for comparison
             scanned_org = (self.last_scanned_data.get("OrgaNom") or "").strip()
@@ -653,7 +650,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             scanned_aff = (self.last_scanned_data.get("Affiliates") or "").strip()
 
             if existing:
-                row = existing[0]
+                row = existing
                 same = (
                     ((str(row[0] or "")).upper() == scanned_org.upper()) and
                     ((str(row[1] or "")).upper() == scanned_sid.upper()) and
@@ -696,7 +693,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             # Proceed to upsert
             # Ensure the data uses the handle uppercase as in DB
             self.last_scanned_data["Handle"] = handle
-            self.controller.db.upsert_target_intel(self.last_scanned_data)
+            self.controller.upsert_target_intel(self.last_scanned_data)
 
             self.btn_save_db.configure(
                 fg_color="#2ecc71", text="ARCHIVÉ ✓", state="disabled"
@@ -745,7 +742,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                 # (J'assume que ton controller a une méthode pour chercher un profil)
 
-                local_data = self.controller.db.get_target_by_handle(handle)
+                local_data = self.controller.get_target_by_handle(handle)
 
                 self.details_box.delete("1.0", "end")
 
@@ -807,23 +804,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         }
 
         try:
-            # 3. Vérification via le controller (Correction du 's')
-            existing_org = self.controller.org.get_org_model(sid)
-
-            if existing_org:
-                # MISE À JOUR (Correction de .orgs -> .org)
-                self.controller.org.update_org(sid, **data_payload)
-                action_text = "UPDATED"
-            else:
-                # INSERTION PROPRE
-                columns = ["sid", "name"] + list(data_payload.keys())
-                placeholders = ", ".join(["?"] * len(columns))
-                sql = f"INSERT INTO organizations ({', '.join(columns)}) VALUES ({placeholders})"
-                
-                # On met le SID par défaut dans NAME si on n'a pas mieux
-                params = [sid, sid] + list(data_payload.values())
-                self.controller.db.commit(sql, tuple(params))
-                action_text = "ARCHIVED"
+            action_text = self.controller.intelligence.save_org_snapshot(sid, sid, data_payload)
 
             # 4. Feedback
             self.btn_save_org_db.configure(

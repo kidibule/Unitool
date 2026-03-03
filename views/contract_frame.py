@@ -297,22 +297,15 @@ class ContractFrame(ctk.CTkFrame):
                 try:
                     # Conversion en int pour être sûr de la donnée
                     reward_val = int(r.replace(".", "").replace(" ", ""))
-                    self.controller.db.commit(
-                        "INSERT INTO contract_types (name, reward) VALUES (?,?)", (n, reward_val)
-                    )
-                    if hasattr(self.controller, "log"):
-                        self.controller.log(f"TYPE REGISTERED: {n}", source="SYS_CFG")
-                    
-                    refresh_list()
-                    self.update_type_menu() # Met à jour le menu déroulant sur la frame principale
-                    n_entry.delete(0, "end")
-                    r_entry.delete(0, "end")
+                    saved = self.controller.contract.add_contract_type(n, str(reward_val))
+                    if saved:
+                        refresh_list()
+                        self.update_type_menu()
+                        n_entry.delete(0, "end")
+                        r_entry.delete(0, "end")
                 except ValueError:
                     if hasattr(self.controller, "log"):
                         self.controller.log("CONFIG ERROR: INVALID REWARD NUMBER", source="ERROR")
-                except Exception:
-                    if hasattr(self.controller, "log"):
-                        self.controller.log(f"CONFIG ERROR: {n} ALREADY EXISTS", source="ERROR")
 
         DrakeButton(f_in, text="+", width=40, command=add).pack(side="left", padx=10)
 
@@ -330,15 +323,13 @@ class ContractFrame(ctk.CTkFrame):
         btn_abort.pack(side="bottom", fill="x", padx=20, pady=(0,20))
 
         def delete(name):
-            self.controller.db.commit("DELETE FROM contract_types WHERE name=?", (name,))
-            if hasattr(self.controller, "log"):
-                self.controller.log(f"TYPE DELETED: {name}", source="SYS_CFG")
+            self.controller.contract.delete_contract_type(name)
             refresh_list()
             self.update_type_menu()
 
         def refresh_list():
             for w in scroll.winfo_children(): w.destroy()
-            rows = self.controller.db.query("SELECT * FROM contract_types")
+            rows = self.controller.contract.get_contract_types()
             for row in rows:
                 f = ctk.CTkFrame(scroll, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
                 f.pack(fill="x", pady=2, padx=5)
