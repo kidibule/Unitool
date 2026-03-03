@@ -92,15 +92,12 @@ class ShipFrame(ctk.CTkFrame):
     def setup_components_tab(self):
         """Gestion de la base de données des composants."""
         self.comp_container = ctk.CTkFrame(self.tab_components, fg_color="transparent")
-        self.comp_container.pack(fill="both", expand=True, padx=10, pady=10)
+        self.comp_container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Terminal de visualisation (Gauche)
-        self.comp_list_terminal = DrakeTerminal(self.comp_container)
-        self.comp_list_terminal.pack(side="right", fill="both", expand=True, padx=(0, 10))
-        
-        # Formulaire d'ajout (Droite)
-        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=280, fg_color=DrakeConfig.BG_MAIN)
-        self.add_comp_frame.pack(side="left", fill="y")
+        # Panneau de contrôle (Gauche)
+        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=250, fg_color=DrakeConfig.BG_MAIN)
+        self.add_comp_frame.pack(side="left", fill="y", padx=(0, 10))
+        self.add_comp_frame.pack_propagate(False)
         
         ctk.CTkLabel(self.add_comp_frame, text="ADD COMPONENT", font=("Orbitron", 14, "bold"), 
                      text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=15)
@@ -141,6 +138,20 @@ class ShipFrame(ctk.CTkFrame):
         default_cat = categories[0] if categories else "SYSTEMS"
         self.new_comp_category.set(default_cat)
         self.on_category_change(default_cat)
+
+        # Zone principale (Droite)
+        comp_main = ctk.CTkScrollableFrame(
+            self.comp_container,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text="COMPONENT CATALOG",
+            label_font=("Orbitron", 12),
+            label_text_color=DrakeConfig.ACCENT_PRIMARY,
+        )
+        comp_main.pack(side="right", fill="both", expand=True)
+
+        self.comp_list_terminal = DrakeTerminal(comp_main)
+        self.comp_list_terminal.pack(fill="both", expand=True)
+
         self.run_component_scan()
 
         # --- ONGLET LOADOUT ---
@@ -151,7 +162,7 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # --- PANNEAU DE CONTRÔLE (GAUCHE) ---
-        ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_MAIN, width=280)
+        ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_MAIN, width=250)
         ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
         ctrl_panel.pack_propagate(False)
 
@@ -203,13 +214,19 @@ class ShipFrame(ctk.CTkFrame):
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
         root = ctk.CTkFrame(self.tab_config, fg_color="transparent")
-        root.pack(fill="both", expand=True, padx=12, pady=12)
+        root.pack(fill="both", expand=True, padx=20, pady=20)
 
-        left = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_MAIN, width=340)
-        left.pack(side="left", fill="y", padx=(0, 8))
+        left = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_MAIN, width=250)
+        left.pack(side="left", fill="y", padx=(0, 10))
         left.pack_propagate(False)
 
-        right = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_TERMINAL)
+        right = ctk.CTkScrollableFrame(
+            root,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text="SLOT CONFIGURATION",
+            label_font=("Orbitron", 12),
+            label_text_color=DrakeConfig.ACCENT_PRIMARY,
+        )
         right.pack(side="right", fill="both", expand=True)
 
         ctk.CTkLabel(left, text="CONFIGURATION CATEGORIES / TYPES", font=("Orbitron", 12, "bold"),
