@@ -1,6 +1,5 @@
-from tkinter import messagebox
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
@@ -191,7 +190,7 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_status_terminal.pack(pady=5, padx=15, fill="x")
 
         # Bouton Purge (en bas)
-        DrakeButton(ctrl_panel, text="CLEAR ALL SLOTS", command=self.action_clear_loadout,
+        DrakeClearButton(ctrl_panel, text="CLEAR ALL SLOTS", command=self.action_clear_loadout,
                     fg_color="#440000", hover_color="#770000").pack(side="bottom", pady=20, padx=15, fill="x")
 
         # --- PANNEAU DES SLOTS (DROITE) ---
@@ -254,7 +253,7 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_type_selector = DrakeComboBox(left, values=[])
         self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
 
-        DrakeButton(left, text="DELETE", command=self.action_delete_subtype,
+        DrakeClearButton(left, text="DELETE", command=self.action_delete_subtype,
                     fg_color="#550000", hover_color="#770000").pack(pady=(0, 4), padx=12, fill="x")
 
         DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
@@ -291,8 +290,7 @@ class ShipFrame(ctk.CTkFrame):
         slot_actions.pack(pady=10, padx=12, fill="x")
         DrakeButton(slot_actions, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
         DrakeButton(slot_actions, text="REFRESH", command=self.refresh_config_tab).pack(side="left", padx=4)
-        DrakeButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec,
-                    fg_color="#550000", hover_color="#770000").pack(side="right", padx=4)
+        DrakeClearButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec).pack(side="right", padx=4)
 
         self.cfg_slot_terminal = DrakeTerminal(right)
         self.cfg_slot_terminal.pack(padx=12, pady=8, fill="both", expand=True)
@@ -409,11 +407,13 @@ class ShipFrame(ctk.CTkFrame):
         if not ship: return
 
         # --- CONFIGURATION FENÊTRE ---
-        edit_win = ctk.CTkToplevel(self)
-        edit_win.title(f"DRAKE SYSTEMS - DATABASE OVERRIDE: {ship_name}")
-        edit_win.geometry("800x700")
-        edit_win.after(10, edit_win.lift)
-        edit_win.configure(fg_color=DrakeConfig.BG_PANEL)
+        edit_win = DrakeConfig.create_modal_window(
+            parent=self,
+            title=f"DRAKE SYSTEMS - DATABASE OVERRIDE: {ship_name}",
+            geometry="800x700",
+            fg_color=DrakeConfig.BG_PANEL,
+            resizable=True,
+        )
 
         # Header stylisé
         header = ctk.CTkFrame(edit_win, fg_color=DrakeConfig.ACCENT_PRIMARY, height=50, corner_radius=0)
@@ -605,7 +605,7 @@ class ShipFrame(ctk.CTkFrame):
         profile_name = self._get_active_profile()
         if not ship_name: return
         
-        if messagebox.askyesno("DRAKE OS", f"WIPE PROFILE [{profile_name}] FOR {ship_name}?"):
+        if DrakePopup.yesno("DRAKE OS", f"WIPE PROFILE [{profile_name}] FOR {ship_name}?", parent=self):
             self.controller.ship.clear_ship_loadout(ship_name, profile_name)
             # Rafraîchissement de l'interface
             self.refresh_loadout_view(ship_name)
@@ -651,7 +651,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_type(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            messagebox.showwarning("DRAKE OS", "TYPE requis")
+            DrakePopup.warning("DRAKE OS", "TYPE requis", parent=self)
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -662,7 +662,7 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
         except Exception as e:
-            messagebox.showerror("DRAKE OS", str(e))
+            DrakePopup.error("DRAKE OS", str(e), parent=self)
 
     def refresh_type_terminal(self):
         return
@@ -670,7 +670,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_category(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            messagebox.showwarning("DRAKE OS", "CATÉGORIE requise")
+            DrakePopup.warning("DRAKE OS", "CATÉGORIE requise", parent=self)
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -681,13 +681,13 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
         except Exception as e:
-            messagebox.showerror("DRAKE OS", str(e))
+            DrakePopup.error("DRAKE OS", str(e), parent=self)
 
     def action_add_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
         subtype = self.cfg_type_entry.get().strip().upper()
         if not category or not subtype:
-            messagebox.showwarning("DRAKE OS", "CATÉGORIE et TYPE requis")
+            DrakePopup.warning("DRAKE OS", "CATÉGORIE et TYPE requis", parent=self)
             return
         try:
             self.controller.ship.create_component_subtype(category, subtype)
@@ -696,14 +696,14 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_slot_category_change(self.cfg_slot_category.get())
             self.on_category_change(self.new_comp_category.get())
         except Exception as e:
-            messagebox.showerror("DRAKE OS", str(e))
+            DrakePopup.error("DRAKE OS", str(e), parent=self)
 
     def action_delete_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
         subtype = self.cfg_type_selector.get().strip().upper()
         if not subtype or subtype == "NO DATA":
             return
-        if not messagebox.askyesno("DRAKE OS", f"DELETE TYPE {subtype} ?"):
+        if not DrakePopup.yesno("DRAKE OS", f"DELETE TYPE {subtype} ?", parent=self):
             return
         self.controller.ship.delete_component_subtype(category, subtype)
         self.on_cfg_type_category_change(category)
@@ -807,7 +807,7 @@ class ShipFrame(ctk.CTkFrame):
         if category == "WEAPON":
             subtype = "GENERIC"
         if not ship_name or not category or not subtype:
-            messagebox.showwarning("DRAKE OS", "SHIP / CATEGORY / SUBTYPE requis")
+            DrakePopup.warning("DRAKE OS", "SHIP / CATEGORY / SUBTYPE requis", parent=self)
             return
         try:
             qty = int(self.cfg_slot_qty.get().strip())
@@ -817,7 +817,7 @@ class ShipFrame(ctk.CTkFrame):
             if self.lo_ship_selector.get().strip().upper() == ship_name:
                 self.refresh_loadout_view(ship_name)
         except Exception as e:
-            messagebox.showerror("DRAKE OS", str(e))
+            DrakePopup.error("DRAKE OS", str(e), parent=self)
 
     def action_delete_slot_spec(self):
         ship_name = self.cfg_slot_ship.get().strip().upper()
@@ -825,7 +825,7 @@ class ShipFrame(ctk.CTkFrame):
         if not ship_name or not selection or selection == "NO DATA" or "::" not in selection:
             return
         cat, subtype = selection.split("::", 1)
-        if not messagebox.askyesno("DRAKE OS", f"DELETE SLOT SPEC {cat}::{subtype} ?"):
+        if not DrakePopup.yesno("DRAKE OS", f"DELETE SLOT SPEC {cat}::{subtype} ?", parent=self):
             return
         self.controller.ship.delete_subtype_spec(ship_name, cat, subtype)
         self.refresh_slot_terminal()
@@ -865,12 +865,12 @@ class ShipFrame(ctk.CTkFrame):
     def action_create_profile(self):
         ship_name = self.lo_ship_selector.get()
         if not ship_name:
-            messagebox.showwarning("DRAKE OS", "SELECT A SHIP FIRST.")
+            DrakePopup.warning("DRAKE OS", "SELECT A SHIP FIRST.", parent=self)
             return
 
         new_profile = self.lo_new_profile.get().strip().upper()
         if not new_profile:
-            messagebox.showwarning("DRAKE OS", "ENTER A PROFILE NAME.")
+            DrakePopup.warning("DRAKE OS", "ENTER A PROFILE NAME.", parent=self)
             return
 
         source_profile = self._get_active_profile()
@@ -881,7 +881,7 @@ class ShipFrame(ctk.CTkFrame):
             overwrite=False,
         )
         if not created:
-            messagebox.showwarning("DRAKE OS", f"PROFILE {new_profile} ALREADY EXISTS.")
+            DrakePopup.warning("DRAKE OS", f"PROFILE {new_profile} ALREADY EXISTS.", parent=self)
             return
 
         self.lo_new_profile.delete(0, "end")

@@ -65,6 +65,54 @@ class DrakeConfig:
 
         return label
 
+    @staticmethod
+    def create_modal_window(
+        parent,
+        title: str,
+        geometry: str = "500x220",
+        fg_color: Optional[str] = None,
+        resizable: bool = False,
+    ):
+        """Crée une fenêtre modale toujours au premier plan de la fenêtre principale."""
+        owner = None
+        try:
+            if parent is not None and hasattr(parent, "winfo_toplevel"):
+                owner = parent.winfo_toplevel()
+            else:
+                owner = parent
+        except Exception:
+            owner = parent
+
+        popup = ctk.CTkToplevel(owner if owner is not None else parent)
+        popup.title(title)
+        popup.geometry(geometry)
+        popup.configure(fg_color=fg_color or DrakeConfig.BG_MAIN)
+        popup.resizable(resizable, resizable)
+
+        if owner is not None:
+            try:
+                popup.transient(owner)
+            except Exception:
+                pass
+
+        try:
+            popup.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        try:
+            popup.lift()
+            popup.focus_force()
+        except Exception:
+            pass
+
+        try:
+            popup.grab_set()
+        except Exception:
+            pass
+
+        return popup
+
 
 # ==========================================
 # 2. COMPOSANTS PRÉ-STYLISEZ (BIBLIOTHÈQUE)
@@ -136,14 +184,13 @@ class DrakePopup:
     @staticmethod
     def info(title: str, message: str, parent=None):
         """Popup d'information avec bouton OK."""
-        popup = ctk.CTkToplevel(parent)
-        popup.title(title)
-        popup.geometry("500x200")
-        popup.configure(fg_color=DrakeConfig.BG_MAIN)
-        popup.resizable(False, False)
-        if parent:
-            popup.transient(parent)
-            popup.grab_set()
+        popup = DrakeConfig.create_modal_window(
+            parent=parent,
+            title=title,
+            geometry="500x200",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=False,
+        )
 
         # Frame principal
         frame = ctk.CTkFrame(popup, fg_color="transparent")
@@ -180,14 +227,13 @@ class DrakePopup:
         """Popup yes/no avec deux boutons. Retourne True si oui, False si non."""
         result = {"value": None}
 
-        popup = ctk.CTkToplevel(parent)
-        popup.title(title)
-        popup.geometry("500x220")
-        popup.configure(fg_color=DrakeConfig.BG_MAIN)
-        popup.resizable(False, False)
-        if parent:
-            popup.transient(parent)
-            popup.grab_set()
+        popup = DrakeConfig.create_modal_window(
+            parent=parent,
+            title=title,
+            geometry="500x220",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=False,
+        )
 
         # Frame principal
         frame = ctk.CTkFrame(popup, fg_color="transparent")
@@ -243,14 +289,13 @@ class DrakePopup:
     @staticmethod
     def error(title: str, message: str, parent=None):
         """Popup erreur avec titre et message en rouge."""
-        popup = ctk.CTkToplevel(parent)
-        popup.title(title)
-        popup.geometry("500x220")
-        popup.configure(fg_color=DrakeConfig.BG_MAIN)
-        popup.resizable(False, False)
-        if parent:
-            popup.transient(parent)
-            popup.grab_set()
+        popup = DrakeConfig.create_modal_window(
+            parent=parent,
+            title=title,
+            geometry="500x220",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=False,
+        )
 
         # Frame principal
         frame = ctk.CTkFrame(popup, fg_color="transparent")
@@ -284,6 +329,46 @@ class DrakePopup:
             fg_color=DrakeConfig.ACCENT_ERROR,
             hover_color="#cc0000",
             command=close_popup,
+            height=40,
+        ).pack(fill="x", pady=(10, 0))
+
+    @staticmethod
+    def warning(title: str, message: str, parent=None):
+        """Popup avertissement avec style Drake (accent orange)."""
+        popup = DrakeConfig.create_modal_window(
+            parent=parent,
+            title=title,
+            geometry="500x220",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=False,
+        )
+
+        frame = ctk.CTkFrame(popup, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            frame,
+            text=title.upper(),
+            font=DrakeConfig.FONT_TITLE,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(0, 10))
+
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=("Segoe UI", 11),
+            text_color=DrakeConfig.TEXT_MAIN,
+            wraplength=450,
+            justify="left",
+        ).pack(pady=10, fill="both", expand=True)
+
+        DrakeButton(
+            frame,
+            text="OK",
+            fg_color=DrakeConfig.ACCENT_PRIMARY,
+            hover_color=DrakeConfig.ACCENT_HOVER,
+            text_color="#000000",
+            command=popup.destroy,
             height=40,
         ).pack(fill="x", pady=(10, 0))
 
@@ -631,3 +716,21 @@ class DrakeTitle4(ctk.CTkLabel):
             text_color=DrakeConfig.TEXT_SECONDARY,
             **kwargs
         )
+
+class DrakeClearButton(DrakeButton):
+    """Bouton de réinitialisation stylisé pour les actions de reset."""
+
+    def __init__(self, master, **kwargs) -> None:
+        defaults = {
+            "text": "RESET",
+            "width": 60,
+            "height": 30,
+            "fg_color": "transparent",
+            "border_width": 1,
+            "border_color": DrakeConfig.ACCENT_ERROR,
+            "text_color": DrakeConfig.ACCENT_ERROR,
+            "hover_color": "#331111",
+            "font": DrakeConfig.FONT_LOGS,
+        }
+        defaults.update(kwargs)
+        super().__init__(master, **defaults)

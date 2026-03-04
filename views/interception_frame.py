@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton
+from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearButton
 
 class InterceptionFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -31,12 +31,7 @@ class InterceptionFrame(ctk.CTkFrame):
         btn_add.pack(side="left", padx=2)
 
         # Bouton Reset (Style Alerte/Erreur)
-        self.btn_clear = DrakeButton(f_sources, text="RESET", width=60, height=30,
-                         fg_color="transparent", border_width=1,
-                         border_color=DrakeConfig.ACCENT_ERROR,
-                         text_color=DrakeConfig.ACCENT_ERROR,
-                         hover_color="#331111",
-                         font=DrakeConfig.FONT_LOGS,
+        self.btn_clear = DrakeClearButton(f_sources,
                          command=self.clear_sources)
         self.btn_clear.pack(side="left", padx=2)
 

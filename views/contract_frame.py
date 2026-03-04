@@ -282,11 +282,13 @@ class ContractFrame(ctk.CTkFrame):
 
     def open_type_manager(self):
         """Ouvre la fenêtre de configuration des types de contrats."""
-        toplevel = ctk.CTkToplevel(self)
-        toplevel.title("DRAKE - TYPE CONFIGURATION")
-        toplevel.geometry("500x450")
-        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
-        toplevel.attributes("-topmost", True)
+        toplevel = DrakeConfig.create_modal_window(
+            parent=self,
+            title="DRAKE - TYPE CONFIGURATION",
+            geometry="500x450",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=True,
+        )
         
         # Titre interne à la popup
         ctk.CTkLabel(toplevel, text="CONTRACT TYPES DATABASE", 

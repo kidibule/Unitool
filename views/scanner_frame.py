@@ -216,12 +216,13 @@ class ScannerFrame(ctk.CTkFrame):
 
     def edit_target_window(self, pseudo):
         """Fenêtre d'édition — HANDLE et CREATION en lecture seule."""
-        toplevel = ctk.CTkToplevel(self)
-        toplevel.title(f"MODIFICATION DOSSIER : {pseudo}")
-        toplevel.geometry("700x700")
-        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
-        toplevel.transient(self)
-        toplevel.grab_set()
+        toplevel = DrakeConfig.create_modal_window(
+            parent=self,
+            title=f"MODIFICATION DOSSIER : {pseudo}",
+            geometry="700x700",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=True,
+        )
 
         row = self.controller.scanner.get_target_full(pseudo)
         if not row:
@@ -449,12 +450,13 @@ class ScannerFrame(ctk.CTkFrame):
 
     def edit_org_window(self, sid):
         """Fenêtre d'édition Orga — Structure calquée sur le dossier Target."""
-        toplevel = ctk.CTkToplevel(self)
-        toplevel.title(f"MODIFICATION DOSSIER CORPORATE : {sid}")
-        toplevel.geometry("700x800")
-        toplevel.configure(fg_color=DrakeConfig.BG_MAIN)
-        toplevel.transient(self)
-        toplevel.grab_set()
+        toplevel = DrakeConfig.create_modal_window(
+            parent=self,
+            title=f"MODIFICATION DOSSIER CORPORATE : {sid}",
+            geometry="700x800",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=True,
+        )
 
         # Récupération du modèle via le controller
         org = self.controller.org.get_org_model(sid)
