@@ -1,6 +1,6 @@
 from tkinter import messagebox
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox,DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
@@ -65,7 +65,7 @@ class ShipFrame(ctk.CTkFrame):
 
     def setup_ships_tab(self):
         """Moteur de recherche et fiches techniques."""
-        self.ship_search_entry = ctk.CTkEntry(
+        self.ship_search_entry = DrakeEntry(
             self.tab_ships, placeholder_text="RECHERCHER UN VAISSEAU (NOM OU RÔLE)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
@@ -111,10 +111,10 @@ class ShipFrame(ctk.CTkFrame):
         self.new_comp_type = DrakeComboBox(self.add_comp_frame, values=[])
         self.new_comp_type.pack(pady=5, padx=15, fill="x")
 
-        self.new_comp_name = ctk.CTkEntry(self.add_comp_frame, placeholder_text="MODEL NAME (ex: FR-66)")
+        self.new_comp_name = DrakeEntry(self.add_comp_frame, placeholder_text="MODEL NAME (ex: FR-66)")
         self.new_comp_name.pack(pady=5, padx=15, fill="x")
         
-        self.new_comp_brand = ctk.CTkEntry(self.add_comp_frame, placeholder_text="MANUFACTURER (ex: AEGIS)")
+        self.new_comp_brand = DrakeEntry(self.add_comp_frame, placeholder_text="MANUFACTURER (ex: AEGIS)")
         self.new_comp_brand.pack(pady=5, padx=15, fill="x")
 
         DrakeTitle4(self.add_comp_frame, "SIZE").pack(pady=(0, 2), padx=10)
@@ -180,7 +180,7 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_profile_selector.set("DEFAULT")
         self.lo_profile_selector.pack(pady=5, padx=15, fill="x")
 
-        self.lo_new_profile = ctk.CTkEntry(ctrl_panel, placeholder_text="NEW PROFILE NAME")
+        self.lo_new_profile = DrakeEntry(ctrl_panel, placeholder_text="NEW PROFILE NAME")
         self.lo_new_profile.pack(pady=(8, 5), padx=15, fill="x")
 
         DrakeButton(ctrl_panel, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
@@ -230,7 +230,7 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeTitle4(left, text="--- CATEGORY ---").pack(pady=(4, 2), padx=12)
 
-        self.cfg_type_new_category = ctk.CTkEntry(left, placeholder_text="NEW CATEGORY NAME (ex: WEAPON)")
+        self.cfg_type_new_category = DrakeEntry(left, placeholder_text="NEW CATEGORY NAME (ex: WEAPON)")
         self.cfg_type_new_category.pack(pady=4, padx=12, fill="x")
 
         DrakeButton(left, text="ADD CATEGORY", command=self.action_add_category).pack(pady=(0, 4), padx=12, fill="x")
@@ -241,7 +241,7 @@ class ShipFrame(ctk.CTkFrame):
 
         categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
 
-        self.cfg_type_entry = ctk.CTkEntry(left, placeholder_text="NEW TYPE NAME (ex: SHIELD GENERATOR)")
+        self.cfg_type_entry = DrakeEntry(left, placeholder_text="NEW TYPE NAME (ex: SHIELD GENERATOR)")
         self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
 
         DrakeTitle4(left, text="CATEGORY").pack(pady=(0, 2), padx=12)
@@ -276,11 +276,11 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_slot_subtype.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="MAX QTY").pack(pady=(0, 4))
-        self.cfg_slot_qty = ctk.CTkEntry(row1, placeholder_text="ex: 2")
+        self.cfg_slot_qty = DrakeEntry(row1, placeholder_text="ex: 2")
         self.cfg_slot_qty.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="MAX SIZE").pack(pady=(0, 4))
-        self.cfg_slot_size = ctk.CTkEntry(row1, placeholder_text="ex: 1")
+        self.cfg_slot_size = DrakeEntry(row1, placeholder_text="ex: 1")
         self.cfg_slot_size.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="EXISTING SLOTS").pack(pady=(0, 4))
@@ -434,7 +434,7 @@ class ShipFrame(ctk.CTkFrame):
 
         def create_field(parent, label, key, default_val):
             self._create_form_label(parent, label)
-            entry = ctk.CTkEntry(parent, fg_color=DrakeConfig.BG_PANEL, border_color="#333333")
+            entry = DrakeEntry(parent, fg_color=DrakeConfig.BG_PANEL, border_color="#333333")
             entry.insert(0, str(default_val))
             entry.pack(fill="x", padx=20, pady=5)
             self.edit_entries[key] = entry

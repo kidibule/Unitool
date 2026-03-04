@@ -31,13 +31,13 @@ class InterceptionFrame(ctk.CTkFrame):
         btn_add.pack(side="left", padx=2)
 
         # Bouton Reset (Style Alerte/Erreur)
-        self.btn_clear = ctk.CTkButton(f_sources, text="RESET", width=60, height=30,
-                                      fg_color="transparent", border_width=1,
-                                      border_color=DrakeConfig.ACCENT_ERROR,
-                                      text_color=DrakeConfig.ACCENT_ERROR,
-                                      hover_color="#331111",
-                                      font=DrakeConfig.FONT_LOGS,
-                                      command=self.clear_sources)
+        self.btn_clear = DrakeButton(f_sources, text="RESET", width=60, height=30,
+                         fg_color="transparent", border_width=1,
+                         border_color=DrakeConfig.ACCENT_ERROR,
+                         text_color=DrakeConfig.ACCENT_ERROR,
+                         hover_color="#331111",
+                         font=DrakeConfig.FONT_LOGS,
+                         command=self.clear_sources)
         self.btn_clear.pack(side="left", padx=2)
 
         # --- COMPTEUR DE SÉLECTION ---

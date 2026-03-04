@@ -2,7 +2,7 @@
 
 import customtkinter as ctk
 import tkinter as tk
-from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton
+from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton, DrakeEntry
 
 
 def format_int_with_dots(value) -> str:
@@ -52,17 +52,17 @@ class ContractFrame(ctk.CTkFrame):
         }   
         
         # On utilise .grid() au lieu de .pack()
-        self.target_in = ctk.CTkEntry(f_add, placeholder_text="TARGET ID", **entry_kwargs)
+        self.target_in = DrakeEntry(f_add, placeholder_text="TARGET ID", **entry_kwargs)
         self.target_in.grid(row=0, column=0, padx=5, pady=15, sticky="ew")
         self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
         self.target_in.bind("<FocusOut>", self._on_focus_out)
 
-        self.client_in = ctk.CTkEntry(f_add, placeholder_text="CLIENT ID", **entry_kwargs)
+        self.client_in = DrakeEntry(f_add, placeholder_text="CLIENT ID", **entry_kwargs)
         self.client_in.grid(row=0, column=1, padx=5, pady=15, sticky="ew")
         self.client_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.client_in))
         self.client_in.bind("<FocusOut>", self._on_focus_out)
         
-        self.reward_in = ctk.CTkEntry(f_add, placeholder_text="REWARD", **entry_kwargs)
+        self.reward_in = DrakeEntry(f_add, placeholder_text="REWARD", **entry_kwargs)
         self.reward_in.grid(row=0, column=2, padx=5, pady=15, sticky="ew")
 
         self.type_var = ctk.StringVar(value="TYPE")
@@ -88,7 +88,7 @@ class ContractFrame(ctk.CTkFrame):
         DrakeButton(f_add, text="ACCEPT", width=140, command=self.add_contract).grid(row=0, column=5, padx=10, pady=15)
         
           # Gestion des Types (Petit bouton discret)
-        ctk.CTkButton(
+        DrakeButton(
             self,
             text="EDIT TYPES",
             command=self.open_type_manager, # On pointe vers la nouvelle méthode
@@ -164,8 +164,8 @@ class ContractFrame(ctk.CTkFrame):
         f.pack(pady=1, fill="x", padx=5)
         txt = f">> {c.priority} | COMPLETED: {c.target} | RECEIVED: {format_int_with_dots(c.reward)} aUEC"
         ctk.CTkLabel(f, text=txt, font=DrakeConfig.FONT_LOGS, text_color=DrakeConfig.TEXT_SECONDARY).pack(side="left", padx=10)
-        ctk.CTkButton(f, text="[DEL]", fg_color="transparent", text_color="#444", hover_color=DrakeConfig.ACCENT_ERROR,
-                      width=20, height=18, command=lambda: self.delete_history(c.id)).pack(side="right", padx=5)
+        DrakeButton(f, text="[DEL]", fg_color="transparent", text_color="#444", hover_color=DrakeConfig.ACCENT_ERROR,
+                width=20, height=18, command=lambda: self.delete_history(c.id)).pack(side="right", padx=5)
 
     def add_contract(self):
         if hasattr(self.type_menu, "close_dropdown"):
@@ -297,12 +297,12 @@ class ContractFrame(ctk.CTkFrame):
                            border_width=1, border_color=DrakeConfig.BORDER_COLOR)
         f_in.pack(fill="x", padx=20, pady=10)
 
-        n_entry = ctk.CTkEntry(f_in, placeholder_text="TYPE NAME", font=DrakeConfig.FONT_LOGS, 
-                               fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        n_entry = DrakeEntry(f_in, placeholder_text="TYPE NAME", font=DrakeConfig.FONT_LOGS, 
+                     fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
         n_entry.pack(side="left", padx=10, pady=15, expand=True, fill="x")
         
-        r_entry = ctk.CTkEntry(f_in, placeholder_text="REWARD (aUEC)", font=DrakeConfig.FONT_LOGS,
-                               fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        r_entry = DrakeEntry(f_in, placeholder_text="REWARD (aUEC)", font=DrakeConfig.FONT_LOGS,
+                     fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
         r_entry.pack(side="left", padx=5, pady=15)
 
         def add():
@@ -351,9 +351,9 @@ class ContractFrame(ctk.CTkFrame):
                 ctk.CTkLabel(f, text=f"{row[0]}", font=DrakeConfig.FONT_LOGS, width=150, anchor="w").pack(side="left", padx=10)
                 ctk.CTkLabel(f, text=f"{format_int_with_dots(row[1])} aUEC", font=DrakeConfig.FONT_LOGS, text_color=DrakeConfig.TEXT_SECONDARY).pack(side="left", padx=5)
                 
-                ctk.CTkButton(f, text="[ DELETE ]", width=70, height=20, 
-                              fg_color="transparent", text_color=DrakeConfig.ACCENT_ERROR,
-                              hover_color="#330000", font=("Segoe UI", 8, "bold"),
-                              command=lambda n=row[0]: delete(n)).pack(side="right", padx=5)
+                DrakeButton(f, text="[ DELETE ]", width=70, height=20, 
+                            fg_color="transparent", text_color=DrakeConfig.ACCENT_ERROR,
+                            hover_color="#330000", font=("Segoe UI", 8, "bold"),
+                            command=lambda n=row[0]: delete(n)).pack(side="right", padx=5)
 
         refresh_list()

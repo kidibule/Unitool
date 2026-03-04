@@ -3,11 +3,10 @@
 Contient :
 - `DrakeConfig` : constantes de thème (couleurs, polices, espacement)
 - `DrakeButton` : bouton pré-stylisé
+- `DrakeEntry` : champ texte pré-stylisé
 - `DrakeTerminal` : zone texte / console stylisée
 - `DrakeApp` : petite application de démonstration (utilitaire)
 """
-
-from turtle import width
 
 import customtkinter as ctk
 from typing import Tuple, Optional
@@ -82,6 +81,23 @@ class DrakeButton(ctk.CTkButton):
             "text_color": "#000000",
             "font": DrakeConfig.FONT_UI,
             "corner_radius": DrakeConfig.CORNER_RADIUS,
+            "height": 35,
+        }
+        defaults.update(kwargs)
+        super().__init__(master, **defaults)
+
+
+class DrakeEntry(ctk.CTkEntry):
+    """Champ texte pré-configuré selon la charte Drake."""
+
+    def __init__(self, master, **kwargs) -> None:
+        defaults = {
+            "font": DrakeConfig.FONT_LOGS,
+            "fg_color": DrakeConfig.BG_TERMINAL,
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "border_color": DrakeConfig.BORDER_COLOR,
+            "border_width": DrakeConfig.BORDER_WIDTH,
+            "corner_radius": 0,
             "height": 35,
         }
         defaults.update(kwargs)

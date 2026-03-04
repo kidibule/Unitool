@@ -9,7 +9,7 @@ import webbrowser
 import csv
 import json
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox, DrakeEntry
 
 
 def format_int_with_dots(value) -> str:
@@ -71,7 +71,7 @@ class ScannerFrame(ctk.CTkFrame):
 
     def setup_targets_tab(self):
         """Configure l'onglet de recherche de joueurs."""
-        self.search_entry = ctk.CTkEntry(
+        self.search_entry = DrakeEntry(
             self.tab_targets, placeholder_text="ENTREZ UN PSEUDO OU UN SID...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
@@ -84,7 +84,7 @@ class ScannerFrame(ctk.CTkFrame):
    
     def setup_orgs_tab(self):
         """Configure l'onglet de recherche d'organisations."""
-        self.org_search_entry = ctk.CTkEntry(
+        self.org_search_entry = DrakeEntry(
             self.tab_orgs, placeholder_text="RECHERCHER UNE ORGA (NOM OU SID)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
@@ -236,14 +236,14 @@ class ScannerFrame(ctk.CTkFrame):
         meta = ctk.CTkFrame(frame, fg_color="transparent")
         meta.pack(fill="x", pady=6)
         ctk.CTkLabel(meta, text="HANDLE", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
-        handle_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        handle_entry = DrakeEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
         handle_entry.insert(0, str(pseudo).upper())
         handle_entry.configure(state="disabled")
         handle_entry.pack(side="left", fill="x", expand=True, padx=6)
 
         ctk.CTkLabel(meta, text="CREATION", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
         creation_val = d[13] if len(d) > 13 else (d[6] if len(d) > 6 else "")
-        created_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        created_entry = DrakeEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
         created_entry.insert(0, creation_val)
         created_entry.configure(state="disabled")
         created_entry.pack(side="left", fill="x", expand=True, padx=6)
@@ -252,7 +252,7 @@ class ScannerFrame(ctk.CTkFrame):
             f = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
             f.pack(fill="x", pady=4)
             ctk.CTkLabel(f, text=label.upper(), font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
-            e = ctk.CTkEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+            e = DrakeEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
             e.insert(0, str(value) if value not in [None, "None"] else "")
             e.pack(side="right", fill="x", expand=True, padx=8, pady=6)
             return e
@@ -316,7 +316,7 @@ class ScannerFrame(ctk.CTkFrame):
                 DrakePopup.error("ERREUR SQL", f"Détails : {e}", parent=main_win)
 
         
-        btn_cancel = ctk.CTkButton(
+        btn_cancel = DrakeButton(
             toplevel, 
             text="CANCEL", 
             fg_color="transparent", 
@@ -473,13 +473,13 @@ class ScannerFrame(ctk.CTkFrame):
         meta.pack(fill="x", pady=6)
         
         ctk.CTkLabel(meta, text="SID", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
-        sid_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        sid_entry = DrakeEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
         sid_entry.insert(0, str(sid).upper())
         sid_entry.configure(state="disabled")
         sid_entry.pack(side="left", fill="x", expand=True, padx=6)
 
         ctk.CTkLabel(meta, text="DERNIÈRE MAJ", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
-        update_entry = ctk.CTkEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
+        update_entry = DrakeEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
         update_entry.insert(0, org.updated_at if org.updated_at else "INCONNUE")
         update_entry.configure(state="disabled")
         update_entry.pack(side="left", fill="x", expand=True, padx=6)
@@ -489,7 +489,7 @@ class ScannerFrame(ctk.CTkFrame):
             f = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
             f.pack(fill="x", pady=4)
             ctk.CTkLabel(f, text=label.upper(), font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
-            e = ctk.CTkEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+            e = DrakeEntry(f, fg_color=DrakeConfig.BG_TERMINAL, border_width=1, border_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
             e.insert(0, str(value) if value not in [None, "None", "NONE"] else "")
             e.pack(side="right", fill="x", expand=True, padx=8, pady=6)
             return e
@@ -546,6 +546,6 @@ class ScannerFrame(ctk.CTkFrame):
         btn_save = DrakeButton(toplevel, text="SYNCHRONISER LA DATABASE", command=save_changes, height=45)
         btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 20))
 
-        btn_cancel = ctk.CTkButton(toplevel, text="ABANDONNER", fg_color="transparent", border_width=1, 
-                                border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
+        btn_cancel = DrakeButton(toplevel, text="ABANDONNER", fg_color="transparent", border_width=1, 
+                     border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
         btn_cancel.pack(side="bottom", fill="x", padx=20, pady=0)

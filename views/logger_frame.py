@@ -4,7 +4,7 @@ import customtkinter as ctk
 import csv
 from datetime import datetime
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry
 from controllers.ship_controller import ShipController
 
 
@@ -57,13 +57,13 @@ class LoggerFrame(ctk.CTkFrame):
         f_top = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_top.pack(pady=(20, 5), padx=50, fill="x")
 
-        self.org_sid = ctk.CTkEntry(f_top, placeholder_text="SID (RSI URL ID)", **entry_kwargs)
+        self.org_sid = DrakeEntry(f_top, placeholder_text="SID (RSI URL ID)", **entry_kwargs)
         self.org_sid.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        self.org_tag = ctk.CTkEntry(f_top, placeholder_text="TAG (ex: UEE)", width=120, **entry_kwargs)
+        self.org_tag = DrakeEntry(f_top, placeholder_text="TAG (ex: UEE)", width=120, **entry_kwargs)
         self.org_tag.pack(side="right")
 
-        self.org_name = ctk.CTkEntry(self.tab_orgs, placeholder_text="ORGANIZATION NAME", **entry_kwargs)
+        self.org_name = DrakeEntry(self.tab_orgs, placeholder_text="ORGANIZATION NAME", **entry_kwargs)
         self.org_name.pack(pady=5, padx=50, fill="x")
 
         # --- SECTION 2 : TYPE & ALIGNEMENT ---
@@ -79,16 +79,16 @@ class LoggerFrame(ctk.CTkFrame):
         self.org_align.set("NEUTRE")
 
         # --- SECTION 3 : SPÉCIALISATION & DIPLOMATIE ---
-        self.org_spec = ctk.CTkEntry(self.tab_orgs, placeholder_text="SPECIALIZATION", **entry_kwargs)
+        self.org_spec = DrakeEntry(self.tab_orgs, placeholder_text="SPECIALIZATION", **entry_kwargs)
         self.org_spec.pack(pady=5, padx=50, fill="x")
 
         f_diplomacy = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_diplomacy.pack(pady=5, padx=50, fill="x")
 
-        self.org_allies = ctk.CTkEntry(f_diplomacy, placeholder_text="ALLIES (TAGS)", **entry_kwargs)
+        self.org_allies = DrakeEntry(f_diplomacy, placeholder_text="ALLIES (TAGS)", **entry_kwargs)
         self.org_allies.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
-        self.org_enemies = ctk.CTkEntry(f_diplomacy, placeholder_text="ENEMIES (TAGS)", **entry_kwargs)
+        self.org_enemies = DrakeEntry(f_diplomacy, placeholder_text="ENEMIES (TAGS)", **entry_kwargs)
         self.org_enemies.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
         # --- SECTION 4 : NOTES (Avec titre de section) ---
@@ -106,12 +106,12 @@ class LoggerFrame(ctk.CTkFrame):
         f_utils = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
         f_utils.pack(fill="x", padx=50, pady=(0, 20))
         
-        ctk.CTkButton(f_utils, text="IMPORT CSV", command=self.import_orgs_csv, 
-                      fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_utils, text="EXPORT CSV", command=self.export_orgs_csv, 
-                      fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_utils, text="CLEAR", command=self.clear_org_fields, 
-                      fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="IMPORT CSV", command=self.import_orgs_csv, 
+                fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="EXPORT CSV", command=self.export_orgs_csv, 
+                fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="CLEAR", command=self.clear_org_fields, 
+                fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
 
     # --- LOGIQUE DE SAUVEGARDE ET UTILITAIRES POUR LES ORGAS ---
 
@@ -195,7 +195,7 @@ class LoggerFrame(ctk.CTkFrame):
         f_top = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_top.pack(pady=(20, 10), padx=50, fill="x")
 
-        self.p_in = ctk.CTkEntry(f_top, placeholder_text="TARGET HANDLE", **entry_kwargs)
+        self.p_in = DrakeEntry(f_top, placeholder_text="TARGET HANDLE", **entry_kwargs)
         self.p_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.p_in.bind("<Return>", self.load_target)
 
@@ -207,27 +207,27 @@ class LoggerFrame(ctk.CTkFrame):
         # --- 2. DONNÉES RSI (ORG, SID, RANK) ---
         f_rsi = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_rsi.pack(pady=5, padx=50, fill="x")
-        self.o_in = ctk.CTkEntry(f_rsi, placeholder_text="ORGANIZATION", **entry_kwargs)
+        self.o_in = DrakeEntry(f_rsi, placeholder_text="ORGANIZATION", **entry_kwargs)
         self.o_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.sid_in = ctk.CTkEntry(f_rsi, placeholder_text="SID", **entry_kwargs)
+        self.sid_in = DrakeEntry(f_rsi, placeholder_text="SID", **entry_kwargs)
         self.sid_in.pack(side="left", fill="x", expand=True, padx=5)
-        self.rank_in = ctk.CTkEntry(f_rsi, placeholder_text="RANK", **entry_kwargs)
+        self.rank_in = DrakeEntry(f_rsi, placeholder_text="RANK", **entry_kwargs)
         self.rank_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 3. INFOS COMPLÉMENTAIRES ---
         f_info = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_info.pack(pady=5, padx=50, fill="x")
-        self.lang_in = ctk.CTkEntry(f_info, placeholder_text="LANGUAGE", **entry_kwargs)
+        self.lang_in = DrakeEntry(f_info, placeholder_text="LANGUAGE", **entry_kwargs)
         self.lang_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.aff_in = ctk.CTkEntry(f_info, placeholder_text="AFFILIATES", **entry_kwargs)
+        self.aff_in = DrakeEntry(f_info, placeholder_text="AFFILIATES", **entry_kwargs)
         self.aff_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 4. COMBAT STATS (WINS / LOSSES) ---
         f_stats = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_stats.pack(pady=5, padx=50, fill="x")
-        self.wins_in = ctk.CTkEntry(f_stats, placeholder_text="WINS", **entry_kwargs)
+        self.wins_in = DrakeEntry(f_stats, placeholder_text="WINS", **entry_kwargs)
         self.wins_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.loss_in = ctk.CTkEntry(f_stats, placeholder_text="LOSSES", **entry_kwargs)
+        self.loss_in = DrakeEntry(f_stats, placeholder_text="LOSSES", **entry_kwargs)
         self.loss_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         #--- 5. ALIGNEMENT & PROFIL ---
@@ -252,7 +252,7 @@ class LoggerFrame(ctk.CTkFrame):
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-        self.s_in = ctk.CTkEntry(self.tab_targets, placeholder_text="CURRENT SHIP", **entry_kwargs)
+        self.s_in = DrakeEntry(self.tab_targets, placeholder_text="CURRENT SHIP", **entry_kwargs)
         self.s_in.pack(pady=5, padx=50, fill="x")
 
         # --- 6. NOTES ---
@@ -274,9 +274,9 @@ class LoggerFrame(ctk.CTkFrame):
         f_btns = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_btns.pack(fill="x", padx=50, pady=(0, 20))
         
-        ctk.CTkButton(f_btns, text="IMPORT CSV", command=self.import_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_btns, text="EXPORT CSV", command=self.export_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_btns, text="CLEAR", command=self.clear_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_btns, text="IMPORT CSV", command=self.import_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_btns, text="EXPORT CSV", command=self.export_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_btns, text="CLEAR", command=self.clear_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
 
     def save(self):
         h = self.p_in.get().strip().upper()
@@ -491,11 +491,11 @@ class LoggerFrame(ctk.CTkFrame):
         f_identity = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_identity.pack(pady=(20, 5), padx=50, fill="x")
 
-        self.ship_name = ctk.CTkEntry(f_identity, placeholder_text="SHIP NAME (Press Enter to Load)", **entry_kwargs)
+        self.ship_name = DrakeEntry(f_identity, placeholder_text="SHIP NAME (Press Enter to Load)", **entry_kwargs)
         self.ship_name.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.ship_name.bind("<Return>", self.load_ship)
 
-        self.ship_brand = ctk.CTkEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
+        self.ship_brand = DrakeEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
         self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
         # --- ROLE & SPECS ---
@@ -516,10 +516,10 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_career.set("CAREER") # Placeholder
         self.ship_career.pack(side="left", fill="x", expand=True, padx=5)
         
-        self.ship_size = ctk.CTkEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
+        self.ship_size = DrakeEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
         self.ship_size.pack(side="left", padx=5)
         
-        self.ship_crew = ctk.CTkEntry(f_role, placeholder_text="CREW", width=80, **entry_kwargs)
+        self.ship_crew = DrakeEntry(f_role, placeholder_text="CREW", width=80, **entry_kwargs)
         self.ship_crew.pack(side="right", padx=(5,0))
 
         # --- SECTION : PROPULSION & SPEED ---
@@ -527,20 +527,20 @@ class LoggerFrame(ctk.CTkFrame):
         
         f_prop = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_prop.pack(pady=5, padx=50, fill="x")
-        self.ship_scm = ctk.CTkEntry(f_prop, placeholder_text="SCM SPEED", **entry_kwargs)
+        self.ship_scm = DrakeEntry(f_prop, placeholder_text="SCM SPEED", **entry_kwargs)
         self.ship_scm.pack(side="left", fill="x", expand=True, padx=(0,5))
-        self.ship_scm_bf = ctk.CTkEntry(f_prop, placeholder_text="BOOST FWD", **entry_kwargs)
+        self.ship_scm_bf = DrakeEntry(f_prop, placeholder_text="BOOST FWD", **entry_kwargs)
         self.ship_scm_bf.pack(side="left", fill="x", expand=True, padx=5)
-        self.ship_scm_bb = ctk.CTkEntry(f_prop, placeholder_text="BOOST BWD", **entry_kwargs)
+        self.ship_scm_bb = DrakeEntry(f_prop, placeholder_text="BOOST BWD", **entry_kwargs)
         self.ship_scm_bb.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         f_nav = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_nav.pack(pady=5, padx=50, fill="x")
-        self.ship_nav = ctk.CTkEntry(f_nav, placeholder_text="NAV MAX SPEED", **entry_kwargs)
+        self.ship_nav = DrakeEntry(f_nav, placeholder_text="NAV MAX SPEED", **entry_kwargs)
         self.ship_nav.pack(side="left", fill="x", expand=True, padx=(0,5))
-        self.ship_h2 = ctk.CTkEntry(f_nav, placeholder_text="HYDROGEN CAP", **entry_kwargs)
+        self.ship_h2 = DrakeEntry(f_nav, placeholder_text="HYDROGEN CAP", **entry_kwargs)
         self.ship_h2.pack(side="left", fill="x", expand=True, padx=5)
-        self.ship_qt = ctk.CTkEntry(f_nav, placeholder_text="QT FUEL CAP", **entry_kwargs)
+        self.ship_qt = DrakeEntry(f_nav, placeholder_text="QT FUEL CAP", **entry_kwargs)
         self.ship_qt.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         # --- SECTION : MANEUVERABILITY (Standard vs Boosted) ---
@@ -548,20 +548,20 @@ class LoggerFrame(ctk.CTkFrame):
         
         f_dyn = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_dyn.pack(pady=5, padx=50, fill="x")
-        self.ship_pitch = ctk.CTkEntry(f_dyn, placeholder_text="PITCH", **entry_kwargs)
+        self.ship_pitch = DrakeEntry(f_dyn, placeholder_text="PITCH", **entry_kwargs)
         self.ship_pitch.pack(side="left", fill="x", expand=True, padx=(0,2))
-        self.ship_yaw = ctk.CTkEntry(f_dyn, placeholder_text="YAW", **entry_kwargs)
+        self.ship_yaw = DrakeEntry(f_dyn, placeholder_text="YAW", **entry_kwargs)
         self.ship_yaw.pack(side="left", fill="x", expand=True, padx=2)
-        self.ship_roll = ctk.CTkEntry(f_dyn, placeholder_text="ROLL", **entry_kwargs)
+        self.ship_roll = DrakeEntry(f_dyn, placeholder_text="ROLL", **entry_kwargs)
         self.ship_roll.pack(side="right", fill="x", expand=True, padx=(2,0))
 
         f_dyn_b = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_dyn_b.pack(pady=5, padx=50, fill="x")
-        self.ship_b_pitch = ctk.CTkEntry(f_dyn_b, placeholder_text="B. PITCH", **entry_kwargs)
+        self.ship_b_pitch = DrakeEntry(f_dyn_b, placeholder_text="B. PITCH", **entry_kwargs)
         self.ship_b_pitch.pack(side="left", fill="x", expand=True, padx=(0,2))
-        self.ship_b_yaw = ctk.CTkEntry(f_dyn_b, placeholder_text="B. YAW", **entry_kwargs)
+        self.ship_b_yaw = DrakeEntry(f_dyn_b, placeholder_text="B. YAW", **entry_kwargs)
         self.ship_b_yaw.pack(side="left", fill="x", expand=True, padx=2)
-        self.ship_b_roll = ctk.CTkEntry(f_dyn_b, placeholder_text="B. ROLL", **entry_kwargs)
+        self.ship_b_roll = DrakeEntry(f_dyn_b, placeholder_text="B. ROLL", **entry_kwargs)
         self.ship_b_roll.pack(side="right", fill="x", expand=True, padx=(2,0))
 
         # --- SECTION : SURVIVABILITY & LOGISTICS ---
@@ -569,30 +569,30 @@ class LoggerFrame(ctk.CTkFrame):
         
         f_surv = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_surv.pack(pady=5, padx=50, fill="x")
-        self.ship_hp = ctk.CTkEntry(f_surv, placeholder_text="TOTAL HP", **entry_kwargs)
+        self.ship_hp = DrakeEntry(f_surv, placeholder_text="TOTAL HP", **entry_kwargs)
         self.ship_hp.pack(side="left", fill="x", expand=True, padx=(0,5))
-        self.ship_power = ctk.CTkEntry(f_surv, placeholder_text="POWER CONS.", **entry_kwargs)
+        self.ship_power = DrakeEntry(f_surv, placeholder_text="POWER CONS.", **entry_kwargs)
         self.ship_power.pack(side="left", fill="x", expand=True, padx=5)
-        self.ship_cm = ctk.CTkEntry(f_surv, placeholder_text="CM (DECOY/NOISE)", **entry_kwargs)
+        self.ship_cm = DrakeEntry(f_surv, placeholder_text="CM (DECOY/NOISE)", **entry_kwargs)
         self.ship_cm.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         f_log = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_log.pack(pady=5, padx=50, fill="x")
-        self.ship_cargo = ctk.CTkEntry(f_log, placeholder_text="CARGO (SCU)", **entry_kwargs)
+        self.ship_cargo = DrakeEntry(f_log, placeholder_text="CARGO (SCU)", **entry_kwargs)
         self.ship_cargo.pack(side="left", fill="x", expand=True, padx=(0,5))
-        self.ship_mass = ctk.CTkEntry(f_log, placeholder_text="MASS", **entry_kwargs)
+        self.ship_mass = DrakeEntry(f_log, placeholder_text="MASS", **entry_kwargs)
         self.ship_mass.pack(side="left", fill="x", expand=True, padx=5)
-        self.ship_dim = ctk.CTkEntry(f_log, placeholder_text="DIMENSIONS", **entry_kwargs)
+        self.ship_dim = DrakeEntry(f_log, placeholder_text="DIMENSIONS", **entry_kwargs)
         self.ship_dim.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         # --- SECTION : ECONOMY ---
         f_econ = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_econ.pack(pady=5, padx=50, fill="x")
-        self.ship_fee = ctk.CTkEntry(f_econ, placeholder_text="EXPEDITION FEE", **entry_kwargs)
+        self.ship_fee = DrakeEntry(f_econ, placeholder_text="EXPEDITION FEE", **entry_kwargs)
         self.ship_fee.pack(side="left", fill="x", expand=True, padx=(0,5))
-        self.ship_claim = ctk.CTkEntry(f_econ, placeholder_text="CLAIM TIME", **entry_kwargs)
+        self.ship_claim = DrakeEntry(f_econ, placeholder_text="CLAIM TIME", **entry_kwargs)
         self.ship_claim.pack(side="left", fill="x", expand=True, padx=5)
-        self.ship_expedite = ctk.CTkEntry(f_econ, placeholder_text="EXPEDITE TIME", **entry_kwargs)
+        self.ship_expedite = DrakeEntry(f_econ, placeholder_text="EXPEDITE TIME", **entry_kwargs)
         self.ship_expedite.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         # --- ACTIONS ---
@@ -602,9 +602,9 @@ class LoggerFrame(ctk.CTkFrame):
         # --- UTILS ---
         f_utils = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
         f_utils.pack(fill="x", padx=50, pady=(0, 20))
-        ctk.CTkButton(f_utils, text="IMPORT", command=self.import_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_utils, text="EXPORT", command=self.export_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        ctk.CTkButton(f_utils, text="CLEAR", command=self.clear_ship_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="IMPORT", command=self.import_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="EXPORT", command=self.export_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeButton(f_utils, text="CLEAR", command=self.clear_ship_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
 
     def _add_section_title(self, parent, title):
         """Petit utilitaire pour ajouter des titres de section Drake"""

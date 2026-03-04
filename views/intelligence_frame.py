@@ -7,7 +7,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeEntry
 
 
 class IntelligenceFrame(ctk.CTkFrame):
@@ -90,7 +90,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         )
         self.bot_status_label.pack(pady=(0, 8))
 
-        self.ent_p = ctk.CTkEntry(
+        self.ent_p = DrakeEntry(
             self.tab_player,
             placeholder_text="HANDLE...",
             width=300,
@@ -183,7 +183,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(pady=5)
 
-        self.ent_o = ctk.CTkEntry(
+        self.ent_o = DrakeEntry(
             self.tab_org,
             placeholder_text="SID...",
             width=200,

@@ -9,7 +9,7 @@ from views.logger_frame import LoggerFrame
 from views.contract_frame import ContractFrame
 from views.intelligence_frame import IntelligenceFrame
 from views.ship_frame import ShipFrame 
-from drake_ui.engine import DrakeConfig
+from drake_ui.engine import DrakeConfig, DrakeButton
 from views.interception_frame import InterceptionFrame
 from datetime import datetime
 
@@ -78,7 +78,7 @@ class MainView(ctk.CTkFrame):
 
         # Remplacement par des boutons typés Drake
         for name, label in menu_items:
-            btn = ctk.CTkButton(
+            btn = DrakeButton(
                 self.sidebar,
                 text=label,
                 command=lambda n=name: self.show_page(n),
