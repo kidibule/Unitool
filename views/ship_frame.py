@@ -250,9 +250,6 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeButton(left, text="SAVE", command=self.action_add_subtype).pack(pady=(0, 4), padx=12, fill="x")
 
-        self.cfg_type_terminal = DrakeTerminal(left, height=220)
-        self.cfg_type_terminal.pack(pady=(8, 20), padx=12, fill="x")
-
         DrakeTitle4(left, text="EXISTING TYPES").pack(pady=(0, 2), padx=12)
         self.cfg_type_selector = DrakeComboBox(left, values=[])
         self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
@@ -668,16 +665,7 @@ class ShipFrame(ctk.CTkFrame):
             messagebox.showerror("DRAKE OS", str(e))
 
     def refresh_type_terminal(self):
-        category = self.cfg_type_category.get().strip().upper() if hasattr(self, "cfg_type_category") else ""
-        if not hasattr(self, "cfg_type_terminal"):
-            return
-        self.cfg_type_terminal.delete("0.0", "end")
-        if not category:
-            return
-        subtypes = self.controller.ship.list_component_subtypes(category)
-        self.cfg_type_terminal.insert("end", f"> TYPES - {category}\n", "ACCENT")
-        for subtype in subtypes:
-            self.cfg_type_terminal.insert("end", f"- {subtype}\n")
+        return
 
     def action_add_category(self):
         category = self.cfg_type_new_category.get().strip().upper()
@@ -775,6 +763,8 @@ class ShipFrame(ctk.CTkFrame):
         if not hasattr(self, "cfg_slot_terminal"):
             return
         ship_name = self.cfg_slot_ship.get().strip().upper() if hasattr(self, "cfg_slot_ship") else ""
+        self.cfg_slot_selector.configure(values=["NO DATA"])
+        self.cfg_slot_selector.set("NO DATA")
         self.cfg_slot_terminal.delete("0.0", "end")
         if not ship_name:
             return
