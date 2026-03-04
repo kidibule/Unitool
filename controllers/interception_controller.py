@@ -14,6 +14,45 @@ class InterceptionController:
             return np.array(res[0])
         return None
 
+    def upsert_location(self, name, x, y, z, loc_type="POI"):
+        location_name = (name or "").strip().upper()
+        if not location_name:
+            raise ValueError("Location name is required.")
+
+        try:
+            fx = float(x)
+            fy = float(y)
+            fz = float(z)
+        except (TypeError, ValueError):
+            raise ValueError("Coordinates must be numeric.")
+
+        self.master.commit(
+            """
+            INSERT INTO locations (name, x, y, z, type)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                x = excluded.x,
+                y = excluded.y,
+                z = excluded.z,
+                type = excluded.type
+            """,
+            (location_name, fx, fy, fz, (loc_type or "POI").strip().upper()),
+        )
+
+        return location_name
+
+    def delete_location(self, name):
+        location_name = (name or "").strip().upper()
+        if not location_name or location_name == "NO DATA":
+            raise ValueError("Location name is required.")
+
+        self.master.commit(
+            "DELETE FROM locations WHERE name = ?",
+            (location_name,),
+        )
+
+        return location_name
+
     def calculate_snare_distance(self, source_names, dest_name, radius=20000):
         sources_coords = [self.get_coords_from_db(n) for n in source_names if self.get_coords_from_db(n) is not None]
         end_coords = self.get_coords_from_db(dest_name)
