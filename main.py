@@ -15,6 +15,7 @@ class App(ctk.CTk):
         # Paramètres de fenêtre globaux
         self.title("UNITOOL - STAR CITIZEN INTEL")
         self.geometry("1400x800")
+        self.attributes("-topmost", False)
 
         # Instancie le contrôleur applicatif (gestion DB + sub-controllers)
         self.controller = AppController(reset_db_on_start=False)

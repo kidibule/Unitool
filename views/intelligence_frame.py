@@ -823,7 +823,6 @@ class IntelligenceFrame(ctk.CTkFrame):
                 state="disabled"
             )
             main_win = self.winfo_toplevel()
-            main_win.attributes("-topmost", True)
             
             self._log(f"UPLINK SUCCESS: {sid} synchronization complete.")
             DrakePopup.info("SYSTEMS", f"Dossier {sid} synchronisé.\nMembres: {total_members}", parent=main_win)

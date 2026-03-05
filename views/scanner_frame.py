@@ -316,7 +316,6 @@ class ScannerFrame(ctk.CTkFrame):
                 # (cela évite les conflits de focus/grab qui font planter l'app)
                 toplevel.grab_release()
                 main_win = self.winfo_toplevel()
-                main_win.attributes("-topmost", True)
                 
                 # Le popup de succès s'affiche sur la fenêtre principale
                 DrakePopup.info("SYSTEMS", f"Dossier de {pseudo} synchronisé.", parent=main_win)
@@ -449,7 +448,6 @@ class ScannerFrame(ctk.CTkFrame):
                     writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
                     writer.writerows(rows)
                     main_win = self.winfo_toplevel()
-                    main_win.attributes("-topmost", True)
                 DrakePopup.info("SYSTEMS", "EXPORTATION TERMINÉE", parent=main_win)
                 try:
                     if hasattr(self.controller, "log"):
