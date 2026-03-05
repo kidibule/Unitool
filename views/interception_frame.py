@@ -1,7 +1,15 @@
+"""Frame d'interception quantique.
+
+Permet de gérer les positions, sélectionner des points source/destination
+et lancer le calcul de distance de déploiement snare.
+"""
+
 import customtkinter as ctk
 from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearButton, DrakeEntry, DrakePopup, DrakeTerminal, DrakeTitle2, DrakeTitle4
 
 class InterceptionFrame(ctk.CTkFrame):
+    """Vue UI pour le calcul et la gestion des positions d'interception."""
+
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
@@ -9,6 +17,7 @@ class InterceptionFrame(ctk.CTkFrame):
         self.setup_ui()
 
     def setup_ui(self):
+        """Construit l'interface complète (contrôles + terminal de sortie)."""
         DrakeConfig.create_title(self, "QUANTUM INTERCEPTION SYSTEM")
 
         self.int_container = ctk.CTkFrame(self, fg_color=DrakeConfig.BG_PANEL)

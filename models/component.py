@@ -1,7 +1,12 @@
+"""Modèle Component — représente un composant de vaisseau."""
+
 from models.base_model import BaseModel
 
 class Component(BaseModel):
+    """Entité métier pour un composant (arme, système, propulsion, etc.)."""
+
     def __init__(self, name, brand, type_name, category, size, grade, stats=None):
+        """Initialise un composant avec normalisation des champs principaux."""
         self.name = (name or "UNKNOWN").upper()
         self.brand = (brand or "UNKNOWN").upper()
         self.type_name = (type_name or "UNKNOWN").upper()

@@ -1,3 +1,9 @@
+"""Frame Intelligence.
+
+Interface de scraping RSI pour joueurs/organisations et
+centralisation des résultats vers la base locale.
+"""
+
 import customtkinter as ctk
 import json
 import time, threading
@@ -11,6 +17,7 @@ from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup,
 
 
 class IntelligenceFrame(ctk.CTkFrame):
+    """Vue UI du module d'intelligence (scan joueur + scan organisation)."""
 
     def __init__(self, parent, controller):
 
@@ -73,6 +80,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             pass
 
     def setup_player_tab(self):
+        """Construit l'onglet de tracking d'un joueur (handle RSI)."""
 
         ctk.CTkLabel(
             self.tab_player,
@@ -149,6 +157,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         self.res_orga.configure(cursor="hand2")
 
     def create_row(self, parent, label):
+        """Crée une ligne label/valeur réutilisable pour les résultats."""
 
         r = ctk.CTkFrame(parent, fg_color="transparent")
 
@@ -175,6 +184,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         return val
 
     def setup_org_tab(self):
+        """Construit l'onglet de tracking d'organisation (SID RSI)."""
 
         ctk.CTkLabel(
             self.tab_org,

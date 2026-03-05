@@ -5,12 +5,16 @@ from models import Contract, ContractType
 from models.contract import Contract 
 
 class ContractController:
+    """Contrôleur des contrats (création, clôture, statistiques, types)."""
+
     def __init__(self, app_controller):
+        # Référence au contrôleur principal pour accès DB/logging
         self.app = app_controller
 
     # --- Gestion des Contrats ---
 
     def add_contract(self, target: str, client: str, reward: str, priority: str = "MEDIUM", contract_type: str = None) -> None:
+        """Ajoute un contrat en statut OPEN avec horodatage courant."""
         sql = """
         INSERT INTO contracts (target, client, reward, date, status, priority, contract_type)
         VALUES (?, ?, ?, ?, 'OPEN', ?, ?)
@@ -28,6 +32,7 @@ class ContractController:
             self.app.log(f"CONTRACT REGISTERED: {target.upper()} PRIO: {priority}", source="DECK")
 
     def complete_contract(self, contract_id: int, target: str) -> None:
+        """Ferme un contrat et met à jour la fiche cible (wins/auto-création)."""
         # Récupérer la récompense pour le log avant fermeture
         res = self.app.query("SELECT reward FROM contracts WHERE id=?", (contract_id,))
         reward_value = res[0][0] if res else "0"
@@ -50,6 +55,7 @@ class ContractController:
             self.app.log(f"MISSION COMPLETE >> {target} | +{reward_value} aUEC", source="DECK")
 
     def delete_contract(self, contract_id: int) -> None:
+        """Supprime définitivement un contrat de la base."""
         self.app.commit("DELETE FROM contracts WHERE id=?", (contract_id,))
         if hasattr(self.app, "log"):
             self.app.log(f"TRANSACTION PURGED FROM LOGS (ID: {contract_id})", source="SYS")
@@ -84,9 +90,11 @@ class ContractController:
     # --- Gestion des Types ---
 
     def get_contract_types(self) -> list:
+        """Retourne la liste des types de contrats configurés."""
         return self.app.query("SELECT name, reward FROM contract_types")
 
     def add_contract_type(self, name: str, reward: str) -> bool:
+        """Ajoute un type de contrat; retourne False si déjà existant."""
         try:
             self.app.commit("INSERT INTO contract_types VALUES (?, ?)", (name.upper(), reward))
             if hasattr(self.app, "log"):
@@ -98,6 +106,7 @@ class ContractController:
             return False
 
     def delete_contract_type(self, name: str) -> None:
+        """Supprime un type de contrat existant."""
         self.app.commit("DELETE FROM contract_types WHERE name=?", (name.upper(),))
         if hasattr(self.app, "log"):
             self.app.log(f"CONTRACT TYPE DELETED: {name}", source="SYS")
@@ -105,11 +114,13 @@ class ContractController:
     # --- Utilitaires ---
 
     def get_suggestions(self, text: str) -> list:
+        """Fournit des suggestions de pseudos pour l'auto-complétion."""
         if not text: return []
         rows = self.app.query("SELECT pseudo FROM targets WHERE pseudo LIKE ? LIMIT 8", (text.upper() + '%',))
         return [r[0] for r in rows]
     
     def get_contract_reward_for_type(self, type_name: str) -> str:
+        """Retourne la récompense par défaut associée à un type de contrat."""
         row = self.app.query("SELECT reward FROM contract_types WHERE name=?", (type_name,))
         return row[0][0] if row else "0"
     

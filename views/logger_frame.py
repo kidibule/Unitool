@@ -9,7 +9,10 @@ from controllers.ship_controller import ShipController
 
 
 class LoggerFrame(ctk.CTkFrame):
+    """Vue d'archivage : saisie, import/export et maintenance des dossiers."""
+
     def __init__(self, parent, controller):
+        """Initialise les onglets Players/Organizations/Ships."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         self.ship_controller = ShipController(self.controller)
@@ -121,7 +124,7 @@ class LoggerFrame(ctk.CTkFrame):
         name = self.org_name.get().strip()
         
         if not sid or not name:
-            self.controller.log("ERROR", "SID and Name are mandatory for registration.")
+            self.controller.log("SID and Name are mandatory for registration.", source="ERROR")
             return
 
         try:
@@ -137,12 +140,12 @@ class LoggerFrame(ctk.CTkFrame):
                 alignment=self.org_align.get(),
                 updated_at=datetime.now().strftime("%d/%m/%Y"),
             )
-            self.controller.log("SYSTEMS", f"Dossier Corporate {sid} synchronisé.")
+            self.controller.log(f"Dossier Corporate {sid} synchronisé.", source="SYSTEMS")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="LOGGER")
             self.clear_org_fields() 
         except Exception as e:
-            self.controller.log("DB ERROR", f"Failed to save organization: {e}")
+            self.controller.log(f"Failed to save organization: {e}", source="DB ERROR")
 
     def import_orgs_csv(self):
         """Importation CSV pour les organisations"""
@@ -152,9 +155,9 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_organizations_csv(list(reader))
-            self.controller.log("SUCCESS", "Import des organisations terminé.")
+            self.controller.log("Import des organisations terminé.", source="SUCCESS")
         except Exception as e:
-            self.controller.log("IMPORT ERROR", str(e))
+            self.controller.log(str(e), source="IMPORT ERROR")
 
     def export_orgs_csv(self):
         """Exportation CSV pour les organisations"""
@@ -165,7 +168,7 @@ class LoggerFrame(ctk.CTkFrame):
             writer = csv.writer(f, delimiter=";")
             writer.writerow(["sid", "name", "tag", "alignment"])
             writer.writerows(data)
-        self.controller.log("SUCCESS", f"Base organisations exportée vers {path}")
+        self.controller.log(f"Base organisations exportée vers {path}", source="SUCCESS")
 
     def clear_org_fields(self):
         """Réinitialise tous les champs de l'onglet Organisation"""
@@ -402,14 +405,14 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_targets_csv(list(reader))
-                self.controller.log("SUCCESS", "Import terminé.", parent=self)
+                self.controller.log("Import terminé.", source="SUCCESS")
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Imported CSV: {path}", source="LOGGER")
             except Exception:
                 pass
         except Exception as e:
-            self.controller.log("ERROR", str(e), parent=self)
+            self.controller.log(str(e), source="ERROR")
 
     def export_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -432,7 +435,7 @@ class LoggerFrame(ctk.CTkFrame):
                 ]
             )
             writer.writerows(data)
-        self.controller.log("SUCCESS", "Données exportées.", parent=self)
+        self.controller.log("Données exportées.", source="SUCCESS")
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
@@ -619,7 +622,7 @@ class LoggerFrame(ctk.CTkFrame):
         
         # 2. Sécurité : Nom obligatoire
         if not name:
-            self.controller.log("LOCK ERROR", "SHIP NAME REQUIRED TO SYNC.")
+            self.controller.log("SHIP NAME REQUIRED TO SYNC.", source="LOCK ERROR")
             self.ship_name.focus_set()
             return
 
@@ -638,7 +641,7 @@ class LoggerFrame(ctk.CTkFrame):
                 try:
                     float(value) 
                 except ValueError:
-                    self.controller.log("DATA CORRUPTION", f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.")
+                    self.controller.log(f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.", source="DATA CORRUPTION")
                     return 
 
         data = {
@@ -673,9 +676,9 @@ class LoggerFrame(ctk.CTkFrame):
 
         try:
             self.ship_controller.save_ship(data)
-            self.controller.log("DATABASE", f"SHIP {name.upper()} DATA SYNCED.")
+            self.controller.log(f"SHIP {name.upper()} DATA SYNCED.", source="DATABASE")
         except Exception as e:
-            self.controller.log("ERROR", f"SYNC ERROR: {str(e)}")
+            self.controller.log(f"SYNC ERROR: {str(e)}", source="ERROR")
 
     def load_ship(self, event=None):
         name = self.ship_name.get().strip()
@@ -684,7 +687,7 @@ class LoggerFrame(ctk.CTkFrame):
         ship = self.ship_controller.load_ship_as_model(name)
         
         if not ship:
-            self.controller.log("NOT FOUND", f"No record for {name}")
+            self.controller.log(f"No record for {name}", source="NOT FOUND")
             return
 
         self.ship_brand.delete(0, "end"); self.ship_brand.insert(0, ship.brand)
@@ -698,7 +701,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_name.delete(0, "end"); self.ship_name.insert(0, ship.name)
         self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
         
-        self.controller.log("FLEET", f"Specs for {ship.name} loaded.")
+        self.controller.log(f"Specs for {ship.name} loaded.", source="FLEET")
     
     def import_ships_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -707,9 +710,9 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.ship_controller.import_ships_csv(list(reader))
-            self.controller.log("SUCCESS", "Fleet import successful.")
+            self.controller.log("Fleet import successful.", source="SUCCESS")
         except Exception as e:
-            self.controller.log("IMPORT ERROR", str(e))
+            self.controller.log(str(e), source="IMPORT ERROR")
 
     def export_ships_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -720,9 +723,9 @@ class LoggerFrame(ctk.CTkFrame):
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(["name", "brand", "role", "career", "size", "crew_size", "scm_speed"]) 
                 writer.writerows(data)
-            self.controller.log("SUCCESS", f"Fleet exported to {path}")
+            self.controller.log(f"Fleet exported to {path}", source="SUCCESS")
         except Exception as e:
-            self.controller.log("EXPORT ERROR", str(e))
+            self.controller.log(str(e), source="EXPORT ERROR")
 
     def clear_ship_fields(self):
         for attr in [self.ship_name, self.ship_brand, self.ship_role, 

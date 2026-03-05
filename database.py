@@ -7,10 +7,15 @@ from tkinter import messagebox
 
 class Database:
     def __init__(self, db_name="unitool_data.db", reset_on_start: bool = False):
+        # Option pratique pour repartir d'une base propre au lancement (debug/dev)
         if reset_on_start and os.path.exists(db_name):
             os.remove(db_name)
+
+        # Connexion SQLite + curseur principal réutilisé dans tout le projet
         self.conn = sqlite3.connect(db_name)
         self.cursor = self.conn.cursor()
+
+        # Initialisation / migration du schéma
         self.setup()
 
     def execute(self, query, params=()):
@@ -20,6 +25,11 @@ class Database:
         return result
 
     def setup(self):
+        """Crée les tables et applique les migrations légères (ALTER TABLE).
+
+        Cette méthode est idempotente : elle peut être relancée sans casser
+        une base déjà existante.
+        """
         # --- TABLE TARGETS ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS targets 
             (pseudo TEXT PRIMARY KEY, org TEXT, ship TEXT, threat TEXT, notes TEXT, 
@@ -57,7 +67,7 @@ class Database:
             allies TEXT DEFAULT '',
             enemies TEXT DEFAULT '',
             neutrals TEXT DEFAULT '',
-            updated_at TEXT
+            updated_at TEXT,
             alignment TEXT DEFAULT 'NEUTRE'
         )""")
 
@@ -225,6 +235,7 @@ class Database:
         loadout_pk_cols = [row[1] for row in self.cursor.execute("PRAGMA table_info(ship_loadout)").fetchall() if row[5] > 0]
         expected_pk = ["ship_name", "profile_name", "category", "subtype_name", "slot_number"]
 
+        # Si le schéma legacy est détecté, on reconstruit la table puis on recopie les données.
         if ("profile_name" not in loadout_cols) or ("subtype_name" not in loadout_cols) or (loadout_pk_cols != expected_pk):
             self.cursor.execute(
                 """CREATE TABLE IF NOT EXISTS ship_loadout_new (
@@ -333,10 +344,12 @@ class Database:
         self.conn.commit()
 
     def query(self, sql, params=()):
+        """Exécute un SELECT et renvoie toutes les lignes."""
         self.cursor.execute(sql, params)
         return self.cursor.fetchall()
 
     def commit(self, sql, params=()):
+        """Exécute une requête d'écriture puis commit la transaction."""
         self.cursor.execute(sql, params)
         self.conn.commit()
 

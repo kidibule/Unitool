@@ -1,3 +1,9 @@
+"""Frame de gestion flotte.
+
+Regroupe les onglets Ships, Components, Loadout et Config
+pour administrer le catalogue et l'équipement des vaisseaux.
+"""
+
 import customtkinter as ctk
 from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton
 
@@ -5,6 +11,7 @@ class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
 
     def __init__(self, parent, controller):
+        """Initialise la vue et prépare le mapping de types UI."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         
@@ -363,11 +370,6 @@ class ShipFrame(ctk.CTkFrame):
         except Exception as e:
             print(f"Error: {e}")
 
-    def update_selectors(self):
-        """Met à jour les listes déroulantes de l'onglet Loadout."""
-        ships = self.controller.ship.list_ship_names()
-        self.lo_ship_selector.configure(values=ships)
-
     # --- ACTIONS ---
     def on_category_change(self, choice):
         new_values = self.controller.ship.list_component_subtypes(choice)
@@ -491,12 +493,12 @@ class ShipFrame(ctk.CTkFrame):
                 # Appel au contrôleur
                 self.controller.ship.update_ship_specs(ship_name, final_data)
                 
-                self.controller.log("DRAKE OS", "CORE DATABASE SYNCHRONIZED.")
+                self.controller.log("CORE DATABASE SYNCHRONIZED.", source="DRAKE OS")
                 edit_win.destroy()
                 self.run_ship_scan() # Refresh le terminal
                 
             except ValueError as e:
-                self.controller.log("DATA ERROR", f"Invalid format in numeric field: {e}")
+                self.controller.log(f"Invalid format in numeric field: {e}", source="DATA ERROR")
 
         save_btn = DrakeButton(edit_win, text="APPLY ALL MODIFICATIONS", 
                                command=perform_full_update)

@@ -1,20 +1,32 @@
+"""Contrôleur d'interception quantique.
+
+Gère la persistance des points de navigation et les calculs
+de distance optimale pour le déploiement de snare.
+"""
+
 import numpy as np
 
 class InterceptionController:
+    """Expose les opérations métier du module d'interception."""
+
     def __init__(self, master):
+        # Référence vers le contrôleur principal (accès DB/query/commit)
         self.master = master 
 
     def get_location_names(self):
+        """Retourne la liste triée des positions enregistrées."""
         rows = self.master.query("SELECT name FROM locations ORDER BY name ASC")
         return [row[0] for row in rows]
 
     def get_coords_from_db(self, name):
+        """Retourne les coordonnées d'une position sous forme de vecteur numpy."""
         res = self.master.query("SELECT x, y, z FROM locations WHERE name = ?", (name,))
         if res:
             return np.array(res[0])
         return None
 
     def upsert_location(self, name, x, y, z, loc_type="POI"):
+        """Crée ou met à jour une position dans la base de données."""
         location_name = (name or "").strip().upper()
         if not location_name:
             raise ValueError("Location name is required.")
@@ -42,6 +54,7 @@ class InterceptionController:
         return location_name
 
     def delete_location(self, name):
+        """Supprime une position existante par son nom."""
         location_name = (name or "").strip().upper()
         if not location_name or location_name == "NO DATA":
             raise ValueError("Location name is required.")
@@ -54,6 +67,11 @@ class InterceptionController:
         return location_name
 
     def calculate_snare_distance(self, source_names, dest_name, radius=20000):
+        """Calcule la distance maximale valide pour un déploiement de snare.
+
+        Le calcul se base sur plusieurs sources et une destination afin de
+        trouver le point le plus éloigné qui reste dans le rayon autorisé.
+        """
         sources_coords = [self.get_coords_from_db(n) for n in source_names if self.get_coords_from_db(n) is not None]
         end_coords = self.get_coords_from_db(dest_name)
 

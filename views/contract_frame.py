@@ -20,7 +20,10 @@ def format_int_with_dots(value) -> str:
     return f"{n:,}".replace(",", ".")
 
 class ContractFrame(ctk.CTkFrame):
+    """Vue de pilotage des contrats actifs/clos et des types associés."""
+
     def __init__(self, parent, controller):
+        """Construit la board contrats et initialise les listes d'affichage."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         
