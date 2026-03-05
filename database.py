@@ -338,8 +338,19 @@ class Database:
             x REAL,
             y REAL,
             z REAL,
-            type TEXT DEFAULT 'POI'
+            type TEXT DEFAULT 'POI',
+            parent_name TEXT
         )""")
+
+        try:
+            self.cursor.execute("ALTER TABLE locations ADD COLUMN type TEXT DEFAULT 'POI'")
+        except Exception:
+            pass
+
+        try:
+            self.cursor.execute("ALTER TABLE locations ADD COLUMN parent_name TEXT")
+        except Exception:
+            pass
 
         self.conn.commit()
 
@@ -424,11 +435,11 @@ class Database:
         res = self.query("SELECT name FROM locations ORDER BY name ASC")
         return [row[0] for row in res]
 
-    def add_location(self, name, x, y, z, loc_type="POI"):
-        sql = """INSERT INTO locations (name, x, y, z, type) 
-                 VALUES (?, ?, ?, ?, ?) 
-                 ON CONFLICT(name) DO UPDATE SET x=excluded.x, y=excluded.y, z=excluded.z, type=excluded.type"""
-        self.commit(sql, (name.upper(), x, y, z, loc_type))
+    def add_location(self, name, x, y, z, loc_type="POI", parent_name=None):
+        sql = """INSERT INTO locations (name, x, y, z, type, parent_name) 
+                 VALUES (?, ?, ?, ?, ?, ?) 
+                 ON CONFLICT(name) DO UPDATE SET x=excluded.x, y=excluded.y, z=excluded.z, type=excluded.type, parent_name=excluded.parent_name"""
+        self.commit(sql, (name.upper(), x, y, z, loc_type, parent_name))
 
     # --- GESTION DES COMPOSANTS ---
 

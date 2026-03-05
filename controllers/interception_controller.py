@@ -18,6 +18,49 @@ class InterceptionController:
         rows = self.master.query("SELECT name FROM locations ORDER BY name ASC")
         return [row[0] for row in rows]
 
+    def get_location_names_by_type(self, type_names):
+        """Retourne les noms triés des positions filtrées par type."""
+        normalized_types = [str(t).strip().upper() for t in (type_names or []) if str(t).strip()]
+        if not normalized_types:
+            return self.get_location_names()
+
+        placeholders = ",".join(["?"] * len(normalized_types))
+        rows = self.master.query(
+            f"SELECT name FROM locations WHERE UPPER(COALESCE(type, 'POI')) IN ({placeholders}) ORDER BY name ASC",
+            tuple(normalized_types),
+        )
+        return [row[0] for row in rows]
+
+    def get_location_type(self, name):
+        """Retourne le type normalisé d'un lieu, ou None s'il n'existe pas."""
+        location_name = (name or "").strip().upper()
+        if not location_name:
+            return None
+
+        row = self.master.query(
+            "SELECT UPPER(COALESCE(type, 'POI')) FROM locations WHERE name = ?",
+            (location_name,),
+        )
+        return row[0][0] if row else None
+
+    def get_child_moons(self, planet_name):
+        """Retourne les lunes enfants d'une planète."""
+        parent = (planet_name or "").strip().upper()
+        if not parent:
+            return []
+
+        rows = self.master.query(
+            """
+            SELECT name
+            FROM locations
+            WHERE parent_name = ?
+              AND UPPER(COALESCE(type, 'POI')) = 'MOON'
+            ORDER BY name ASC
+            """,
+            (parent,),
+        )
+        return [row[0] for row in rows]
+
     def get_coords_from_db(self, name):
         """Retourne les coordonnées d'une position sous forme de vecteur numpy."""
         res = self.master.query("SELECT x, y, z FROM locations WHERE name = ?", (name,))
@@ -25,11 +68,34 @@ class InterceptionController:
             return np.array(res[0])
         return None
 
-    def upsert_location(self, name, x, y, z, loc_type="POI"):
+    def upsert_location(self, name, x, y, z, loc_type="POI", parent_name=None):
         """Crée ou met à jour une position dans la base de données."""
         location_name = (name or "").strip().upper()
         if not location_name:
             raise ValueError("Location name is required.")
+
+        normalized_type = (loc_type or "POI").strip().upper()
+        normalized_parent = (parent_name or "").strip().upper()
+        if normalized_parent in ("", "NONE", "NO PARENT"):
+            normalized_parent = None
+
+        if normalized_parent == location_name:
+            raise ValueError("A location cannot be its own parent.")
+
+        if normalized_parent is not None:
+            parent_row = self.master.query(
+                "SELECT UPPER(COALESCE(type, 'POI')) FROM locations WHERE name = ?",
+                (normalized_parent,),
+            )
+            if not parent_row:
+                raise ValueError("Selected parent location does not exist.")
+
+            parent_type = parent_row[0][0]
+            if normalized_type == "MOON" and parent_type != "PLANET":
+                raise ValueError("A MOON must have a PLANET as parent.")
+
+        if normalized_type == "MOON" and normalized_parent is None:
+            raise ValueError("A MOON requires a parent PLANET.")
 
         try:
             fx = float(x)
@@ -40,15 +106,16 @@ class InterceptionController:
 
         self.master.commit(
             """
-            INSERT INTO locations (name, x, y, z, type)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO locations (name, x, y, z, type, parent_name)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 x = excluded.x,
                 y = excluded.y,
                 z = excluded.z,
-                type = excluded.type
+                type = excluded.type,
+                parent_name = excluded.parent_name
             """,
-            (location_name, fx, fy, fz, (loc_type or "POI").strip().upper()),
+            (location_name, fx, fy, fz, normalized_type, normalized_parent),
         )
 
         return location_name
@@ -58,6 +125,14 @@ class InterceptionController:
         location_name = (name or "").strip().upper()
         if not location_name or location_name == "NO DATA":
             raise ValueError("Location name is required.")
+
+        child_rows = self.master.query(
+            "SELECT name FROM locations WHERE parent_name = ? ORDER BY name ASC",
+            (location_name,),
+        )
+        if child_rows:
+            children = ", ".join([row[0] for row in child_rows])
+            raise ValueError(f"Cannot delete parent location. Linked children: {children}")
 
         self.master.commit(
             "DELETE FROM locations WHERE name = ?",
