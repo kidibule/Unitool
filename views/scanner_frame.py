@@ -69,6 +69,14 @@ class ScannerFrame(ctk.CTkFrame):
         self.setup_orgs_tab()
         self.setup_tags()
 
+    def _log(self, message: str, source: str = "SCANNER") -> None:
+        """Forward un message vers le terminal principal si l'API de log existe."""
+        try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(message, source=source)
+        except Exception:
+            pass
+
     def setup_targets_tab(self):
         """Configure l'onglet de recherche de joueurs."""
         self.search_entry = DrakeEntry(
@@ -206,12 +214,14 @@ class ScannerFrame(ctk.CTkFrame):
             self.results.tag_bind(k, "<Leave>", lambda e: self.results.configure(cursor="arrow"))
 
     def open_rsi(self, pseudo):
+        self._log(f"Ouverture profil RSI: {pseudo}")
         webbrowser.open(f"https://robertsspaceindustries.com/citizens/{pseudo}")
 
     def open_org(self, sid):
         if sid and sid != "N/A":
             # Nettoyage au cas où (espaces ou crochets)
             clean_sid = str(sid).strip().replace("[", "").replace("]", "")
+            self._log(f"Ouverture organisation RSI: {clean_sid}")
             webbrowser.open(f"https://robertsspaceindustries.com/orgs/{clean_sid}")
 
     def edit_target_window(self, pseudo):
@@ -310,10 +320,11 @@ class ScannerFrame(ctk.CTkFrame):
                 
                 # Le popup de succès s'affiche sur la fenêtre principale
                 DrakePopup.info("SYSTEMS", f"Dossier de {pseudo} synchronisé.", parent=main_win)
+                self._log(f"Target synchronisée: {pseudo}")
 
             except Exception as e:
                 # On affiche l'erreur sans fermer pour pouvoir copier le message
-                print(f"DEBUG SAVE ERROR: {e}")
+                self._log(f"Échec synchronisation target {pseudo}: {e}", source="ERROR")
                 DrakePopup.error("ERREUR SQL", f"Détails : {e}", parent=main_win)
 
         
@@ -417,7 +428,7 @@ class ScannerFrame(ctk.CTkFrame):
                         self.results.insert("end", "   CONTRATS : Aucun historique détecté.\n", "small_info")
 
                 except Exception as e:
-                    print(f"Erreur affichage contrats scan: {e}")
+                    self._log(f"Erreur affichage contrats pour {t.pseudo}: {e}", source="ERROR")
 
                 # Séparateur final de cible
                 self.results.insert("end", f"{'='*60}\n")
@@ -446,6 +457,7 @@ class ScannerFrame(ctk.CTkFrame):
                 except Exception:
                     pass
             except Exception as e:
+                self._log(f"Échec export DB: {e}", source="ERROR")
                 DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=main_win)
 
     def edit_org_window(self, sid):
@@ -540,8 +552,10 @@ class ScannerFrame(ctk.CTkFrame):
                 self.run_org_scan(None) # Rafraîchissement auto
                 toplevel.destroy()
                 DrakePopup.info("SYSTEMS", f"Dossier Corporate {sid} mis à jour.")
+                self._log(f"Organisation synchronisée: {sid}", source="ORG")
                 
             except Exception as ex:
+                self._log(f"Échec mise à jour organisation {sid}: {ex}", source="ERROR")
                 DrakePopup.error("SYNC ERROR", f"Échec : {ex}")
 
         # Boutons d'action

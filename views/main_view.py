@@ -201,7 +201,11 @@ class MainView(ctk.CTkFrame):
             self.stat_orgs.configure(text=f"{known_orgs:03d}")
 
         except Exception as e:
-            print(f"Intel Error: {e}")
+            try:
+                if hasattr(self.controller, "log"):
+                    self.controller.log(f"Intel refresh error: {e}", source="UI")
+            except Exception:
+                pass
 
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""

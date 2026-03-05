@@ -368,7 +368,7 @@ class ShipFrame(ctk.CTkFrame):
             self.run_component_scan()
             self.update_selectors()
         except Exception as e:
-            print(f"Error: {e}")
+            self.controller.log(f"Error adding component: {e}", source="FLEET")
 
     # --- ACTIONS ---
     def on_category_change(self, choice):
@@ -583,10 +583,12 @@ class ShipFrame(ctk.CTkFrame):
         selection = combo_widget.get()
         profile_name = self._get_active_profile()
         if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, selection, profile_name):
-            if hasattr(self.controller.app, "log"):
-                self.controller.app.log(f"LOADOUT SYNC: {ship_name} -> {selection} (Slot {slot_index})")
+            self.controller.log(
+                f"LOADOUT SYNC: {ship_name} [{profile_name}] -> {selection} (Slot {slot_index + 1})",
+                source="FLEET",
+            )
         else:
-            self.controller.app.log("DRAKE OS ERROR", "Failed to sync with ship database.")
+            self.controller.log("Failed to sync with ship database.", source="DRAKE OS ERROR")
         
     def action_mount(self, category, subtype_name, slot_index, component_name):
         """Enregistre le composant sélectionné en base de données."""
@@ -598,8 +600,12 @@ class ShipFrame(ctk.CTkFrame):
         if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, component_name, profile_name):
             # On rafraîchit TOUTE la vue pour mettre à jour le terminal de gauche
             self.refresh_loadout_view(ship_name)
+            self.controller.log(
+                f"Component mounted: {ship_name} [{profile_name}] {category}/{subtype_name} -> {component_name}",
+                source="FLEET",
+            )
         else:
-            self.controller.app.log("DRAKE OS", "Database Sync Failed. Incompatible hardware.")
+            self.controller.log("Database Sync Failed. Incompatible hardware.", source="DRAKE OS")
     
     def action_clear_loadout(self):
         """Supprime tous les composants installés sur le vaisseau actuel."""
@@ -637,7 +643,7 @@ class ShipFrame(ctk.CTkFrame):
                 categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
                 self.new_comp_category.configure(values=categories)
         except Exception as e:
-            print(f"Update error: {e}")
+            self.controller.log(f"Update selectors error: {e}", source="FLEET")
 
     def on_cfg_type_category_change(self, category):
         subtypes = self.controller.ship.list_component_subtypes(category)
@@ -852,7 +858,7 @@ class ShipFrame(ctk.CTkFrame):
             self.lo_profile_selector.set(current)
                 
         except Exception as e:
-            print(f"Error updating profiles: {e}")
+            self.controller.log(f"Error updating profiles: {e}", source="FLEET")
 
     def _get_active_profile(self):
         profile = (self.lo_profile_selector.get() or "DEFAULT").strip().upper()
