@@ -129,7 +129,7 @@ class DrakeButton(ctk.CTkButton):
             "text_color": "#000000",
             "font": DrakeConfig.FONT_UI,
             "corner_radius": DrakeConfig.CORNER_RADIUS,
-            "height": 35,
+            "height": 30,
         }
         defaults.update(kwargs)
         super().__init__(master, **defaults)
