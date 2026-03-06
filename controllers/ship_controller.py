@@ -50,6 +50,12 @@ class ShipController:
         except (ValueError, TypeError):
             return default
 
+    def _is_generic_subtype(self, category: str, subtype_name: str) -> bool:
+        """WEAPON subgroups (S1/S3/etc.) are logical slot groups, not component type filters."""
+        cat = (category or "").strip().upper()
+        subtype = (subtype_name or "GENERIC").strip().upper()
+        return subtype == "GENERIC" or cat == "WEAPON"
+
     def save_ship(self, data_dict: dict) -> None:
         ship = Ship(
             name=str(data_dict.get("name", "")),
@@ -416,7 +422,7 @@ class ShipController:
     def get_slot_data(self, ship_name, profile_name, category, subtype_name, max_size, slot_index):
         profile = self._normalize_profile(profile_name)
         subtype = (subtype_name or "GENERIC").strip().upper()
-        if subtype == "GENERIC":
+        if self._is_generic_subtype(category, subtype):
             available = self.get_compatible_components(category, max_size)
         else:
             available = self.get_compatible_components_by_subtype(category, subtype, max_size)
@@ -455,7 +461,7 @@ class ShipController:
                 comp_cat, comp_type, comp_size = comp_rows[0]
                 if (comp_cat or "").upper() != category_up:
                     return False
-                if subtype != "GENERIC" and (comp_type or "").upper() != subtype:
+                if (not self._is_generic_subtype(category_up, subtype)) and (comp_type or "").upper() != subtype:
                     return False
 
                 spec_rows = self.app.query(
@@ -638,9 +644,15 @@ class ShipController:
                 spec
                 for spec in slot_specs
                 if spec["category"] == new_comp.category.upper()
-                and (spec["subtype_name"] == "GENERIC" or spec["subtype_name"] == new_comp.type_name.upper())
+                and (
+                    self._is_generic_subtype(spec["category"], spec["subtype_name"])
+                    or spec["subtype_name"] == new_comp.type_name.upper()
+                )
                 and int(new_comp.size) <= int(spec["max_size"])
             ]
+
+            # Prefer the smallest compatible slot first to preserve larger hardpoints.
+            matching_specs.sort(key=lambda s: int(s["max_size"]))
 
             chosen_spec = matching_specs[0] if matching_specs else None
             if not chosen_spec:

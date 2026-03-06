@@ -420,22 +420,22 @@ class InterceptionFrame(ctk.CTkFrame):
             return
         
         dest = self.dest_selector.get()
-        self.output.insert("end", f">>> Analyzing lanes toward {dest}...\n")
+        start_points_label = ", ".join(active_sources)
+        self.output.insert("end", "\n" + "-" * 58 + "\n")
         
         # On récupère la distance au lieu des coordonnées
         distance_km = self.controller.interception.calculate_snare_distance(active_sources, dest)
         
         if distance_km is not None:
-            self.output.insert("end", "\n" + "="*35 + "\n")
-            self.output.insert("end", "      SNARE DEPLOYMENT DATA\n")
-            self.output.insert("end", "="*35 + "\n")
-            self.output.insert("end", f" TARGET: {dest}\n")
-            self.output.insert("end", f" OPTIMAL DISTANCE: {distance_km:,.0f} KM\n")
-            self.output.insert("end", f" STATUS: POSITION READY\n")
-            self.output.insert("end", "="*35 + "\n")
-            self.output.insert("end", f"\n>>> INSTRUCTIONS: Fly toward your sources\n")
-            self.output.insert("end", f"    until you are at {distance_km:,.0f} KM\n")
-            self.output.insert("end", f"    from {dest}.\n")
+            self.output.insert("end", "SNARE DEPLOYMENT DATA\n")
+            self.output.insert("end", f"- START POINT(S): {start_points_label}\n")
+            self.output.insert("end", f"- DESTINATION: {dest}\n")
+            self.output.insert("end", f"- OPTIMAL DISTANCE: {distance_km:,.0f} KM\n")
+            self.output.insert("end", f"- STATUS: READY\n")
+            self.output.insert(
+                "end",
+                f"[INSTRUCTIONS] DEMARRER DEPUIS: {start_points_label} -> aller vers {dest} jusqu'a {distance_km:,.0f} KM de la destination.\n",
+            )
             self.output.see("end")
         else:
             self.output.insert("end", "[ERROR] Calculation failed.\n")

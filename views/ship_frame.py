@@ -820,17 +820,19 @@ class ShipFrame(ctk.CTkFrame):
             )
 
     def on_cfg_slot_category_change(self, category):
-        if (category or "").strip().upper() == "WEAPON":
-            self.cfg_slot_subtype.configure(values=["GENERIC"])
-            self.cfg_slot_subtype.set("GENERIC")
-            self._set_slot_type_locked(True)
-            return
-
+        category_up = (category or "").strip().upper()
         self._set_slot_type_locked(False)
 
-        subtypes = self.controller.ship.list_component_subtypes(category)
+        if category_up == "WEAPON":
+            weapon_groups = ["GENERIC", "S1", "S2", "S3", "S4", "S5"]
+            self.cfg_slot_subtype.configure(values=weapon_groups)
+            current = self.cfg_slot_subtype.get().strip().upper()
+            self.cfg_slot_subtype.set(current if current in weapon_groups else "GENERIC")
+            return
+
+        subtypes = self.controller.ship.list_component_subtypes(category_up)
         if not subtypes:
-            subtypes = self.mapping_types.get(category, [])
+            subtypes = self.mapping_types.get(category_up, [])
         self.cfg_slot_subtype.configure(values=subtypes if subtypes else ["GENERIC"])
         if subtypes:
             self.cfg_slot_subtype.set(subtypes[0])
@@ -882,8 +884,6 @@ class ShipFrame(ctk.CTkFrame):
         ship_name = self.cfg_slot_ship.get().strip().upper()
         category = self.cfg_slot_category.get().strip().upper()
         subtype = self.cfg_slot_subtype.get().strip().upper()
-        if category == "WEAPON":
-            subtype = "GENERIC"
         if not ship_name or not category or not subtype:
             DrakePopup.warning("DRAKE OS", "SHIP / CATEGORY / SUBTYPE requis", parent=self)
             return
