@@ -379,8 +379,10 @@ class Database:
                  language=excluded.language,
                  date=excluded.date"""
 
+        handle = str(data.get("Handle", "")).strip().upper()
+
         params = (
-            data["Handle"],
+            handle,
             data["OrgaNom"],
             data["SID"],
             data.get("Affiliates", "NONE"),
@@ -394,7 +396,11 @@ class Database:
 
     def get_target_by_handle(self, handle):
         """Récupère les infos d'un joueur pour la preview"""
-        sql = "SELECT org, sid, org_rank, enlisted_date, language FROM targets WHERE pseudo = ?"
+        handle = str(handle or "").strip()
+        if not handle:
+            return None
+
+        sql = "SELECT org, sid, org_rank, enlisted_date, language FROM targets WHERE UPPER(pseudo) = UPPER(?)"
         res = self.query(sql, (handle,))
         if res:
             row = res[0]

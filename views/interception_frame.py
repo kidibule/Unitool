@@ -13,6 +13,7 @@ class InterceptionFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        self.position_popup = None
         self.selected_sources = [] 
         self.source_active_vars = {}
         self.source_checkboxes = []
@@ -39,41 +40,58 @@ class InterceptionFrame(ctk.CTkFrame):
         self.int_tabview.pack(fill="both", expand=True, padx=0, pady=0)
 
         tab_snare = self.int_tabview.add("SNARE")
-        tab_positions = self.int_tabview.add("POSITIONS")
+
+        DrakeButton(
+            tab_snare,
+            text="EDIT POSITIONS",
+            command=self.open_position_manager,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=90,
+            height=20,
+            font=("Segoe UI", 9, "bold"),
+            corner_radius=0,
+        ).pack(anchor="ne", padx=10, pady=(8, 2))
 
         snare_container = ctk.CTkFrame(tab_snare, fg_color="transparent")
-        snare_container.pack(fill="both", expand=True, padx=12, pady=12)
+        snare_container.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
         left = ctk.CTkFrame(snare_container, width=280, fg_color=DrakeConfig.BG_MAIN)
         left.pack(side="left", fill="y", padx=(0, 10))
         left.pack_propagate(False)
 
+        self.snare_controls = ctk.CTkScrollableFrame(left, fg_color="transparent")
+        self.snare_controls.pack(fill="both", expand=True, padx=0, pady=(0, 6))
+
         right = DrakeTerminal(snare_container)
         right.pack(side="right", fill="both", expand=True)
 
-        DrakeTitle2(left, text="SNARE SETUP").pack(pady=(10, 8))
+        DrakeTitle2(self.snare_controls, text="SNARE SETUP").pack(pady=(10, 8))
 
-        DrakeTitle4(left, text="START POINT").pack(pady=(0, 2), padx=12)
-        self.source_selector = DrakeComboBox(left, values=location_list, command=self.on_source_changed)
+        DrakeTitle4(self.snare_controls, text="START POINT").pack(pady=(0, 2), padx=12)
+        self.source_selector = DrakeComboBox(self.snare_controls, values=location_list, command=self.on_source_changed)
         self.source_selector.pack(pady=5, padx=12, fill="x")
 
-        self.source_moons_frame = ctk.CTkFrame(left, fg_color="transparent")
+        self.source_moons_frame = ctk.CTkFrame(self.snare_controls, fg_color="transparent")
 
-        self.source_actions = ctk.CTkFrame(left, fg_color="transparent")
+        self.source_actions = ctk.CTkFrame(self.snare_controls, fg_color="transparent")
         self.source_actions.pack(pady=(4, 6), padx=12, fill="x")
         DrakeButton(self.source_actions, text="ADD", width=80, command=self.add_source_to_list).pack(side="left", padx=(0, 4))
         self.btn_clear = DrakeClearButton(self.source_actions, command=self.clear_sources)
         self.btn_clear.pack(side="left", padx=(4, 0))
 
-        DrakeTitle4(left, text="DESTINATION").pack(pady=(8, 2), padx=12)
-        self.dest_selector = DrakeComboBox(left, values=location_list)
+        DrakeTitle4(self.snare_controls, text="DESTINATION").pack(pady=(8, 2), padx=12)
+        self.dest_selector = DrakeComboBox(self.snare_controls, values=location_list)
         self.dest_selector.pack(pady=5, padx=12, fill="x")
 
-        ctk.CTkFrame(left, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(fill="x", padx=12, pady=(6, 8))
+        ctk.CTkFrame(self.snare_controls, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(fill="x", padx=12, pady=(6, 8))
 
-        DrakeTitle4(left, text="SELECTED SOURCES").pack(pady=(12, 2), padx=12)
+        DrakeTitle4(self.snare_controls, text="SELECTED SOURCES").pack(pady=(12, 2), padx=12)
         self.sources_count_label = ctk.CTkLabel(
-            left,
+            self.snare_controls,
             text="SOURCES ADDED: 0",
             font=DrakeConfig.FONT_LOGS,
             text_color=DrakeConfig.TEXT_SECONDARY,
@@ -83,7 +101,11 @@ class InterceptionFrame(ctk.CTkFrame):
         )
         self.sources_count_label.pack(pady=(0, 8), padx=12, fill="x")
 
-        self.sources_check_frame = ctk.CTkScrollableFrame(left, fg_color=DrakeConfig.BG_TERMINAL, height=130)
+        self.sources_check_frame = ctk.CTkScrollableFrame(
+            self.snare_controls,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            height=120,
+        )
         self.sources_check_frame.pack(pady=(0, 8), padx=12, fill="x")
 
         self.btn_calc = DrakeButton(
@@ -92,44 +114,9 @@ class InterceptionFrame(ctk.CTkFrame):
             command=self.run_calculation,
             height=45,
         )
-        self.btn_calc.pack(pady=(12, 10), padx=12, fill="x")
-
-        DrakeTitle2(tab_positions, text="POSITION MANAGEMENT").pack(pady=(10, 8))
-
-        DrakeTitle4(tab_positions, text="NEW POSITION").pack(pady=(4, 2), padx=12)
-        self.new_pos_name = DrakeEntry(tab_positions, placeholder_text="NAME (ex: ARC-L2)")
-        self.new_pos_name.pack(pady=4, padx=12, fill="x")
-
-        DrakeTitle4(tab_positions, text="LOCATION TYPE").pack(pady=(4, 2), padx=12)
-        self.new_pos_type = DrakeComboBox(
-            tab_positions,
-            values=["POI", "STATION", "PLANET", "MOON", "LAGRANGE", "OUTPOST", "ASTEROID", "OTHER"],
-            command=self.on_location_type_change,
-        )
-        self.new_pos_type.set("POI")
-        self.new_pos_type.pack(pady=4, padx=12, fill="x")
-
-        DrakeTitle4(tab_positions, text="PARENT LOCATION").pack(pady=(4, 2), padx=12)
-        self.new_pos_parent = DrakeComboBox(tab_positions, values=["NONE"])
-        self.new_pos_parent.set("NONE")
-        self.new_pos_parent.pack(pady=4, padx=12, fill="x")
-
-        self.new_pos_x = DrakeEntry(tab_positions, placeholder_text="X")
-        self.new_pos_x.pack(pady=2, padx=12, fill="x")
-        self.new_pos_y = DrakeEntry(tab_positions, placeholder_text="Y")
-        self.new_pos_y.pack(pady=2, padx=12, fill="x")
-        self.new_pos_z = DrakeEntry(tab_positions, placeholder_text="Z")
-        self.new_pos_z.pack(pady=2, padx=12, fill="x")
-
-        DrakeButton(tab_positions, text="SAVE POSITION", command=self.action_create_position).pack(pady=(6, 8), padx=12, fill="x")
-
-        DrakeTitle4(tab_positions, text="DELETE POSITION").pack(pady=(6, 2), padx=12)
-        self.del_pos_selector = DrakeComboBox(tab_positions, values=location_list)
-        self.del_pos_selector.pack(pady=4, padx=12, fill="x")
-        DrakeClearButton(tab_positions, text="DELETE POSITION", command=self.action_delete_position).pack(pady=(2, 8), padx=12, fill="x")
+        self.btn_calc.pack(side="bottom", pady=(6, 10), padx=12, fill="x")
 
         self.on_source_changed(self.source_selector.get())
-        self.on_location_type_change(self.new_pos_type.get())
 
         self.output = right
 
@@ -150,13 +137,22 @@ class InterceptionFrame(ctk.CTkFrame):
         new_list = self.get_location_names()
         self.source_selector.configure(values=new_list)
         self.dest_selector.configure(values=new_list)
-        if hasattr(self, "del_pos_selector"):
+        if self._widget_exists("del_pos_selector"):
             self.del_pos_selector.configure(values=new_list)
         if hasattr(self, "source_selector"):
             self.on_source_changed(self.source_selector.get())
-        if hasattr(self, "new_pos_type"):
+        if self._widget_exists("new_pos_type"):
             self.on_location_type_change(self.new_pos_type.get())
         self.output.insert("end", ">>> Database refreshed: Selectors updated.\n")
+
+    def _widget_exists(self, attr_name):
+        widget = getattr(self, attr_name, None)
+        if widget is None:
+            return False
+        try:
+            return bool(widget.winfo_exists())
+        except Exception:
+            return False
 
     def on_source_changed(self, selected_source):
         """Affiche des checkboxes de lunes si la source choisie est une planète."""
@@ -205,7 +201,7 @@ class InterceptionFrame(ctk.CTkFrame):
 
     def on_location_type_change(self, selected_type):
         """Met à jour les choix de parent en fonction du type sélectionné."""
-        if not hasattr(self, "new_pos_parent"):
+        if not self._widget_exists("new_pos_parent"):
             return
 
         loc_type = (selected_type or "POI").strip().upper()
@@ -223,6 +219,75 @@ class InterceptionFrame(ctk.CTkFrame):
         values = ["NONE"] + [name for name in candidates if name != "NO DATA"]
         self.new_pos_parent.configure(values=values)
         self.new_pos_parent.set("NONE")
+
+    def _close_position_manager(self):
+        if self.position_popup is not None:
+            try:
+                self.position_popup.destroy()
+            except Exception:
+                pass
+            self.position_popup = None
+
+    def open_position_manager(self):
+        """Ouvre la fenêtre d'édition des positions (create/delete)."""
+        if self.position_popup is not None:
+            try:
+                if self.position_popup.winfo_exists():
+                    self.position_popup.lift()
+                    self.position_popup.focus_force()
+                    return
+            except Exception:
+                self.position_popup = None
+
+        self.position_popup = DrakeConfig.create_modal_window(
+            parent=self,
+            title="INTERCEPTION - POSITION EDITOR",
+            geometry="460x560",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=True,
+        )
+        self.position_popup.protocol("WM_DELETE_WINDOW", self._close_position_manager)
+
+        root = ctk.CTkScrollableFrame(self.position_popup, fg_color="transparent")
+        root.pack(fill="both", expand=True, padx=10, pady=10)
+
+        DrakeTitle2(root, text="POSITION MANAGEMENT").pack(pady=(8, 8))
+
+        location_list = self.get_location_names()
+
+        DrakeTitle4(root, text="NEW POSITION").pack(pady=(4, 2), padx=12)
+        self.new_pos_name = DrakeEntry(root, placeholder_text="NAME (ex: ARC-L2)")
+        self.new_pos_name.pack(pady=4, padx=12, fill="x")
+
+        DrakeTitle4(root, text="LOCATION TYPE").pack(pady=(4, 2), padx=12)
+        self.new_pos_type = DrakeComboBox(
+            root,
+            values=["STATION", "PLANET", "MOON", "LAGRANGE", "OUTPOST", "ASTEROID", "OTHER"],
+            command=self.on_location_type_change,
+        )
+        self.new_pos_type.set("STATION")
+        self.new_pos_type.pack(pady=4, padx=12, fill="x")
+
+        DrakeTitle4(root, text="PARENT LOCATION").pack(pady=(4, 2), padx=12)
+        self.new_pos_parent = DrakeComboBox(root, values=["NONE"])
+        self.new_pos_parent.set("NONE")
+        self.new_pos_parent.pack(pady=4, padx=12, fill="x")
+
+        self.new_pos_x = DrakeEntry(root, placeholder_text="X")
+        self.new_pos_x.pack(pady=2, padx=12, fill="x")
+        self.new_pos_y = DrakeEntry(root, placeholder_text="Y")
+        self.new_pos_y.pack(pady=2, padx=12, fill="x")
+        self.new_pos_z = DrakeEntry(root, placeholder_text="Z")
+        self.new_pos_z.pack(pady=2, padx=12, fill="x")
+
+        DrakeButton(root, text="SAVE POSITION", command=self.action_create_position).pack(pady=(6, 8), padx=12, fill="x")
+
+        DrakeTitle4(root, text="DELETE POSITION").pack(pady=(6, 2), padx=12)
+        self.del_pos_selector = DrakeComboBox(root, values=location_list)
+        self.del_pos_selector.pack(pady=4, padx=12, fill="x")
+        DrakeClearButton(root, text="DELETE POSITION", command=self.action_delete_position).pack(pady=(2, 8), padx=12, fill="x")
+
+        self.on_location_type_change(self.new_pos_type.get())
 
     def add_source_to_list(self):
         selected = self.source_selector.get()

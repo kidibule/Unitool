@@ -1,6 +1,6 @@
 """Frame de gestion flotte.
 
-Regroupe les onglets Ships, Components, Loadout et Config
+Regroupe les onglets Ships, Loadout et Config
 pour administrer le catalogue et l'équipement des vaisseaux.
 """
 
@@ -14,6 +14,7 @@ class ShipFrame(ctk.CTkFrame):
         """Initialise la vue et prépare le mapping de types UI."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        self.component_popup = None
         
         # Mapping des types pour le formulaire
         self.mapping_types = {
@@ -49,13 +50,11 @@ class ShipFrame(ctk.CTkFrame):
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
 
         self.tab_ships = self.tabview.add("SHIPS")
-        self.tab_components = self.tabview.add("COMPONENTS")
         self.tab_loadout = self.tabview.add("LOADOUT")
         self.tab_config = self.tabview.add("CONFIG")
 
         self.setup_ships_tab()
         self.setup_loadout_tab()
-        self.setup_components_tab()
         self.setup_config_tab()
 
     def refresh(self):
@@ -95,44 +94,86 @@ class ShipFrame(ctk.CTkFrame):
 
     def setup_components_tab(self):
         """Gestion de la base de données des composants."""
-        self.comp_container = ctk.CTkFrame(self.tab_components, fg_color="transparent")
+        self.open_component_manager()
+
+    def _widget_exists(self, attr_name):
+        widget = getattr(self, attr_name, None)
+        if widget is None:
+            return False
+        try:
+            return bool(widget.winfo_exists())
+        except Exception:
+            return False
+
+    def _close_component_manager(self):
+        if self.component_popup is not None:
+            try:
+                self.component_popup.destroy()
+            except Exception:
+                pass
+            self.component_popup = None
+
+    def open_component_manager(self):
+        """Ouvre la fenêtre d'édition des composants."""
+        if self.component_popup is not None:
+            try:
+                if self.component_popup.winfo_exists():
+                    self.component_popup.lift()
+                    self.component_popup.focus_force()
+                    return
+            except Exception:
+                self.component_popup = None
+
+        self.component_popup = DrakeConfig.create_modal_window(
+            parent=self,
+            title="FLEET - COMPONENT MANAGER",
+            geometry="980x620",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=True,
+        )
+        self.component_popup.protocol("WM_DELETE_WINDOW", self._close_component_manager)
+
+        self.comp_container = ctk.CTkFrame(self.component_popup, fg_color="transparent")
         self.comp_container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Panneau de contrôle (Gauche)
         self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=250, fg_color=DrakeConfig.BG_MAIN)
         self.add_comp_frame.pack(side="left", fill="y", padx=(0, 10))
         self.add_comp_frame.pack_propagate(False)
+
+        self.add_comp_scroll = ctk.CTkScrollableFrame(self.add_comp_frame, fg_color="transparent")
+        self.add_comp_scroll.pack(fill="both", expand=True, padx=0, pady=0)
         
-        DrakeTitle2(self.add_comp_frame, text="ADD COMPONENT").pack(pady=15)
+        DrakeTitle2(self.add_comp_scroll, text="ADD COMPONENT").pack(pady=15)
 
         # Champs du formulaire
-        DrakeTitle4(self.add_comp_frame, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
+        DrakeTitle4(self.add_comp_scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
         categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
-        self.new_comp_category = DrakeComboBox(self.add_comp_frame, 
+        self.new_comp_category = DrakeComboBox(self.add_comp_scroll, 
                             values=categories, 
                                                 command=self.on_category_change)
         self.new_comp_category.pack(pady=5, padx=15, fill="x")
 
-        DrakeTitle4(self.add_comp_frame, "MODULE TYPE").pack(pady=(0, 2), padx=10)
-        self.new_comp_type = DrakeComboBox(self.add_comp_frame, values=[])
+        DrakeTitle4(self.add_comp_scroll, "MODULE TYPE").pack(pady=(0, 2), padx=10)
+        self.new_comp_type = DrakeComboBox(self.add_comp_scroll, values=[])
         self.new_comp_type.pack(pady=5, padx=15, fill="x")
 
-        self.new_comp_name = DrakeEntry(self.add_comp_frame, placeholder_text="MODEL NAME (ex: FR-66)")
+        self.new_comp_name = DrakeEntry(self.add_comp_scroll, placeholder_text="MODEL NAME (ex: FR-66)")
         self.new_comp_name.pack(pady=5, padx=15, fill="x")
         
-        self.new_comp_brand = DrakeEntry(self.add_comp_frame, placeholder_text="MANUFACTURER (ex: AEGIS)")
+        self.new_comp_brand = DrakeEntry(self.add_comp_scroll, placeholder_text="MANUFACTURER (ex: AEGIS)")
         self.new_comp_brand.pack(pady=5, padx=15, fill="x")
 
-        DrakeTitle4(self.add_comp_frame, "SIZE").pack(pady=(0, 2), padx=10)
-        self.new_comp_size = DrakeComboBox(self.add_comp_frame, values=["0", "1", "2", "3", "4", "5"])
+        DrakeTitle4(self.add_comp_scroll, "SIZE").pack(pady=(0, 2), padx=10)
+        self.new_comp_size = DrakeComboBox(self.add_comp_scroll, values=["0", "1", "2", "3", "4", "5"])
         self.new_comp_size.pack(pady=5, padx=15, fill="x")
 
-        DrakeTitle4(self.add_comp_frame, "GRADE").pack(pady=(0, 2), padx=10)
-        self.new_comp_grade = DrakeComboBox(self.add_comp_frame, values=["A", "B", "C", "D"])
+        DrakeTitle4(self.add_comp_scroll, "GRADE").pack(pady=(0, 2), padx=10)
+        self.new_comp_grade = DrakeComboBox(self.add_comp_scroll, values=["A", "B", "C", "D"])
         self.new_comp_grade.set("C")
         self.new_comp_grade.pack(pady=5, padx=15, fill="x")
 
-        DrakeButton(self.add_comp_frame, text="SAVE TO DATABASE", 
+        DrakeButton(self.add_comp_scroll, text="SAVE TO DATABASE", 
                     command=self.save_new_component).pack(pady=(0, 8), padx=15, fill="x")
         
         self.update_selectors()
@@ -143,13 +184,7 @@ class ShipFrame(ctk.CTkFrame):
         self.on_category_change(default_cat)
 
         # Zone principale (Droite)
-        comp_main = ctk.CTkScrollableFrame(
-            self.comp_container,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            label_text="COMPONENT CATALOG",
-            label_font=("Orbitron", 12),
-            label_text_color=DrakeConfig.ACCENT_PRIMARY,
-        )
+        comp_main = ctk.CTkFrame(self.comp_container, fg_color=DrakeConfig.BG_TERMINAL)
         comp_main.pack(side="right", fill="both", expand=True)
 
         self.comp_list_terminal = DrakeTerminal(comp_main)
@@ -161,39 +196,57 @@ class ShipFrame(ctk.CTkFrame):
 
     def setup_loadout_tab(self):
         """Interface d'équipement avec contrôle à gauche et slots à droite."""
+        DrakeButton(
+            self.tab_loadout,
+            text="EDIT COMPONENTS",
+            command=self.open_component_manager,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=100,
+            height=20,
+            font=("Segoe UI", 9, "bold"),
+            corner_radius=0,
+        ).pack(anchor="ne", padx=20, pady=(8, 2))
+
         self.lo_container = ctk.CTkFrame(self.tab_loadout, fg_color="transparent")
-        self.lo_container.pack(fill="both", expand=True, padx=20, pady=20)
+        self.lo_container.pack(fill="both", expand=True, padx=20, pady=(4, 20))
 
         # --- PANNEAU DE CONTRÔLE (GAUCHE) ---
         ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_MAIN, width=250)
         ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
         ctrl_panel.pack_propagate(False)
 
-        DrakeTitle2(ctrl_panel, text="SHIP SELECTION").pack(pady=(15, 5))
+        ctrl_scroll = ctk.CTkScrollableFrame(ctrl_panel, fg_color="transparent")
+        ctrl_scroll.pack(fill="both", expand=True, padx=0, pady=0)
+
+        DrakeTitle2(ctrl_scroll, text="SHIP SELECTION").pack(pady=(15, 5))
 
         # Sélecteur de vaisseau
-        self.lo_ship_selector = DrakeComboBox(ctrl_panel, values=["SHIP"], command=self.on_ship_selected)
+        self.lo_ship_selector = DrakeComboBox(ctrl_scroll, values=["SHIP"], command=self.on_ship_selected)
         self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
 
-        DrakeTitle4(ctrl_panel, text="LOADOUT PROFILE").pack(pady=(15, 0))
+        DrakeTitle4(ctrl_scroll, text="LOADOUT PROFILE").pack(pady=(15, 0))
 
         # Nouveau sélecteur de profils
         self.lo_profile_selector = DrakeComboBox(
-            ctrl_panel, 
+            ctrl_scroll, 
             values=["DEFAULT"], 
             command=self.action_load_profile
         )
         self.lo_profile_selector.set("DEFAULT")
         self.lo_profile_selector.pack(pady=5, padx=15, fill="x")
 
-        self.lo_new_profile = DrakeEntry(ctrl_panel, placeholder_text="NEW PROFILE NAME")
+        self.lo_new_profile = DrakeEntry(ctrl_scroll, placeholder_text="NEW PROFILE NAME")
         self.lo_new_profile.pack(pady=(8, 5), padx=15, fill="x")
 
-        DrakeButton(ctrl_panel, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
+        DrakeButton(ctrl_scroll, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
 
         # Terminal de résumé
-        DrakeTitle4(ctrl_panel, text="CURRENT CONFIGURATION").pack(pady=(20, 0), padx=15)
-        self.lo_status_terminal = DrakeTerminal(ctrl_panel, height=250)
+        DrakeTitle4(ctrl_scroll, text="CURRENT CONFIGURATION").pack(pady=(20, 0), padx=15)
+        self.lo_status_terminal = DrakeTerminal(ctrl_scroll, height=250)
         self.lo_status_terminal.pack(pady=5, padx=15, fill="x")
 
         # Bouton Purge (en bas)
@@ -221,6 +274,9 @@ class ShipFrame(ctk.CTkFrame):
         left.pack(side="left", fill="y", padx=(0, 10))
         left.pack_propagate(False)
 
+        left_content = ctk.CTkFrame(left, fg_color="transparent")
+        left_content.pack(fill="both", expand=True, padx=0, pady=0)
+
         right = ctk.CTkScrollableFrame(
             root,
             fg_color=DrakeConfig.BG_TERMINAL,
@@ -230,38 +286,40 @@ class ShipFrame(ctk.CTkFrame):
         )
         right.pack(side="right", fill="both", expand=True)
 
-        DrakeTitle2(left, text="CONFIGURATION").pack(pady=(12, 0))
+        DrakeTitle2(left_content, text="CONFIGURATION").pack(pady=(12, 0))
         
-        DrakeTitle3(left, text="CATEGORY / TYPES").pack(pady=(2, 8))
+        DrakeTitle3(left_content, text="CATEGORY / TYPES").pack(pady=(2, 8))
 
-        DrakeTitle4(left, text="--- CATEGORY ---").pack(pady=(4, 2), padx=12)
+        DrakeTitle4(left_content, text="--- CATEGORY ---").pack(pady=(4, 2), padx=12)
 
-        self.cfg_type_new_category = DrakeEntry(left, placeholder_text="NEW CATEGORY NAME (ex: WEAPON)")
+        self.cfg_type_new_category = DrakeEntry(left_content, placeholder_text="NEW CATEGORY NAME (ex: WEAPON)")
         self.cfg_type_new_category.pack(pady=4, padx=12, fill="x")
 
-        DrakeButton(left, text="ADD CATEGORY", command=self.action_add_category).pack(pady=(0, 4), padx=12, fill="x")
+        DrakeButton(left_content, text="ADD CATEGORY", command=self.action_add_category).pack(pady=(0, 8), padx=12, fill="x")
 
-        ctk.CTkFrame(left, fg_color="#2a2a2a", height=1).pack(fill="x", padx=12, pady=(6, 8))
+        ctk.CTkFrame(left_content, fg_color="#2a2a2a", height=1).pack(fill="x", padx=12, pady=(2, 10))
 
-        DrakeTitle4(left, text="--- TYPES (BY CATEGORY) ---").pack(pady=(0, 2), padx=12)
+        DrakeTitle4(left_content, text="--- TYPES (BY CATEGORY) ---").pack(pady=(0, 2), padx=12)
 
         categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
 
-        self.cfg_type_entry = DrakeEntry(left, placeholder_text="NEW TYPE NAME (ex: SHIELD GENERATOR)")
-        self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
-
-        DrakeTitle4(left, text="CATEGORY").pack(pady=(0, 2), padx=12)
-        self.cfg_type_category = DrakeComboBox(left, values=categories, command=self.on_cfg_type_category_change)
+        DrakeTitle4(left_content, text="CATEGORY").pack(pady=(0, 2), padx=12)
+        self.cfg_type_category = DrakeComboBox(left_content, values=categories, command=self.on_cfg_type_category_change)
         self.cfg_type_category.pack(pady=4, padx=12, fill="x")
 
-        DrakeButton(left, text="SAVE", command=self.action_add_subtype).pack(pady=(0, 4), padx=12, fill="x")
+        self.cfg_type_entry = DrakeEntry(left_content, placeholder_text="NEW TYPE NAME (ex: SHIELD GENERATOR)")
+        self.cfg_type_entry.pack(pady=4, padx=12, fill="x")
 
-        DrakeTitle4(left, text="EXISTING TYPES").pack(pady=(0, 2), padx=12)
-        self.cfg_type_selector = DrakeComboBox(left, values=[])
+        type_actions = ctk.CTkFrame(left_content, fg_color="transparent")
+        type_actions.pack(pady=(2, 8), padx=12, fill="x")
+        DrakeButton(type_actions, text="ADD TYPE", command=self.action_add_subtype).pack(side="left", padx=(0, 4), fill="x", expand=True)
+
+        DrakeTitle4(left_content, text="EXISTING TYPES").pack(pady=(0, 2), padx=12)
+        self.cfg_type_selector = DrakeComboBox(left_content, values=[])
         self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
 
-        DrakeClearButton(left, text="DELETE", command=self.action_delete_subtype,
-                    fg_color="#550000", hover_color="#770000").pack(pady=(0, 4), padx=12, fill="x")
+        DrakeClearButton(left_content, text="DELETE TYPE", command=self.action_delete_subtype,
+                fg_color="#550000", hover_color="#770000").pack(pady=(0, 4), padx=12, fill="x")
 
         DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
 
@@ -349,6 +407,10 @@ class ShipFrame(ctk.CTkFrame):
 
     def save_new_component(self):
         """Sauvegarde un composant et rafraîchit les vues."""
+        if not self._widget_exists("new_comp_name"):
+            self.open_component_manager()
+            return
+
         name = self.new_comp_name.get().strip().upper()
         if not name: return
 
@@ -372,6 +434,9 @@ class ShipFrame(ctk.CTkFrame):
 
     # --- ACTIONS ---
     def on_category_change(self, choice):
+        if not self._widget_exists("new_comp_type"):
+            return
+
         new_values = self.controller.ship.list_component_subtypes(choice)
         if not new_values:
             new_values = self.mapping_types.get(choice, [])
@@ -394,6 +459,9 @@ class ShipFrame(ctk.CTkFrame):
 
     def run_component_scan(self):
         """Liste hiérarchique des composants en DB."""
+        if not self._widget_exists("comp_list_terminal"):
+            return
+
         self.comp_list_terminal.delete("0.0", "end")
         rows = self.controller.ship.list_components_catalog()
         last_cat = None
@@ -639,7 +707,7 @@ class ShipFrame(ctk.CTkFrame):
                 self.cfg_type_category.configure(values=categories)
                 self.cfg_slot_category.configure(values=categories)
 
-            if hasattr(self, "new_comp_category"):
+            if self._widget_exists("new_comp_category"):
                 categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
                 self.new_comp_category.configure(values=categories)
         except Exception as e:
@@ -702,7 +770,8 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_type_entry.delete(0, "end")
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(self.cfg_slot_category.get())
-            self.on_category_change(self.new_comp_category.get())
+            if self._widget_exists("new_comp_category"):
+                self.on_category_change(self.new_comp_category.get())
         except Exception as e:
             DrakePopup.error("DRAKE OS", str(e), parent=self)
 
@@ -716,7 +785,8 @@ class ShipFrame(ctk.CTkFrame):
         self.controller.ship.delete_component_subtype(category, subtype)
         self.on_cfg_type_category_change(category)
         self.on_cfg_slot_category_change(self.cfg_slot_category.get())
-        self.on_category_change(self.new_comp_category.get())
+        if self._widget_exists("new_comp_category"):
+            self.on_category_change(self.new_comp_category.get())
 
     def on_cfg_slot_ship_change(self, _ship_name):
         self.refresh_slot_terminal()
