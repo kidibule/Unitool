@@ -115,7 +115,7 @@ class ScannerFrame(ctk.CTkFrame):
             orgs = [o for o in orgs if o[0] and len(str(o[0])) > 2]
 
             for o in orgs:
-                # On adapte la déballage pour correspondre au retour du controller (8 colonnes maintenant)
+                # On adapte la déballage pour correspondre au retour du controller
                 sid, name, tag, count, o_type, spec, alignment, updated_at = o
                 tag_name_click = f"edit_name_{sid}"
                 tag_link = f"link_org_{sid}"
@@ -124,11 +124,12 @@ class ScannerFrame(ctk.CTkFrame):
                 org_model = self.controller.org.get_org_model(sid)
 
                 # --- [BLOC 1 : IDENTITÉ & TYPE] ---
-                # AJOUT DU CARRÉ DE COULEUR (Alignement)
                 self.org_results.insert("end", " ■ ", alignment) 
                 
                 self.org_results.insert("end", f"{name} ", (tag_name_click, "NEUTRE"))
-                self.org_results.insert("end", f"[{sid}]", (tag_link, "link_rsi"))
+                self.org_results.insert("end", "[")
+                self.org_results.insert("end", f"{sid}", (tag_link, "link_org"))
+                self.org_results.insert("end", "]")
                 
                 # Ligne de spécialisation
                 self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec} | TAG: {tag or 'N/A'}\n")
@@ -197,20 +198,22 @@ class ScannerFrame(ctk.CTkFrame):
                 self.org_results.insert("end", f"{'='*60}\n\n")
 
                 # --- BINDINGS ---
-                self.org_results.tag_bind(tag_name_click, "<Double-Button-1>", lambda e, s=sid: self.edit_org_window(s))   
+                self.org_results.tag_bind(tag_name_click, "<Button-1>", lambda e, s=sid: self.edit_org_window(s))   
                 self.org_results.tag_bind(tag_link, "<Button-1>", lambda e, s=sid: self.open_org(s))
 
     def setup_tags(self):
-        self.results.tag_config("link", foreground=DrakeConfig.ACCENT_PRIMARY, underline=True)
+        self.results.tag_config("link", foreground=DrakeConfig.TEXT_MAIN)
         self.results.tag_config("link_org", foreground=DrakeConfig.TEXT_SECONDARY, underline=True)
         self.results.tag_config("link_rsi", foreground="#00aaff", underline=True)
+        self.results.tag_config("ship_name_white", foreground=DrakeConfig.TEXT_MAIN)
         self.results.tag_config("AMI", foreground="#00FF00")
         self.results.tag_config("ENNEMI", foreground=DrakeConfig.ACCENT_ERROR)
         self.results.tag_config("NEUTRE", foreground=DrakeConfig.TEXT_MAIN)
         self.results.tag_config("open_contract", foreground=DrakeConfig.ACCENT_PRIMARY)
         self.results.tag_config("closed_contract", foreground="green")
 
-        self.org_results.tag_config("ACCENT", foreground="#ff8c00") # L'orange Drake
+        self.org_results.tag_config("ACCENT", foreground="#ff8c00")
+        self.org_results.tag_config("link_org", foreground=DrakeConfig.TEXT_SECONDARY, underline=True)
         self.org_results.tag_config("NEUTRE", foreground="white")
         self.org_results.tag_config("ENNEMI", foreground="#ff4444")
         self.org_results.tag_config("AMI", foreground="#00FF00")
@@ -518,14 +521,16 @@ class ScannerFrame(ctk.CTkFrame):
                 
                 # --- [BLOC 2 : INFOS TECHNIQUES] ---
                 ratio = f"{t.pvp_ratio():.2f}"
-                self.results.insert("end", f"   VAISSEAU: {t.ship or 'INC'} | MENACE: {t.threat} | W/L: {t.wins}/{t.losses} ({ratio})\n")
+                self.results.insert("end", "   SHIP: ")
+                self.results.insert("end", f"{t.ship or 'INC'}", "ship_name_white")
+                self.results.insert("end", f" | MENACE: {t.threat} | W/L: {t.wins}/{t.losses} ({ratio})\n")
                 self.results.insert("end", f"   PVP: {t.pvp_lvl} | ACTIVITÉ: {t.activity} | LANG: {t.language}\n")
 
                 # --- [BLOC 3 : NOTES / RENSEIGNEMENTS] ---
                 self.results.insert("end", "   " + "-"*45 + "\n", "separator")
                 notes = self.controller.scanner.get_target_notes(t.pseudo, limit=3)
                 if notes:
-                    self.results.insert("end", "   RENSEIGNEMENTS (journal):\n", "notes_label")
+                    self.results.insert("end", "   RENSEIGNEMENTS:\n", "notes_label")
                     for note_id, note_text, created_at in notes:
                         self.results.insert("end", f"   - #{note_id} {created_at}: {note_text}\n", "notes_text")
                 elif t.notes and t.notes.strip():

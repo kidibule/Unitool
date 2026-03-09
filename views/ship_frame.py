@@ -89,6 +89,8 @@ class ShipFrame(ctk.CTkFrame):
 
         self.ship_results = DrakeTerminal(self.tab_ships)
         self.ship_results.pack(pady=5, padx=10, fill="both", expand=True)
+        self.ship_results.tag_config("ACCENT", foreground=DrakeConfig.ACCENT_PRIMARY)
+        self.ship_results.tag_config("ship_name_white", foreground=DrakeConfig.TEXT_MAIN)
 
     # --- ONGLET COMPONENTS ---
 
@@ -319,7 +321,7 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
 
         DrakeClearButton(left_content, text="DELETE TYPE", command=self.action_delete_subtype,
-                fg_color="#550000", hover_color="#770000").pack(pady=(0, 4), padx=12, fill="x")
+                fg_color="#550000", hover_color="#770000").pack(side="bottom", pady=(0, 4), padx=12, fill="x")
 
         DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
 
@@ -391,7 +393,7 @@ class ShipFrame(ctk.CTkFrame):
             
             tag = f"edit_{ship.name.replace(' ', '_')}"
             self.ship_results.insert("end", " ■ ", "ACCENT") 
-            self.ship_results.insert("end", f"{ship.brand} {ship.name} ", (tag, "NEUTRE"))
+            self.ship_results.insert("end", f"{ship.brand} {ship.name} ", (tag, "ship_name_white"))
             self.ship_results.insert("end", f"[{ship.size.upper()}]\n", "info_label")
             self.ship_results.insert("end", f"   ROLE: {ship.role} | CREW: {ship.crew_size} | CARGO: {ship.cargo} SCU\n")
             self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
