@@ -390,6 +390,7 @@ class ShipFrame(ctk.CTkFrame):
         for ship_name in names:
             ship = self.controller.ship.load_ship_as_model(ship_name)
             if not ship: continue
+            ship_default = self.controller.ship.load_full_ship(ship_name, "DEFAULT")
             
             tag = f"edit_{ship.name.replace(' ', '_')}"
             self.ship_results.insert("end", " ■ ", "ACCENT") 
@@ -398,11 +399,13 @@ class ShipFrame(ctk.CTkFrame):
             self.ship_results.insert("end", f"   ROLE: {ship.role} | CREW: {ship.crew_size} | CARGO: {ship.cargo} SCU\n")
             self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
             
-            # Affichage des composants équipés
-            if ship.components:
-                self.ship_results.insert("end", "   LOADOUT:\n", "ACCENT")
-                for c in ship.components:
-                    self.ship_results.insert("end", f"     • [{c.category}] {c.brand} {c.name} (S{c.size})\n")
+            # Affichage du loadout par défaut (profil DEFAULT)
+            if ship_default and ship_default.components:
+                self.ship_results.insert("end", "   DEFAULT LOADOUT:\n", "ACCENT")
+                for c in ship_default.components:
+                    self.ship_results.insert("end", f"   - [{c.category}] {c.brand} {c.name} (S{c.size})\n")
+            else:
+                self.ship_results.insert("end", "   DEFAULT LOADOUT: No data.\n", "small_info")
             
             self.ship_results.insert("end", f"{'='*60}\n\n")
             self.ship_results.tag_bind(tag, "<Double-Button-1>", lambda e, n=ship.name: self.open_edit_window(n))
