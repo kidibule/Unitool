@@ -52,6 +52,32 @@ class Database:
             try: self.cursor.execute(f"ALTER TABLE targets ADD COLUMN {col_name} {col_type}")
             except: pass
 
+        # Journal des notes par target (historique multi-entrées)
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS target_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_pseudo TEXT NOT NULL,
+                note_text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_target_notes_pseudo ON target_notes(target_pseudo)"
+        )
+
+        # Journal des notes par organisation
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS org_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_sid TEXT NOT NULL,
+                note_text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_org_notes_sid ON org_notes(org_sid)"
+        )
+
         # --- TABLE ORGANIZATIONS ---
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS organizations (
             sid TEXT PRIMARY KEY,
@@ -412,6 +438,121 @@ class Database:
                 "Language": row[4],
             }
         return None
+
+    def add_target_note(self, pseudo, note_text, created_at=None):
+        """Ajoute une note horodatée au journal d'une target."""
+        handle = str(pseudo or "").strip().upper()
+        note = str(note_text or "").strip()
+        if not handle or not note:
+            return
+
+        created = created_at or time.strftime("%d/%m/%Y %H:%M")
+        self.commit(
+            "INSERT INTO target_notes (target_pseudo, note_text, created_at) VALUES (?, ?, ?)",
+            (handle, note, created),
+        )
+
+        # Compatibilité: conserve la dernière note dans la table targets.
+        self.commit(
+            "UPDATE targets SET notes=?, date=? WHERE pseudo=?",
+            (note, time.strftime("%d/%m/%Y"), handle),
+        )
+
+    def get_target_notes(self, pseudo, limit=50):
+        """Retourne le journal des notes d'une target (plus recentes d'abord)."""
+        handle = str(pseudo or "").strip().upper()
+        if not handle:
+            return []
+
+        sql = (
+            "SELECT id, note_text, created_at FROM target_notes "
+            "WHERE target_pseudo=? ORDER BY id DESC"
+        )
+        params = (handle,)
+        if limit and int(limit) > 0:
+            sql += " LIMIT ?"
+            params = (handle, int(limit))
+
+        return self.query(sql, params)
+
+    def update_target_note(self, pseudo, note_id, note_text):
+        """Modifie une note existante d'une target."""
+        handle = str(pseudo or "").strip().upper()
+        note = str(note_text or "").strip()
+        if not handle or not note:
+            return
+
+        self.commit(
+            "UPDATE target_notes SET note_text=? WHERE id=? AND target_pseudo=?",
+            (note, int(note_id), handle),
+        )
+
+    def delete_target_note(self, pseudo, note_id):
+        """Supprime une note du journal d'une target."""
+        handle = str(pseudo or "").strip().upper()
+        if not handle:
+            return
+
+        self.commit(
+            "DELETE FROM target_notes WHERE id=? AND target_pseudo=?",
+            (int(note_id), handle),
+        )
+
+    def add_org_note(self, sid, note_text, created_at=None):
+        """Ajoute une note horodatee au journal d'une organisation."""
+        org_sid = str(sid or "").strip().upper()
+        note = str(note_text or "").strip()
+        if not org_sid or not note:
+            return
+
+        created = created_at or time.strftime("%d/%m/%Y %H:%M")
+        self.commit(
+            "INSERT INTO org_notes (org_sid, note_text, created_at) VALUES (?, ?, ?)",
+            (org_sid, note, created),
+        )
+
+        # Compatibilite legacy: description conserve la derniere note.
+        self.commit(
+            "UPDATE organizations SET description=?, updated_at=? WHERE sid=?",
+            (note, time.strftime("%d/%m/%Y"), org_sid),
+        )
+
+    def get_org_notes(self, sid, limit=50):
+        """Retourne le journal des notes d'une organisation."""
+        org_sid = str(sid or "").strip().upper()
+        if not org_sid:
+            return []
+
+        sql = "SELECT id, note_text, created_at FROM org_notes WHERE org_sid=? ORDER BY id DESC"
+        params = (org_sid,)
+        if limit and int(limit) > 0:
+            sql += " LIMIT ?"
+            params = (org_sid, int(limit))
+
+        return self.query(sql, params)
+
+    def update_org_note(self, sid, note_id, note_text):
+        """Modifie une note existante d'une organisation."""
+        org_sid = str(sid or "").strip().upper()
+        note = str(note_text or "").strip()
+        if not org_sid or not note:
+            return
+
+        self.commit(
+            "UPDATE org_notes SET note_text=? WHERE id=? AND org_sid=?",
+            (note, int(note_id), org_sid),
+        )
+
+    def delete_org_note(self, sid, note_id):
+        """Supprime une note du journal d'une organisation."""
+        org_sid = str(sid or "").strip().upper()
+        if not org_sid:
+            return
+
+        self.commit(
+            "DELETE FROM org_notes WHERE id=? AND org_sid=?",
+            (int(note_id), org_sid),
+        )
 
     def add_ship(self, pseudo, ship):
         """Ajoute un ship à un joueur."""

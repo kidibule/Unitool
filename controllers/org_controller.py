@@ -87,3 +87,44 @@ class OrgController:
             
             sql = f"INSERT INTO organizations ({', '.join(cols)}) VALUES ({placeholders})"
             self.app.commit(sql, tuple(vals))
+
+    def add_org_note(self, sid: str, note_text: str) -> None:
+        """Ajoute une note au journal d'une organisation."""
+        org_sid = str(sid or "").strip().upper()
+        note = str(note_text or "").strip()
+        if not org_sid or not note:
+            return
+
+        org = self.get_org_model(org_sid)
+        if org is None:
+            self.app.commit(
+                "INSERT INTO organizations (sid, name, updated_at) VALUES (?, ?, strftime('%d/%m/%Y','now'))",
+                (org_sid, org_sid),
+            )
+
+        # Migration douce de l'ancienne description en premiere entree du journal.
+        org = self.get_org_model(org_sid)
+        if org and org.description and str(org.description).strip():
+            legacy_note = str(org.description).strip()
+            already = self.app.query(
+                "SELECT 1 FROM org_notes WHERE org_sid=? AND note_text=? LIMIT 1",
+                (org_sid, legacy_note),
+            )
+            if not already:
+                legacy_date = str(org.updated_at or "").strip() or "N/A"
+                created = f"{legacy_date} 00:00" if "/" in legacy_date else legacy_date
+                self.app.db.add_org_note(org_sid, legacy_note, created)
+
+        self.app.db.add_org_note(org_sid, note)
+
+    def get_org_notes(self, sid: str, limit: int = 50) -> list:
+        """Retourne les notes d'organisation (id, note_text, created_at)."""
+        return self.app.db.get_org_notes(sid, limit=limit)
+
+    def update_org_note(self, sid: str, note_id: int, note_text: str) -> None:
+        """Modifie une entree du journal d'organisation."""
+        self.app.db.update_org_note(sid, note_id, note_text)
+
+    def delete_org_note(self, sid: str, note_id: int) -> None:
+        """Supprime une entree du journal d'organisation."""
+        self.app.db.delete_org_note(sid, note_id)
