@@ -69,8 +69,8 @@ class MainView(ctk.CTkFrame):
 
         menu_items = [
             ("ScannerFrame", "DATABASE"),
-            ("ContractFrame", "CONTRATS"),
-            ("LoggerFrame", "ARCHIVER"),
+            ("ContractFrame", "CONTRACTS"),
+            ("LoggerFrame", "ARCHIVE"),
             ("IntelligenceFrame", "INTEL"),
             ("InterceptionFrame", "INTERCEPTION"),
             ("ShipFrame", "SHIPS"),

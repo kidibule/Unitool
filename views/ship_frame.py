@@ -71,7 +71,7 @@ class ShipFrame(ctk.CTkFrame):
     def setup_ships_tab(self):
         """Moteur de recherche et fiches techniques."""
         self.ship_search_entry = DrakeEntry(
-            self.tab_ships, placeholder_text="RECHERCHER UN VAISSEAU (NOM OU RÔLE)...", 
+            self.tab_ships, placeholder_text="SEARCH A SHIP (NAME OR ROLE)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
         self.ship_search_entry.pack(pady=(10, 5), padx=20, fill="x")

@@ -80,7 +80,7 @@ class ScannerFrame(ctk.CTkFrame):
     def setup_targets_tab(self):
         """Configure l'onglet de recherche de joueurs."""
         self.search_entry = DrakeEntry(
-            self.tab_targets, placeholder_text="ENTREZ UN PSEUDO OU UN SID...", 
+            self.tab_targets, placeholder_text="ENTER A HANDLE OR SID...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
         self.search_entry.pack(pady=10, padx=20, fill="x")
@@ -93,7 +93,7 @@ class ScannerFrame(ctk.CTkFrame):
     def setup_orgs_tab(self):
         """Configure l'onglet de recherche d'organisations."""
         self.org_search_entry = DrakeEntry(
-            self.tab_orgs, placeholder_text="RECHERCHER UNE ORGA (NOM OU SID)...", 
+            self.tab_orgs, placeholder_text="SEARCH AN ORG (NAME OR SID)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
         self.org_search_entry.pack(pady=10, padx=20, fill="x")
@@ -133,7 +133,7 @@ class ScannerFrame(ctk.CTkFrame):
                 
                 # Ligne de spécialisation
                 self.org_results.insert("end", f"\n   TYPE: {o_type} | SPEC: {spec} | TAG: {tag or 'N/A'}\n")
-                self.org_results.insert("end", f"   DERNIÈRE MAJ: {org_model.updated_at if org_model else 'INCONNUE'}\n")
+                self.org_results.insert("end", f"   LAST UPDATE: {org_model.updated_at if org_model else 'UNKNOWN'}\n")
 
                 # --- [BLOC 2 : ROSTER & EFFECTIFS] ---
                 self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
@@ -167,18 +167,18 @@ class ScannerFrame(ctk.CTkFrame):
                             summary = f"\n   TOTAL: {count:<4} | VISIBLE: {len(members):<4} | REDACTED: {r_val}\n"
                             self.org_results.insert("end", summary, "bold")
                     except Exception as e:
-                        self.org_results.insert("end", f"   [!] Erreur Roster: {e}\n", "warning")
+                        self.org_results.insert("end", f"   [!] Roster error: {e}\n", "warning")
                 
                 # --- [BLOC 3 : DIPLOMATIE & MANIFESTE] ---
                 self.org_results.insert("end", "   " + "-"*45 + "\n", "separator")
                 
                 if org_model:
                     # Diplomatie
-                    self.org_results.insert("end", "   ALLIÉS : ", "info_label")
-                    self.org_results.insert("end", f"{org_model.allies or 'AUCUN'}\n")
+                    self.org_results.insert("end", "   ALLIES: ", "info_label")
+                    self.org_results.insert("end", f"{org_model.allies or 'NONE'}\n")
                     
-                    self.org_results.insert("end", "   ENNEMIS : ", "warning_label")
-                    self.org_results.insert("end", f"{org_model.enemies or 'AUCUN'}\n")
+                    self.org_results.insert("end", "   ENEMIES: ", "warning_label")
+                    self.org_results.insert("end", f"{org_model.enemies or 'NONE'}\n")
 
                     # Journal notes (3 dernieres) + fallback legacy description
                     notes = self.controller.org.get_org_notes(sid, limit=3)
@@ -188,7 +188,7 @@ class ScannerFrame(ctk.CTkFrame):
                             compact = note_text[:120] + "..." if len(note_text) > 120 else note_text
                             self.org_results.insert("end", f"   - #{note_id} {created_at}: {compact}\n", "notes_text")
                     elif org_model.description and org_model.description.strip():
-                        self.org_results.insert("end", "\n   MANIFESTE / NOTES (LEGACY) :\n", "notes_label")
+                        self.org_results.insert("end", "\n   MANIFEST / NOTES (LEGACY):\n", "notes_label")
                         desc = org_model.description[:200] + "..." if len(org_model.description) > 200 else org_model.description
                         self.org_results.insert("end", f"   {desc}\n", "notes_text")
                 
@@ -223,21 +223,21 @@ class ScannerFrame(ctk.CTkFrame):
             self.results.tag_bind(k, "<Leave>", lambda e: self.results.configure(cursor="arrow"))
 
     def open_rsi(self, pseudo):
-        self._log(f"Ouverture profil RSI: {pseudo}")
+        self._log(f"Opening RSI profile: {pseudo}")
         webbrowser.open(f"https://robertsspaceindustries.com/citizens/{pseudo}")
 
     def open_org(self, sid):
         if sid and sid != "N/A":
             # Nettoyage au cas où (espaces ou crochets)
             clean_sid = str(sid).strip().replace("[", "").replace("]", "")
-            self._log(f"Ouverture organisation RSI: {clean_sid}")
+            self._log(f"Opening RSI organization: {clean_sid}")
             webbrowser.open(f"https://robertsspaceindustries.com/orgs/{clean_sid}")
 
     def edit_target_window(self, pseudo):
         """Fenêtre d'édition — HANDLE et CREATION en lecture seule."""
         toplevel = DrakeConfig.create_modal_window(
             parent=self,
-            title=f"MODIFICATION DOSSIER : {pseudo}",
+            title=f"EDIT FILE: {pseudo}",
             geometry="700x700",
             fg_color=DrakeConfig.BG_MAIN,
             resizable=True,
@@ -248,7 +248,7 @@ class ScannerFrame(ctk.CTkFrame):
             return
         d = row[0]
 
-        ctk.CTkLabel(toplevel, text=f"ÉDITION DES DONNÉES IFF : {pseudo}", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=12)
+        ctk.CTkLabel(toplevel, text=f"EDIT IFF DATA: {pseudo}", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=12)
 
         frame = ctk.CTkScrollableFrame(toplevel, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -285,7 +285,7 @@ class ScannerFrame(ctk.CTkFrame):
 
         align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         align_f.pack(fill="x", pady=4)
-        ctk.CTkLabel(align_f, text="ALIGNEMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
+        ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
         e_align.set(d[8] if len(d) > 8 and d[8] else "NEUTRE")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
@@ -294,7 +294,7 @@ class ScannerFrame(ctk.CTkFrame):
         e_activity = field(frame, "Activity", d[10] if len(d) > 10 else "")
         e_lang = field(frame, "Language", d[14] if len(d) > 14 else "")
 
-        ctk.CTkLabel(frame, text="JOURNAL DE RENSEIGNEMENT", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=8)
+        ctk.CTkLabel(frame, text="INTEL JOURNAL", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=8)
         journal_list = ctk.CTkScrollableFrame(
             frame,
             height=210,
@@ -307,7 +307,7 @@ class ScannerFrame(ctk.CTkFrame):
         def open_edit_target_note(note_id: int, current_text: str) -> None:
             edit_win = DrakeConfig.create_modal_window(
                 parent=toplevel,
-                title=f"MODIFIER NOTE #{note_id}",
+                title=f"EDIT NOTE #{note_id}",
                 geometry="520x260",
                 fg_color=DrakeConfig.BG_MAIN,
                 resizable=True,
@@ -332,14 +332,14 @@ class ScannerFrame(ctk.CTkFrame):
             def save_note_edit() -> None:
                 new_text = edit_box.get("0.0", "end").strip()
                 if not new_text:
-                    DrakePopup.error("ERREUR", "La note ne peut pas etre vide.", parent=edit_win)
+                    DrakePopup.error("ERROR", "Note cannot be empty.", parent=edit_win)
                     return
                 self.controller.scanner.update_target_note(pseudo, note_id, new_text)
                 edit_win.destroy()
                 refresh_note_journal()
                 self.run_scan(None)
 
-            DrakeButton(edit_win, text="SAUVEGARDER", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
+            DrakeButton(edit_win, text="SAVE", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
 
         def refresh_note_journal() -> None:
             for child in journal_list.winfo_children():
@@ -363,7 +363,7 @@ class ScannerFrame(ctk.CTkFrame):
 
                     DrakeButton(
                         top,
-                        text="MODIFIER",
+                        text="EDIT",
                         width=90,
                         height=26,
                         command=lambda nid=note_id, txt=note_text: open_edit_target_note(nid, txt),
@@ -371,7 +371,7 @@ class ScannerFrame(ctk.CTkFrame):
 
                     DrakeButton(
                         top,
-                        text="SUPPRIMER",
+                        text="DELETE",
                         width=90,
                         height=26,
                         fg_color="#8b2c2c",
@@ -400,12 +400,12 @@ class ScannerFrame(ctk.CTkFrame):
             else:
                 ctk.CTkLabel(
                     journal_list,
-                    text="Aucune note enregistree.",
+                    text="No saved notes.",
                     text_color=DrakeConfig.TEXT_SECONDARY,
                 ).pack(padx=8, pady=8, anchor="w")
 
         def delete_target_note(note_id: int) -> None:
-            confirm = DrakePopup.yesno("CONFIRMATION", f"Supprimer la note #{note_id} ?", parent=toplevel)
+            confirm = DrakePopup.yesno("CONFIRMATION", f"Delete note #{note_id}?", parent=toplevel)
             if not confirm:
                 return
             self.controller.scanner.delete_target_note(pseudo, note_id)
@@ -414,7 +414,7 @@ class ScannerFrame(ctk.CTkFrame):
 
         refresh_note_journal()
 
-        ctk.CTkLabel(frame, text="NOUVELLE NOTE", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(8, 2), padx=8)
+        ctk.CTkLabel(frame, text="NEW NOTE", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(8, 2), padx=8)
         new_note_box = ctk.CTkTextbox(
             frame,
             height=110,
@@ -456,13 +456,13 @@ class ScannerFrame(ctk.CTkFrame):
                 toplevel.grab_release()
                 
                 # Le popup de succès s'affiche sur la fenêtre principale
-                DrakePopup.info("SYSTEMS", f"Dossier de {pseudo} synchronise.", parent=main_win)
-                self._log(f"Target synchronisée: {pseudo}")
+                DrakePopup.info("SYSTEMS", f"File for {pseudo} synchronized.", parent=main_win)
+                self._log(f"Target synchronized: {pseudo}")
 
             except Exception as e:
                 # On affiche l'erreur sans fermer pour pouvoir copier le message
-                self._log(f"Échec synchronisation target {pseudo}: {e}", source="ERROR")
-                DrakePopup.error("ERREUR SQL", f"Détails : {e}", parent=main_win)
+                self._log(f"Target sync failed {pseudo}: {e}", source="ERROR")
+                DrakePopup.error("SQL ERROR", f"Details: {e}", parent=main_win)
 
         
         btn_cancel = DrakeButton(
@@ -513,7 +513,7 @@ class ScannerFrame(ctk.CTkFrame):
                     self.results.insert("end", f"{org_val}/{t.sid or 'N/A'}", ("link_org", tag_o))
                     self.results.insert("end", "]")
                 else:
-                    self.results.insert("end", " [SANS ORG]")
+                    self.results.insert("end", " [NO ORG]")
 
                 self.results.insert("end", " [")
                 self.results.insert("end", "RSI", ("link_rsi", tag_r))
@@ -530,14 +530,14 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.insert("end", "   " + "-"*45 + "\n", "separator")
                 notes = self.controller.scanner.get_target_notes(t.pseudo, limit=3)
                 if notes:
-                    self.results.insert("end", "   RENSEIGNEMENTS:\n", "notes_label")
+                    self.results.insert("end", "   INTEL:\n", "notes_label")
                     for note_id, note_text, created_at in notes:
                         self.results.insert("end", f"   - #{note_id} {created_at}: {note_text}\n", "notes_text")
                 elif t.notes and t.notes.strip():
-                    self.results.insert("end", f"   RENSEIGNEMENTS ({t.date}):\n", "notes_label")
+                    self.results.insert("end", f"   INTEL ({t.date}):\n", "notes_label")
                     self.results.insert("end", f"   {t.notes}\n", "notes_text")
                 else:
-                    self.results.insert("end", "   RENSEIGNEMENTS: Aucune donnee.\n", "small_info")
+                    self.results.insert("end", "   INTEL: No data.\n", "small_info")
                 self.results.insert("end", "   " + "-"*45 + "\n", "separator")
 
                 # --- [BLOC 4 : CONTRATS (DÉTAILLÉ)] ---
@@ -549,11 +549,11 @@ class ScannerFrame(ctk.CTkFrame):
                         t_open = sum(1 for c in target_contracts if c[4] != "CLOSED")
                         c_open = sum(1 for c in client_contracts if c[4] != "CLOSED")
                         
-                        self.results.insert("end", f"   HISTORIQUE CONTRATS : CIBLE(O:{t_open}) | CLIENT(O:{c_open})\n")
+                        self.results.insert("end", f"   CONTRACT HISTORY: TARGET(O:{t_open}) | CLIENT(O:{c_open})\n")
 
                         # Section : Joueur est la Cible
                         if target_contracts:
-                            self.results.insert("end", "      -> En tant que CIBLE:\n")
+                            self.results.insert("end", "      -> As TARGET:\n")
                             for c in target_contracts:
                                 status, reward, ctype, client = c[4], format_int_with_dots(c[3]), c[7], c[2]
                                 icon = "✔" if status == "CLOSED" else "○"
@@ -562,17 +562,17 @@ class ScannerFrame(ctk.CTkFrame):
 
                         # Section : Joueur est le Client
                         if client_contracts:
-                            self.results.insert("end", "      -> En tant que CLIENT:\n")
+                            self.results.insert("end", "      -> As CLIENT:\n")
                             for c in client_contracts:
                                 target_c, reward, status, ctype = c[1], format_int_with_dots(c[3]), c[4], c[7]
                                 icon = "✔" if status == "CLOSED" else "○"
                                 tag = "closed_contract" if status == "CLOSED" else "open_contract"
-                                self.results.insert("end", f"         {icon} # {status} | {ctype} | Cible: {target_c} | {reward} aUEC\n", (tag,))
+                                self.results.insert("end", f"         {icon} # {status} | {ctype} | Target: {target_c} | {reward} aUEC\n", (tag,))
                     else:
-                        self.results.insert("end", "   CONTRATS : Aucun historique détecté.\n", "small_info")
+                            self.results.insert("end", "   CONTRACTS: No history found.\n", "small_info")
 
                 except Exception as e:
-                    self._log(f"Erreur affichage contrats pour {t.pseudo}: {e}", source="ERROR")
+                    self._log(f"Contract display error for {t.pseudo}: {e}", source="ERROR")
 
                 # Séparateur final de cible
                 self.results.insert("end", f"{'='*60}\n")
@@ -593,21 +593,21 @@ class ScannerFrame(ctk.CTkFrame):
                     writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
                     writer.writerows(rows)
                     main_win = self.winfo_toplevel()
-                DrakePopup.info("SYSTEMS", "EXPORTATION TERMINÉE", parent=main_win)
+                DrakePopup.info("SYSTEMS", "EXPORT COMPLETED", parent=main_win)
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Exported DB to {filename}", source="SCANNER")
                 except Exception:
                     pass
             except Exception as e:
-                self._log(f"Échec export DB: {e}", source="ERROR")
-                DrakePopup.error("ERREUR", f"ÉCHEC DE L'EXPORT : {e}", parent=main_win)
+                self._log(f"DB export failed: {e}", source="ERROR")
+                DrakePopup.error("ERROR", f"EXPORT FAILED: {e}", parent=main_win)
 
     def edit_org_window(self, sid):
         """Fenêtre d'édition Orga — Structure calquée sur le dossier Target."""
         toplevel = DrakeConfig.create_modal_window(
             parent=self,
-            title=f"MODIFICATION DOSSIER CORPORATE : {sid}",
+            title=f"EDIT CORPORATE FILE: {sid}",
             geometry="700x800",
             fg_color=DrakeConfig.BG_MAIN,
             resizable=True,
@@ -619,7 +619,7 @@ class ScannerFrame(ctk.CTkFrame):
             return
 
         # --- [HEADER] ---
-        ctk.CTkLabel(toplevel, text=f"ÉDITION DES DONNÉES CORPORATE : {sid}", 
+        ctk.CTkLabel(toplevel, text=f"EDIT CORPORATE DATA: {sid}", 
                     font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=12)
 
         frame = ctk.CTkScrollableFrame(toplevel, fg_color="transparent")
@@ -635,9 +635,9 @@ class ScannerFrame(ctk.CTkFrame):
         sid_entry.configure(state="disabled")
         sid_entry.pack(side="left", fill="x", expand=True, padx=6)
 
-        ctk.CTkLabel(meta, text="DERNIÈRE MAJ", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
+        ctk.CTkLabel(meta, text="LAST UPDATE", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=120).pack(side="left", padx=6)
         update_entry = DrakeEntry(meta, fg_color=DrakeConfig.BG_TERMINAL)
-        update_entry.insert(0, org.updated_at if org.updated_at else "INCONNUE")
+        update_entry.insert(0, org.updated_at if org.updated_at else "UNKNOWN")
         update_entry.configure(state="disabled")
         update_entry.pack(side="left", fill="x", expand=True, padx=6)
 
@@ -651,32 +651,32 @@ class ScannerFrame(ctk.CTkFrame):
             e.pack(side="right", fill="x", expand=True, padx=8, pady=6)
             return e
 
-        e_name = field(frame, "Nom Orga", org.name)
-        e_tag  = field(frame, "Tag RSI", org.tag)
-        e_type = field(frame, "Type Orga", org.org_type)
-        e_spec = field(frame, "Spécialisation", org.specialization)
-        e_count = field(frame, "Membres", org.member_count)
+        e_name = field(frame, "Org Name", org.name)
+        e_tag  = field(frame, "RSI Tag", org.tag)
+        e_type = field(frame, "Org Type", org.org_type)
+        e_spec = field(frame, "Specialization", org.specialization)
+        e_count = field(frame, "Members", org.member_count)
 
         # --- [SECTION 3 : ALIGNEMENT & DIPLOMATIE] ---
         # On reprend exactement le même sélecteur d'alignement que pour les Targets
         align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         align_f.pack(fill="x", pady=4)
-        ctk.CTkLabel(align_f, text="ALIGNEMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
+        ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         
         e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
         e_align.set(org.alignment if hasattr(org, 'alignment') else "NEUTRE")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 
-        e_allies = field(frame, "Alliés", org.allies)
-        e_enemies = field(frame, "Ennemis", org.enemies)
+        e_allies = field(frame, "Allies", org.allies)
+        e_enemies = field(frame, "Enemies", org.enemies)
 
         # --- [SECTION 4 : MANIFESTE LEGACY + JOURNAL NOTES] ---
-        ctk.CTkLabel(frame, text="MANIFESTE (LEGACY)", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=8)
+        ctk.CTkLabel(frame, text="MANIFEST (LEGACY)", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=8)
         e_manifest = ctk.CTkTextbox(frame, height=90, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, border_width=1)
         e_manifest.insert("0.0", org.description if org.description and org.description != "NONE" else "")
         e_manifest.pack(fill="x", padx=8, pady=(0, 8))
 
-        ctk.CTkLabel(frame, text="JOURNAL DE RENSEIGNEMENT ORGA", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(4, 2), padx=8)
+        ctk.CTkLabel(frame, text="ORG INTEL JOURNAL", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(4, 2), padx=8)
         org_journal_list = ctk.CTkScrollableFrame(
             frame,
             height=200,
@@ -689,14 +689,14 @@ class ScannerFrame(ctk.CTkFrame):
         def open_edit_org_note(note_id: int, current_text: str) -> None:
             edit_win = DrakeConfig.create_modal_window(
                 parent=toplevel,
-                title=f"MODIFIER NOTE ORGA #{note_id}",
+                title=f"EDIT ORG NOTE #{note_id}",
                 geometry="520x260",
                 fg_color=DrakeConfig.BG_MAIN,
                 resizable=True,
             )
             ctk.CTkLabel(
                 edit_win,
-                text=f"NOTE ORGA #{note_id}",
+                text=f"ORG NOTE #{note_id}",
                 font=DrakeConfig.FONT_UI,
                 text_color=DrakeConfig.ACCENT_PRIMARY,
             ).pack(pady=(12, 6))
@@ -714,14 +714,14 @@ class ScannerFrame(ctk.CTkFrame):
             def save_note_edit() -> None:
                 new_text = edit_box.get("0.0", "end").strip()
                 if not new_text:
-                    DrakePopup.error("ERREUR", "La note ne peut pas etre vide.", parent=edit_win)
+                    DrakePopup.error("ERROR", "Note cannot be empty.", parent=edit_win)
                     return
                 self.controller.org.update_org_note(sid, note_id, new_text)
                 edit_win.destroy()
                 refresh_org_journal()
                 self.run_org_scan(None)
 
-            DrakeButton(edit_win, text="SAUVEGARDER", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
+            DrakeButton(edit_win, text="SAVE", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
 
         def refresh_org_journal() -> None:
             for child in org_journal_list.winfo_children():
@@ -745,7 +745,7 @@ class ScannerFrame(ctk.CTkFrame):
 
                     DrakeButton(
                         top,
-                        text="MODIFIER",
+                        text="EDIT",
                         width=90,
                         height=26,
                         command=lambda nid=note_id, txt=note_text: open_edit_org_note(nid, txt),
@@ -753,7 +753,7 @@ class ScannerFrame(ctk.CTkFrame):
 
                     DrakeButton(
                         top,
-                        text="SUPPRIMER",
+                        text="DELETE",
                         width=90,
                         height=26,
                         fg_color="#8b2c2c",
@@ -782,12 +782,12 @@ class ScannerFrame(ctk.CTkFrame):
             else:
                 ctk.CTkLabel(
                     org_journal_list,
-                    text="Aucune note enregistree.",
+                    text="No saved notes.",
                     text_color=DrakeConfig.TEXT_SECONDARY,
                 ).pack(padx=8, pady=8, anchor="w")
 
         def delete_org_note(note_id: int) -> None:
-            confirm = DrakePopup.yesno("CONFIRMATION", f"Supprimer la note orga #{note_id} ?", parent=toplevel)
+            confirm = DrakePopup.yesno("CONFIRMATION", f"Delete org note #{note_id}?", parent=toplevel)
             if not confirm:
                 return
             self.controller.org.delete_org_note(sid, note_id)
@@ -796,7 +796,7 @@ class ScannerFrame(ctk.CTkFrame):
 
         refresh_org_journal()
 
-        ctk.CTkLabel(frame, text="NOUVELLE NOTE ORGA", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(2, 2), padx=8)
+        ctk.CTkLabel(frame, text="NEW ORG NOTE", font=DrakeConfig.FONT_UI, text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(2, 2), padx=8)
         new_org_note_box = ctk.CTkTextbox(frame, height=100, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR, border_width=1)
         new_org_note_box.pack(fill="x", padx=8, pady=(0, 8))
 
@@ -820,19 +820,19 @@ class ScannerFrame(ctk.CTkFrame):
                 self.controller.org.update_org(sid, **payload)
                 if new_note:
                     self.controller.org.add_org_note(sid, new_note)
-                self.run_org_scan(None) # Rafraîchissement auto
+                self.run_org_scan(None) # Auto refresh
                 toplevel.destroy()
-                DrakePopup.info("SYSTEMS", f"Dossier Corporate {sid} mis à jour.")
-                self._log(f"Organisation synchronisée: {sid}", source="ORG")
+                DrakePopup.info("SYSTEMS", f"Corporate file {sid} updated.")
+                self._log(f"Organization synchronized: {sid}", source="ORG")
                 
             except Exception as ex:
-                self._log(f"Échec mise à jour organisation {sid}: {ex}", source="ERROR")
-                DrakePopup.error("SYNC ERROR", f"Échec : {ex}")
+                self._log(f"Organization update failed {sid}: {ex}", source="ERROR")
+                DrakePopup.error("SYNC ERROR", f"Failed: {ex}")
 
         # Boutons d'action
-        btn_save = DrakeButton(toplevel, text="SYNCHRONISER LA DATABASE", command=save_changes, height=45)
+        btn_save = DrakeButton(toplevel, text="SYNCHRONIZE DATABASE", command=save_changes, height=45)
         btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 20))
 
-        btn_cancel = DrakeButton(toplevel, text="ABANDONNER", fg_color="transparent", border_width=1, 
+        btn_cancel = DrakeButton(toplevel, text="CANCEL", fg_color="transparent", border_width=1, 
                      border_color=DrakeConfig.BORDER_COLOR, command=toplevel.destroy)
         btn_cancel.pack(side="bottom", fill="x", padx=20, pady=0)

@@ -208,7 +208,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         btns_org.pack(pady=5)
 
         DrakeButton(
-            btns_org, text="EXTRAIRE MEMBRES", command=lambda: self.start_work("org")
+            btns_org, text="EXTRACT MEMBERS", command=lambda: self.start_work("org")
         ).pack(side="left", padx=5)
 
         self.btn_save_org_db = DrakeButton(
@@ -222,7 +222,7 @@ class IntelligenceFrame(ctk.CTkFrame):
         self.btn_save_org_db.pack(side="left", padx=5)
         
         self.btn_save_org = DrakeButton(
-            btns_org, text="EXPORTER CSV", fg_color="#333", command=self.save_org_to_csv
+            btns_org, text="EXPORT CSV", fg_color="#333", command=self.save_org_to_csv
         )
 
         self.btn_save_org.pack(side="left", padx=5)
@@ -670,7 +670,7 @@ class IntelligenceFrame(ctk.CTkFrame):
                     ((str(row[5] or "")).upper() == scanned_aff.upper())
                 )
                 if same:
-                    DrakePopup.info("SYSTEMS", f"Aucune modification détectée pour {handle}. Sauvegarde évitée.", parent=self)
+                    DrakePopup.info("SYSTEMS", f"No changes detected for {handle}. Save skipped.", parent=self)
                     self._log(f"save skipped (no change): {handle}")
                     # disable button to avoid re-save
                     try:
@@ -695,8 +695,8 @@ class IntelligenceFrame(ctk.CTkFrame):
                     diffs.append(f"AFFILIATES: {row[5] or 'None'}  ->  {scanned_aff}")
 
                 diff_text = "\n".join(diffs)
-                prompt = f"Le dossier {handle} existe déjà. Changements détectés:\n\n{diff_text}\n\nMettre à jour avec ces nouvelles valeurs ?"
-                confirm = DrakePopup.yesno("CHANGEMENTS DÉTECTÉS", prompt, parent=self)
+                prompt = f"File {handle} already exists. Detected changes:\n\n{diff_text}\n\nUpdate with these new values?"
+                confirm = DrakePopup.yesno("CHANGES DETECTED", prompt, parent=self)
                 if not confirm:
                     return
 
@@ -706,13 +706,13 @@ class IntelligenceFrame(ctk.CTkFrame):
             self.controller.upsert_target_intel(self.last_scanned_data)
 
             self.btn_save_db.configure(
-                fg_color="#2ecc71", text="ARCHIVÉ ✓", state="disabled"
+                fg_color="#2ecc71", text="ARCHIVED ✓", state="disabled"
             )
 
-            self._log(f"dossier archived in database: {handle}")
+            self._log(f"file archived in database: {handle}")
 
         except Exception as e:
-            DrakePopup.error("ERREUR", f"Erreur lors de l'archivage : {e}", parent=self)
+            DrakePopup.error("ERROR", f"Archive error: {e}", parent=self)
             self._log(f"error saving to db: {e}")
 
     def save_org_to_csv(self):
@@ -758,7 +758,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                 if local_data:
 
-                    self.details_box.log(f"--- LOCAL DOSSIER: {handle} ---")
+                    self.details_box.log(f"--- LOCAL FILE: {handle} ---")
 
                     # On affiche les infos que tu as stockées (ex: Orga, Date, Notes...)
 
@@ -825,8 +825,8 @@ class IntelligenceFrame(ctk.CTkFrame):
             main_win = self.winfo_toplevel()
             
             self._log(f"UPLINK SUCCESS: {sid} synchronization complete.")
-            DrakePopup.info("SYSTEMS", f"Dossier {sid} synchronisé.\nMembres: {total_members}", parent=main_win)
+            DrakePopup.info("SYSTEMS", f"File {sid} synchronized.\nMembers: {total_members}", parent=main_win)
 
         except Exception as e:
             self._log(f"Controller Error: {e}")
-            DrakePopup.error("SYNC FAILURE", f"Détails : {e}")
+            DrakePopup.error("SYNC FAILURE", f"Details: {e}")

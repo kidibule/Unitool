@@ -140,7 +140,7 @@ class LoggerFrame(ctk.CTkFrame):
                 alignment=self.org_align.get(),
                 updated_at=datetime.now().strftime("%d/%m/%Y"),
             )
-            self.controller.log(f"Dossier Corporate {sid} synchronisé.", source="SYSTEMS")
+            self.controller.log(f"Corporate file {sid} synchronized.", source="SYSTEMS")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="LOGGER")
             self.clear_org_fields() 
@@ -155,7 +155,7 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_organizations_csv(list(reader))
-            self.controller.log("Import des organisations terminé.", source="SUCCESS")
+            self.controller.log("Organization import completed.", source="SUCCESS")
         except Exception as e:
             self.controller.log(str(e), source="IMPORT ERROR")
 
@@ -168,7 +168,7 @@ class LoggerFrame(ctk.CTkFrame):
             writer = csv.writer(f, delimiter=";")
             writer.writerow(["sid", "name", "tag", "alignment"])
             writer.writerows(data)
-        self.controller.log(f"Base organisations exportée vers {path}", source="SUCCESS")
+        self.controller.log(f"Organizations database exported to {path}", source="SUCCESS")
 
     def clear_org_fields(self):
         """Réinitialise tous les champs de l'onglet Organisation"""
@@ -251,7 +251,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.pvp_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.act_in = DrakeComboBox(
             f_combat,
-            values=["PIRATE", "BOUNTY HUNTER", "MINEUR", "TRADER"]
+            values=["PIRATE", "BOUNTY HUNTER", "MINER", "TRADER"]
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
@@ -340,7 +340,7 @@ class LoggerFrame(ctk.CTkFrame):
                     self.controller.logger.sync_ship_to_catalog(ship_val)
                 except Exception:
                     pass
-                DrakePopup.info("SYSTEMS", f"Aucune modification trouvée pour {h}. Aucune sauvegarde effectuée.", parent=self)
+                DrakePopup.info("SYSTEMS", f"No changes found for {h}. No save performed.", parent=self)
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Save skipped (no change): {h}", source="LOGGER")
@@ -348,7 +348,7 @@ class LoggerFrame(ctk.CTkFrame):
                     pass
                 return
             else:
-                confirm = DrakePopup.yesno("CONFIRMATION", f"Le dossier {h} existe déjà. Écraser les données ?", parent=self)
+                confirm = DrakePopup.yesno("CONFIRMATION", f"File {h} already exists. Overwrite data?", parent=self)
                 if not confirm:
                     return
 
@@ -368,10 +368,10 @@ class LoggerFrame(ctk.CTkFrame):
             wins=wins_val,
             losses=losses_val,
         )
-        DrakePopup.info("SYSTEMS", f"Dossier {h} synchronisé.", parent=self)
+        DrakePopup.info("SYSTEMS", f"File {h} synchronized.", parent=self)
         try:
             if hasattr(self.controller, "log"):
-                self.controller.log(f"Synchronized dossier: {h}", source="LOGGER")
+                self.controller.log(f"Synchronized file: {h}", source="LOGGER")
         except Exception:
             pass
 
@@ -393,7 +393,7 @@ class LoggerFrame(ctk.CTkFrame):
             self.a_btn.set(r[8] or "NEUTRE")
             try:
                 if hasattr(self.controller, "log"):
-                    self.controller.log(f"Loaded dossier: {pseudo}", source="LOGGER")
+                    self.controller.log(f"Loaded file: {pseudo}", source="LOGGER")
             except Exception:
                 pass
 
@@ -405,7 +405,7 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_targets_csv(list(reader))
-                self.controller.log("Import terminé.", source="SUCCESS")
+                self.controller.log("Import completed.", source="SUCCESS")
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Imported CSV: {path}", source="LOGGER")
@@ -435,7 +435,7 @@ class LoggerFrame(ctk.CTkFrame):
                 ]
             )
             writer.writerows(data)
-        self.controller.log("Données exportées.", source="SUCCESS")
+        self.controller.log("Data exported.", source="SUCCESS")
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
