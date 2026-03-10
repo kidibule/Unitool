@@ -393,7 +393,6 @@ class ShipFrame(ctk.CTkFrame):
         for ship_name in names:
             ship = self.controller.ship.load_ship_as_model(ship_name)
             if not ship: continue
-            ship_default = self.controller.ship.load_full_ship(ship_name, "DEFAULT")
             
             tag = f"edit_{ship.name.replace(' ', '_')}"
             self.ship_results.insert("end", " ■ ", "ACCENT") 
@@ -401,17 +400,102 @@ class ShipFrame(ctk.CTkFrame):
             self.ship_results.insert("end", f"[{ship.size.upper()}]\n", "info_label")
             self.ship_results.insert("end", f"   ROLE: {ship.role} | CREW: {ship.crew_size} | CARGO: {ship.cargo} SCU\n")
             self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
-            
-            # Affichage du loadout par défaut (profil DEFAULT)
-            if ship_default and ship_default.components:
-                self.ship_results.insert("end", "   DEFAULT LOADOUT:\n", "ACCENT")
-                for c in ship_default.components:
-                    self.ship_results.insert("end", f"   - [{c.category}] {c.brand} {c.name} (S{c.size})\n")
+
+            # Affichage du loadout par défaut complet (inclut les slots vides).
+            self.ship_results.insert("end", "   DEFAULT LOADOUT (BY CATEGORY):\n", "ACCENT")
+            default_lines = self._build_default_loadout_lines(ship.name)
+            if default_lines:
+                for line in default_lines:
+                    self.ship_results.insert("end", f"{line}\n")
             else:
-                self.ship_results.insert("end", "   DEFAULT LOADOUT: No data.\n", "small_info")
+                self.ship_results.insert("end", "   No slot specs available.\n", "small_info")
             
             self.ship_results.insert("end", f"{'='*60}\n\n")
             self.ship_results.tag_bind(tag, "<Double-Button-1>", lambda e, n=ship.name: self.open_edit_window(n))
+
+    def _build_default_loadout_lines(self, ship_name: str) -> list[str]:
+        """Construit les lignes d'affichage du profil DEFAULT, slots vides inclus."""
+        ship_up = ship_name.upper()
+        specs = self.controller.ship.get_ship_slot_specs(ship_up)
+        if not specs:
+            return []
+
+        loadout_rows = self.controller.ship.app.query(
+            """
+            SELECT category, subtype_name, slot_number, component_name
+            FROM ship_loadout
+            WHERE ship_name = ? AND profile_name = 'DEFAULT'
+            """,
+            (ship_up,),
+        )
+        loadout_map = {
+            (str(r[0]).upper(), str(r[1]).upper(), int(r[2])): str(r[3]).upper()
+            for r in loadout_rows
+        }
+
+        equipped_names = sorted(set(loadout_map.values()))
+        comp_map = {}
+        for comp_name in equipped_names:
+            comp_rows = self.controller.ship.app.query(
+                "SELECT name, type_name, size, grade FROM components WHERE name = ?",
+                (comp_name,),
+            )
+            if comp_rows:
+                name, type_name, size, grade = comp_rows[0]
+                comp_map[str(name).upper()] = {
+                    "name": name,
+                    "type_name": type_name,
+                    "size": size,
+                    "grade": grade,
+                }
+
+        lines = []
+        current_category = None
+        specs_sorted = sorted(
+            specs,
+            key=lambda s: (
+                str(s.get("category", "")).upper(),
+                str(s.get("subtype_name", "")).upper(),
+            ),
+        )
+
+        for spec in specs_sorted:
+            category = str(spec.get("category", "")).upper()
+            subtype = str(spec.get("subtype_name", "GENERIC")).upper()
+            max_qty = int(spec.get("max_qty", 0) or 0)
+            max_size = int(spec.get("max_size", 0) or 0)
+
+            if max_qty <= 0:
+                continue
+
+            if category != current_category:
+                lines.append(f"   {category}")
+                current_category = category
+
+            for slot_index in range(1, max_qty + 1):
+                key = (category, subtype, slot_index)
+                equipped_name = loadout_map.get(key)
+                if equipped_name and equipped_name in comp_map:
+                    comp = comp_map[equipped_name]
+                    if category == "WEAPON":
+                        lines.append(
+                            f"     - {subtype} : {comp['type_name']} | S{comp['size']} | {comp['name']} | {comp['grade']}"
+                        )
+                    else:
+                        lines.append(
+                            f"     - {subtype} : S{comp['size']} | {comp['name']} | {comp['grade']}"
+                        )
+                else:
+                    if category == "WEAPON":
+                        lines.append(
+                            f"     - {subtype} : EMPTY"
+                        )
+                    else:
+                        lines.append(
+                            f"     - {subtype} : S{max_size} | EMPTY | -"
+                        )
+
+        return lines
 
     def save_new_component(self):
         """Sauvegarde un composant et rafraîchit les vues."""
