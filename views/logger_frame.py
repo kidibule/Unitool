@@ -124,7 +124,7 @@ class LoggerFrame(ctk.CTkFrame):
         name = self.org_name.get().strip()
         
         if not sid or not name:
-            self.controller.log("SID and Name are mandatory for registration.", source="ERROR")
+            self.controller.log("SID and Name are mandatory for registration.", source="SYSTEM ERROR")
             return
 
         try:
@@ -140,12 +140,12 @@ class LoggerFrame(ctk.CTkFrame):
                 alignment=self.org_align.get(),
                 updated_at=datetime.now().strftime("%d/%m/%Y"),
             )
-            self.controller.log(f"Corporate file {sid} synchronized.", source="SYSTEMS")
+            self.controller.log(f"Corporate file {sid} synchronized.", source="SYSTEM")
             if hasattr(self.controller, "log"):
-                self.controller.log(f"Org registered: {sid}", source="LOGGER")
+                self.controller.log(f"Org registered: {sid}", source="SYSTEM")
             self.clear_org_fields() 
         except Exception as e:
-            self.controller.log(f"Failed to save organization: {e}", source="DB ERROR")
+            self.controller.log(f"Failed to save organization: {e}", source="SYSTEM ERROR")
 
     def import_orgs_csv(self):
         """Importation CSV pour les organisations"""
@@ -155,9 +155,9 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_organizations_csv(list(reader))
-            self.controller.log("Organization import completed.", source="SUCCESS")
+            self.controller.log("Organization import completed.", source="DATA")
         except Exception as e:
-            self.controller.log(str(e), source="IMPORT ERROR")
+            self.controller.log(str(e), source="DATA ERROR")
 
     def export_orgs_csv(self):
         """Exportation CSV pour les organisations"""
@@ -168,7 +168,7 @@ class LoggerFrame(ctk.CTkFrame):
             writer = csv.writer(f, delimiter=";")
             writer.writerow(["sid", "name", "tag", "alignment"])
             writer.writerows(data)
-        self.controller.log(f"Organizations database exported to {path}", source="SUCCESS")
+        self.controller.log(f"Organizations database exported to {path}", source="DATA")
 
     def clear_org_fields(self):
         """Réinitialise tous les champs de l'onglet Organisation"""
@@ -343,7 +343,7 @@ class LoggerFrame(ctk.CTkFrame):
                 DrakePopup.info("SYSTEMS", f"No changes found for {h}. No save performed.", parent=self)
                 try:
                     if hasattr(self.controller, "log"):
-                        self.controller.log(f"Save skipped (no change): {h}", source="LOGGER")
+                        self.controller.log(f"Save skipped (no change): {h}", source="SYSTEM")
                 except Exception:
                     pass
                 return
@@ -371,7 +371,7 @@ class LoggerFrame(ctk.CTkFrame):
         DrakePopup.info("SYSTEMS", f"File {h} synchronized.", parent=self)
         try:
             if hasattr(self.controller, "log"):
-                self.controller.log(f"Synchronized file: {h}", source="LOGGER")
+                self.controller.log(f"Synchronized file: {h}", source="SYSTEM")
         except Exception:
             pass
 
@@ -393,7 +393,7 @@ class LoggerFrame(ctk.CTkFrame):
             self.a_btn.set(r[8] or "NEUTRE")
             try:
                 if hasattr(self.controller, "log"):
-                    self.controller.log(f"Loaded file: {pseudo}", source="LOGGER")
+                    self.controller.log(f"Loaded file: {pseudo}", source="SYSTEM")
             except Exception:
                 pass
 
@@ -405,14 +405,14 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.controller.logger.import_targets_csv(list(reader))
-                self.controller.log("Import completed.", source="SUCCESS")
+                self.controller.log("Import completed.", source="DATA")
             try:
                 if hasattr(self.controller, "log"):
-                    self.controller.log(f"Imported CSV: {path}", source="LOGGER")
+                    self.controller.log(f"Imported CSV: {path}", source="DATA")
             except Exception:
                 pass
         except Exception as e:
-            self.controller.log(str(e), source="ERROR")
+            self.controller.log(str(e), source="DATA ERROR")
 
     def export_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -435,10 +435,10 @@ class LoggerFrame(ctk.CTkFrame):
                 ]
             )
             writer.writerows(data)
-        self.controller.log("Data exported.", source="SUCCESS")
+        self.controller.log("Data exported.", source="DATA")
         try:
             if hasattr(self.controller, "log"):
-                self.controller.log(f"Exported CSV to: {path}", source="LOGGER")
+                self.controller.log(f"Exported CSV to: {path}", source="DATA")
         except Exception:
             pass
 
@@ -468,7 +468,7 @@ class LoggerFrame(ctk.CTkFrame):
 
         try:
             if hasattr(self.controller, "log"):
-                self.controller.log("Cleared logger UI fields", source="LOGGER")
+                self.controller.log("Cleared logger UI fields", source="SYSTEM")
         except Exception:
             pass
 
@@ -622,7 +622,7 @@ class LoggerFrame(ctk.CTkFrame):
         
         # 2. Sécurité : Nom obligatoire
         if not name:
-            self.controller.log("SHIP NAME REQUIRED TO SYNC.", source="LOCK ERROR")
+            self.controller.log("SHIP NAME REQUIRED TO SYNC.", source="SYSTEM ERROR")
             self.ship_name.focus_set()
             return
 
@@ -641,7 +641,7 @@ class LoggerFrame(ctk.CTkFrame):
                 try:
                     float(value) 
                 except ValueError:
-                    self.controller.log(f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.", source="DATA CORRUPTION")
+                    self.controller.log(f"INVALID VALUE FOR {label}:\n'{value}' IS NOT A NUMBER.", source="SYSTEM ERROR")
                     return 
 
         data = {
@@ -676,9 +676,9 @@ class LoggerFrame(ctk.CTkFrame):
 
         try:
             self.ship_controller.save_ship(data)
-            self.controller.log(f"SHIP {name.upper()} DATA SYNCED.", source="DATABASE")
+            self.controller.log(f"SHIP {name.upper()} DATA SYNCED.", source="SYSTEM")
         except Exception as e:
-            self.controller.log(f"SYNC ERROR: {str(e)}", source="ERROR")
+            self.controller.log(f"SYNC ERROR: {str(e)}", source="SYSTEM ERROR")
 
     def load_ship(self, event=None):
         name = self.ship_name.get().strip()
@@ -687,7 +687,7 @@ class LoggerFrame(ctk.CTkFrame):
         ship = self.ship_controller.load_ship_as_model(name)
         
         if not ship:
-            self.controller.log(f"No record for {name}", source="NOT FOUND")
+            self.controller.log(f"No record for {name}", source="SYSTEM ERROR")
             return
 
         self.ship_brand.delete(0, "end"); self.ship_brand.insert(0, ship.brand)
@@ -701,7 +701,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_name.delete(0, "end"); self.ship_name.insert(0, ship.name)
         self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
         
-        self.controller.log(f"Specs for {ship.name} loaded.", source="FLEET")
+        self.controller.log(f"Specs for {ship.name} loaded.", source="SYSTEM")
     
     def import_ships_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
@@ -710,9 +710,9 @@ class LoggerFrame(ctk.CTkFrame):
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 self.ship_controller.import_ships_csv(list(reader))
-            self.controller.log("Fleet import successful.", source="SUCCESS")
+            self.controller.log("Fleet import successful.", source="DATA")
         except Exception as e:
-            self.controller.log(str(e), source="IMPORT ERROR")
+            self.controller.log(str(e), source="DATA ERROR")
 
     def export_ships_csv(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
@@ -723,9 +723,9 @@ class LoggerFrame(ctk.CTkFrame):
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(["name", "brand", "role", "career", "size", "crew_size", "scm_speed"]) 
                 writer.writerows(data)
-            self.controller.log(f"Fleet exported to {path}", source="SUCCESS")
+            self.controller.log(f"Fleet exported to {path}", source="DATA")
         except Exception as e:
-            self.controller.log(str(e), source="EXPORT ERROR")
+            self.controller.log(str(e), source="DATA ERROR")
 
     def clear_ship_fields(self):
         for attr in [self.ship_name, self.ship_brand, self.ship_role, 

@@ -825,7 +825,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             main_win = self.winfo_toplevel()
             
             self._log(f"UPLINK SUCCESS: {sid} synchronization complete.")
-            DrakePopup.info("SYSTEMS", f"File {sid} synchronized.\nMembers: {total_members}", parent=main_win)
+            # DrakePopup.info("SYSTEM", f"File {sid} synchronized.\nMembers: {total_members}", parent=main_win)
 
         except Exception as e:
             self._log(f"Controller Error: {e}")

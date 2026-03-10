@@ -434,7 +434,7 @@ class InterceptionFrame(ctk.CTkFrame):
             self.output.insert("end", f"- STATUS: READY\n")
             self.output.insert(
                 "end",
-                f"[INSTRUCTIONS] DEMARRER DEPUIS: {start_points_label} -> aller vers {dest} jusqu'a {distance_km:,.0f} KM de la destination.\n",
+                f"[INSTRUCTIONS] Start: {start_points_label} -> go to {dest} until {distance_km:,.0f} KM from the destination.\n",
             )
             self.output.see("end")
         else:

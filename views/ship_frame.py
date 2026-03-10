@@ -316,12 +316,15 @@ class ShipFrame(ctk.CTkFrame):
         type_actions.pack(pady=(2, 8), padx=12, fill="x")
         DrakeButton(type_actions, text="ADD TYPE", command=self.action_add_subtype).pack(side="left", padx=(0, 4), fill="x", expand=True)
 
-        DrakeTitle4(left_content, text="EXISTING TYPES").pack(pady=(0, 2), padx=12)
-        self.cfg_type_selector = DrakeComboBox(left_content, values=[])
-        self.cfg_type_selector.pack(pady=4, padx=12, fill="x")
+        bottom_type_block = ctk.CTkFrame(left_content, fg_color="transparent")
+        bottom_type_block.pack(side="bottom", fill="x", padx=12, pady=(0, 4))
 
-        DrakeClearButton(left_content, text="DELETE TYPE", command=self.action_delete_subtype,
-                fg_color="#550000", hover_color="#770000").pack(side="bottom", pady=(0, 4), padx=12, fill="x")
+        DrakeTitle4(bottom_type_block, text="EXISTING TYPES").pack(pady=(0, 2), fill="x")
+        self.cfg_type_selector = DrakeComboBox(bottom_type_block, values=[])
+        self.cfg_type_selector.pack(pady=(0, 4), fill="x")
+
+        DrakeClearButton(bottom_type_block, text="DELETE TYPE", command=self.action_delete_subtype,
+            fg_color="#550000", hover_color="#770000").pack(pady=(0, 0), fill="x")
 
         DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
 
@@ -566,12 +569,12 @@ class ShipFrame(ctk.CTkFrame):
                 # Appel au contrôleur
                 self.controller.ship.update_ship_specs(ship_name, final_data)
                 
-                self.controller.log("CORE DATABASE SYNCHRONIZED.", source="DRAKE OS")
+                self.controller.log("CORE DATABASE SYNCHRONIZED.", source="SYSTEM")
                 edit_win.destroy()
                 self.run_ship_scan() # Refresh le terminal
                 
             except ValueError as e:
-                self.controller.log(f"Invalid format in numeric field: {e}", source="DATA ERROR")
+                self.controller.log(f"Invalid format in numeric field: {e}", source="SYSTEM ERROR")
 
         save_btn = DrakeButton(edit_win, text="APPLY ALL MODIFICATIONS", 
                                command=perform_full_update)
@@ -661,7 +664,7 @@ class ShipFrame(ctk.CTkFrame):
                 source="FLEET",
             )
         else:
-            self.controller.log("Failed to sync with ship database.", source="DRAKE OS ERROR")
+            self.controller.log("Failed to sync with ship database.", source="SYSTEM ERROR")
         
     def action_mount(self, category, subtype_name, slot_index, component_name):
         """Enregistre le composant sélectionné en base de données."""
@@ -678,7 +681,7 @@ class ShipFrame(ctk.CTkFrame):
                 source="FLEET",
             )
         else:
-            self.controller.log("Database Sync Failed. Incompatible hardware.", source="DRAKE OS")
+            self.controller.log("Database Sync Failed. Incompatible hardware.", source="SYSTEM ERROR")
     
     def action_clear_loadout(self):
         """Supprime tous les composants installés sur le vaisseau actuel."""
@@ -686,7 +689,7 @@ class ShipFrame(ctk.CTkFrame):
         profile_name = self._get_active_profile()
         if not ship_name: return
         
-        if DrakePopup.yesno("DRAKE OS", f"WIPE PROFILE [{profile_name}] FOR {ship_name}?", parent=self):
+        if DrakePopup.yesno("SYSTEM", f"WIPE PROFILE [{profile_name}] FOR {ship_name}?", parent=self):
             self.controller.ship.clear_ship_loadout(ship_name, profile_name)
             # Rafraîchissement de l'interface
             self.refresh_loadout_view(ship_name)
@@ -732,7 +735,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_type(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            DrakePopup.warning("DRAKE OS", "TYPE requis", parent=self)
+            DrakePopup.warning("SYSTEM", "TYPE requis", parent=self)
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -743,7 +746,7 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
         except Exception as e:
-            DrakePopup.error("DRAKE OS", str(e), parent=self)
+            DrakePopup.error("SYSTEM", str(e), parent=self)
 
     def refresh_type_terminal(self):
         return
@@ -751,7 +754,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_category(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            DrakePopup.warning("DRAKE OS", "CATÉGORIE requise", parent=self)
+            DrakePopup.warning("SYSTEM", "CATÉGORIE requise", parent=self)
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -762,13 +765,13 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
         except Exception as e:
-            DrakePopup.error("DRAKE OS", str(e), parent=self)
+            DrakePopup.error("SYSTEM", str(e), parent=self)
 
     def action_add_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
         subtype = self.cfg_type_entry.get().strip().upper()
         if not category or not subtype:
-            DrakePopup.warning("DRAKE OS", "CATÉGORIE et TYPE requis", parent=self)
+            DrakePopup.warning("SYSTEM", "CATÉGORIE et TYPE requis", parent=self)
             return
         try:
             self.controller.ship.create_component_subtype(category, subtype)
@@ -778,14 +781,14 @@ class ShipFrame(ctk.CTkFrame):
             if self._widget_exists("new_comp_category"):
                 self.on_category_change(self.new_comp_category.get())
         except Exception as e:
-            DrakePopup.error("DRAKE OS", str(e), parent=self)
+            DrakePopup.error("SYSTEM", str(e), parent=self)
 
     def action_delete_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
         subtype = self.cfg_type_selector.get().strip().upper()
         if not subtype or subtype == "NO DATA":
             return
-        if not DrakePopup.yesno("DRAKE OS", f"DELETE TYPE {subtype} ?", parent=self):
+        if not DrakePopup.yesno("SYSTEM", f"DELETE TYPE {subtype} ?", parent=self):
             return
         self.controller.ship.delete_component_subtype(category, subtype)
         self.on_cfg_type_category_change(category)
@@ -890,7 +893,7 @@ class ShipFrame(ctk.CTkFrame):
         category = self.cfg_slot_category.get().strip().upper()
         subtype = self.cfg_slot_subtype.get().strip().upper()
         if not ship_name or not category or not subtype:
-            DrakePopup.warning("DRAKE OS", "SHIP / CATEGORY / SUBTYPE requis", parent=self)
+            DrakePopup.warning("SYSTEM", "SHIP / CATEGORY / SUBTYPE requis", parent=self)
             return
         try:
             qty = int(self.cfg_slot_qty.get().strip())
@@ -900,7 +903,7 @@ class ShipFrame(ctk.CTkFrame):
             if self.lo_ship_selector.get().strip().upper() == ship_name:
                 self.refresh_loadout_view(ship_name)
         except Exception as e:
-            DrakePopup.error("DRAKE OS", str(e), parent=self)
+            DrakePopup.error("SYSTEM", str(e), parent=self)
 
     def action_delete_slot_spec(self):
         ship_name = self.cfg_slot_ship.get().strip().upper()
@@ -908,7 +911,7 @@ class ShipFrame(ctk.CTkFrame):
         if not ship_name or not selection or selection == "NO DATA" or "::" not in selection:
             return
         cat, subtype = selection.split("::", 1)
-        if not DrakePopup.yesno("DRAKE OS", f"DELETE SLOT SPEC {cat}::{subtype} ?", parent=self):
+        if not DrakePopup.yesno("SYSTEM", f"DELETE SLOT SPEC {cat}::{subtype} ?", parent=self):
             return
         self.controller.ship.delete_subtype_spec(ship_name, cat, subtype)
         self.refresh_slot_terminal()
@@ -948,12 +951,12 @@ class ShipFrame(ctk.CTkFrame):
     def action_create_profile(self):
         ship_name = self.lo_ship_selector.get()
         if not ship_name:
-            DrakePopup.warning("DRAKE OS", "SELECT A SHIP FIRST.", parent=self)
+            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
             return
 
         new_profile = self.lo_new_profile.get().strip().upper()
         if not new_profile:
-            DrakePopup.warning("DRAKE OS", "ENTER A PROFILE NAME.", parent=self)
+            DrakePopup.warning("SYSTEM", "ENTER A PROFILE NAME.", parent=self)
             return
 
         source_profile = self._get_active_profile()
@@ -964,7 +967,7 @@ class ShipFrame(ctk.CTkFrame):
             overwrite=False,
         )
         if not created:
-            DrakePopup.warning("DRAKE OS", f"PROFILE {new_profile} ALREADY EXISTS.", parent=self)
+            DrakePopup.warning("SYSTEM", f"PROFILE {new_profile} ALREADY EXISTS.", parent=self)
             return
 
         self.lo_new_profile.delete(0, "end")
