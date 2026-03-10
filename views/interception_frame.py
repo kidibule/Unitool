@@ -133,7 +133,7 @@ class InterceptionFrame(ctk.CTkFrame):
             return ["NO DATA"]
 
     def refresh_locations(self):
-        """Force la mise à jour des ComboBox (à appeler après un seed)."""
+        """Force la mise à jour des ComboBox."""
         new_list = self.get_location_names()
         self.source_selector.configure(values=new_list)
         self.dest_selector.configure(values=new_list)

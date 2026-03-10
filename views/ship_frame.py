@@ -25,6 +25,7 @@ class ShipFrame(ctk.CTkFrame):
         }
 
         self._setup_ui()
+        self._suspend_cfg_slot_pick = False
 
     # --- INITIALISATION UI ---
 
@@ -107,6 +108,21 @@ class ShipFrame(ctk.CTkFrame):
         except Exception:
             return False
 
+    def _get_all_component_categories(self) -> list[str]:
+        """Retourne une liste de catégories stable (DB + catégories par défaut UI)."""
+        db_categories = self.controller.ship.list_component_categories() or []
+        merged = []
+        seen = set()
+
+        for cat in db_categories + list(self.mapping_types.keys()):
+            cat_up = (cat or "").strip().upper()
+            if not cat_up or cat_up in seen:
+                continue
+            seen.add(cat_up)
+            merged.append(cat_up)
+
+        return merged
+
     def _close_component_manager(self):
         if self.component_popup is not None:
             try:
@@ -150,7 +166,7 @@ class ShipFrame(ctk.CTkFrame):
 
         # Champs du formulaire
         DrakeTitle4(self.add_comp_scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
-        categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+        categories = self._get_all_component_categories()
         self.new_comp_category = DrakeComboBox(self.add_comp_scroll, 
                             values=categories, 
                                                 command=self.on_category_change)
@@ -303,7 +319,7 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeTitle4(left_content, text="--- TYPES (BY CATEGORY) ---").pack(pady=(0, 2), padx=12)
 
-        categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+        categories = self._get_all_component_categories()
 
         DrakeTitle4(left_content, text="CATEGORY").pack(pady=(0, 2), padx=12)
         self.cfg_type_category = DrakeComboBox(left_content, values=categories, command=self.on_cfg_type_category_change)
@@ -795,12 +811,12 @@ class ShipFrame(ctk.CTkFrame):
                     self.on_cfg_slot_ship_change(ships[0])
 
             if hasattr(self, "cfg_type_category"):
-                categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+                categories = self._get_all_component_categories()
                 self.cfg_type_category.configure(values=categories)
                 self.cfg_slot_category.configure(values=categories)
 
             if self._widget_exists("new_comp_category"):
-                categories = self.controller.ship.list_component_categories() or list(self.mapping_types.keys())
+                categories = self._get_all_component_categories()
                 self.new_comp_category.configure(values=categories)
         except Exception as e:
             self.controller.log(f"Update selectors error: {e}", source="FLEET")
@@ -935,8 +951,11 @@ class ShipFrame(ctk.CTkFrame):
         if not hasattr(self, "cfg_slot_terminal"):
             return
         ship_name = self.cfg_slot_ship.get().strip().upper() if hasattr(self, "cfg_slot_ship") else ""
+        current_selection = self.cfg_slot_selector.get().strip().upper() if hasattr(self, "cfg_slot_selector") else ""
+        self._suspend_cfg_slot_pick = True
         self.cfg_slot_selector.configure(values=["NO DATA"])
         self.cfg_slot_selector.set("NO DATA")
+        self._suspend_cfg_slot_pick = False
         self.cfg_slot_terminal.delete("0.0", "end")
         if not ship_name:
             return
@@ -948,13 +967,18 @@ class ShipFrame(ctk.CTkFrame):
             keys.append(key)
             self.cfg_slot_terminal.insert("end", f"[{cat}] {subtype:<20} | QTY={qty} | SIZE=S{size}\n")
 
+        self._suspend_cfg_slot_pick = True
         self.cfg_slot_selector.configure(values=keys if keys else ["NO DATA"])
         if keys:
-            self.cfg_slot_selector.set(keys[0])
+            selection = current_selection if current_selection in keys else keys[0]
+            self.cfg_slot_selector.set(selection)
         else:
             self.cfg_slot_selector.set("NO DATA")
+        self._suspend_cfg_slot_pick = False
 
     def on_cfg_slot_pick(self, selection):
+        if getattr(self, "_suspend_cfg_slot_pick", False):
+            return
         if not selection or selection == "NO DATA" or "::" not in selection:
             return
         ship_name = self.cfg_slot_ship.get().strip().upper()
@@ -984,6 +1008,9 @@ class ShipFrame(ctk.CTkFrame):
             max_size = int(self.cfg_slot_size.get().strip())
             self.controller.ship.upsert_subtype_spec(ship_name, category, subtype, qty, max_size)
             self.refresh_slot_terminal()
+            self.cfg_slot_category.set(category)
+            self.on_cfg_slot_category_change(category)
+            self.cfg_slot_subtype.set(subtype)
             if self.lo_ship_selector.get().strip().upper() == ship_name:
                 self.refresh_loadout_view(ship_name)
         except Exception as e:
