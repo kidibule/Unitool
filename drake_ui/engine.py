@@ -74,6 +74,12 @@ class DrakeConfig:
         resizable: bool = False,
     ):
         """Crée une fenêtre modale toujours au premier plan de la fenêtre principale."""
+        def _is_valid_widget(widget) -> bool:
+            try:
+                return widget is not None and bool(widget.winfo_exists())
+            except Exception:
+                return False
+
         owner = None
         try:
             if parent is not None and hasattr(parent, "winfo_toplevel"):
@@ -83,13 +89,14 @@ class DrakeConfig:
         except Exception:
             owner = parent
 
-        popup = ctk.CTkToplevel(owner if owner is not None else parent)
+        master = owner if _is_valid_widget(owner) else (parent if _is_valid_widget(parent) else None)
+        popup = ctk.CTkToplevel(master) if master is not None else ctk.CTkToplevel()
         popup.title(title)
         popup.geometry(geometry)
         popup.configure(fg_color=fg_color or DrakeConfig.BG_MAIN)
         popup.resizable(resizable, resizable)
 
-        if owner is not None:
+        if _is_valid_widget(owner):
             try:
                 popup.transient(owner)
             except Exception:
@@ -590,7 +597,6 @@ class DrakeComboBox(ctk.CTkFrame):
 
         # --- LOGIQUE DE FERMETURE ---
         self.dropdown.after(10, self.dropdown.focus_set)
-        self.dropdown.grab_set()
         self.dropdown.bind("<ButtonPress-1>", self._on_click_outside, add="+")
 
     def _on_click_outside(self, event):
@@ -626,8 +632,7 @@ class DrakeComboBox(ctk.CTkFrame):
         if self.dropdown:
             if hasattr(self, "_bind_id"):
                 self._parent_window.unbind("<Configure>", self._bind_id)
-            
-            self.dropdown.grab_release()
+
             self.dropdown.destroy()
             self.dropdown = None
         self.is_open = False
@@ -668,6 +673,78 @@ class DrakeComboBox(ctk.CTkFrame):
             self.entry.configure(text_color=color)
 
         super().configure(**kwargs)
+
+class DrakeMultiSelect(ctk.CTkScrollableFrame):
+    """Multi-sélecteur par cases à cocher (ex : rôles de vaisseau).
+
+    API compatible DrakeComboBox / DrakeEntry :
+    - get()          → str, valeurs cochées séparées par \", \"
+    - set(value)     → coche les entrées présentes dans la chaîne CSV
+    - delete(s, e)   → décoche tout (compat clear)
+    - insert(i, v)   → alias set()
+    - values         → property, liste des clés disponibles
+    """
+
+    def __init__(self, master, values: list = None, height: int = 120, **kwargs):
+        kwargs.setdefault("fg_color", DrakeConfig.BG_TERMINAL)
+        kwargs.setdefault("border_color", DrakeConfig.BORDER_COLOR)
+        kwargs.setdefault("border_width", 1)
+        super().__init__(master, height=height, **kwargs)
+        self._vars: dict[str, ctk.BooleanVar] = {}
+        self._rebuild(values or [])
+
+    def _rebuild(self, values: list) -> None:
+        for w in self.winfo_children():
+            w.destroy()
+        self._vars = {}
+        for v in values:
+            key = str(v).upper().strip()
+            var = ctk.BooleanVar()
+            cb = ctk.CTkCheckBox(
+                self,
+                text=key,
+                variable=var,
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_MAIN,
+                fg_color=DrakeConfig.ACCENT_PRIMARY,
+                hover_color=DrakeConfig.ACCENT_HOVER,
+                checkmark_color="#000000",
+                border_color=DrakeConfig.BORDER_COLOR,
+            )
+            cb.pack(anchor="w", padx=5, pady=1)
+            self._vars[key] = var
+
+    @property
+    def values(self) -> list:
+        return list(self._vars.keys())
+
+    def get(self) -> str:
+        return ", ".join(k for k, var in self._vars.items() if var.get())
+
+    def set(self, value: str) -> None:
+        for var in self._vars.values():
+            var.set(False)
+        if not value:
+            return
+        parts = {p.strip().upper() for p in str(value).split(",") if p.strip()}
+        for p in parts:
+            if p in self._vars:
+                self._vars[p].set(True)
+
+    def delete(self, start, end) -> None:
+        """Compat DrakeEntry/DrakeComboBox : décoche tout."""
+        for var in self._vars.values():
+            var.set(False)
+
+    def insert(self, index, value: str) -> None:
+        """Compat DrakeEntry/DrakeComboBox : alias set()."""
+        self.set(value)
+
+    def configure(self, **kwargs):
+        if "values" in kwargs:
+            self._rebuild(kwargs.pop("values"))
+        super().configure(**kwargs)
+
 
 class DrakeTitle1(ctk.CTkLabel):
     """Titre de niveau 1 stylisé pour les sections principales."""

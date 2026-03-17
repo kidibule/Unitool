@@ -5,6 +5,61 @@ import os
 from tkinter import messagebox
 
 
+SHIP_ROLE_OPTIONS = [
+    "LIGHT FIGHTER",
+    "MEDIUM FIGHTER",
+    "HEAVY FIGHTER",
+    "STEALTH FIGHTER",
+    "INTERDICTOR",
+    "INTERCEPTOR",
+    "GUNSHIP",
+    "BOMBER",
+    "DROPSHIP",
+    "MINELAYER",
+    "SNUB FIGHTER",
+    "LIGHT FREIGHT",
+    "MEDIUM FREIGHT",
+    "HEAVY FREIGHT",
+    "CARGO",
+    "TRANSPORT",
+    "PASSENGER",
+    "LUXURY",
+    "REFUEL",
+    "PATHFINDER",
+    "EXPEDITION",
+    "TOURING",
+    "SCIENCE",
+    "RESEARCH",
+    "REPORTING",
+    "DATA",
+    "PROSPECTING",
+    "MINING",
+    "SALVAGE",
+    "REPAIR",
+    "REFINING",
+    "MEDICAL",
+    "CONSTRUCTION",
+    "RACING",
+    "MODULAR",
+    "STARTER",
+    "CORVETTE",
+    "FRIGATE",
+    "DESTROYER",
+    "CARRIER",
+]
+
+SHIP_CAREER_OPTIONS = [
+    "COMBAT",
+    "TRANSPORT",
+    "EXPLORATION",
+    "INDUSTRIAL",
+    "SCIENCE",
+    "COMPETITION",
+    "SUPPORT",
+    "INTERDICTION",
+]
+
+
 class Database:
     def __init__(self, db_name="unitool_data.db", reset_on_start: bool = False):
         # Option pratique pour repartir d'une base propre au lancement (debug/dev)
@@ -151,6 +206,25 @@ class Database:
             claim_time TEXT,
             expedite_time TEXT
         )""")
+
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS ship_roles (
+                name TEXT PRIMARY KEY
+            )"""
+        )
+        self.cursor.executemany(
+            "INSERT OR IGNORE INTO ship_roles (name) VALUES (?)",
+            [(role,) for role in SHIP_ROLE_OPTIONS],
+        )
+        self.cursor.execute(
+            """CREATE TABLE IF NOT EXISTS ship_careers (
+                name TEXT PRIMARY KEY
+            )"""
+        )
+        self.cursor.executemany(
+            "INSERT OR IGNORE INTO ship_careers (name) VALUES (?)",
+            [(career,) for career in SHIP_CAREER_OPTIONS],
+        )
         # Ensure legacy DBs get new ship columns if missing
         ship_columns = [
             ("brand", "TEXT"),

@@ -2,9 +2,10 @@
 
 import customtkinter as ctk
 import csv
+from difflib import SequenceMatcher
 from datetime import datetime
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeMultiSelect
 from controllers.ship_controller import ShipController
 
 
@@ -483,12 +484,8 @@ class LoggerFrame(ctk.CTkFrame):
         }
 
         # --- VALEURS STANDARDS ---
-        CAREER_OPTIONS = ["COMBAT", "TRANSPORT", "EXPLORATION", "INDUSTRIAL", "SUPPORT", "COMPETITION", "RESEARCH"]
-        ROLE_OPTIONS = [
-            "LIGHT FIGHTER", "MEDIUM FIGHTER", "HEAVY FIGHTER", "BOMBER", 
-            "FREIGHTER", "DATA RUNNER", "MINING", "SALVAGE", "REFUELING",
-            "MEDICAL", "SNUB", "DROP SHIP", "INTERDICTION", "PATROL"
-        ]
+        career_options = self.ship_controller.list_ship_careers()
+        role_options = self.ship_controller.list_ship_roles()
 
         # --- HEADER & IDENTITY ---
         f_identity = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
@@ -501,29 +498,26 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_brand = DrakeEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
         self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-        # --- ROLE & SPECS ---
+        # --- ROLE(S) (multi-sélecteur cases à cocher) ---
+        self.ship_role = DrakeMultiSelect(self.tab_ships, values=role_options, height=110)
+        self.ship_role.pack(pady=(5, 2), padx=50, fill="x")
+
+        # --- CAREER & SPECS ---
         f_role = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
-        f_role.pack(pady=5, padx=50, fill="x")
-        
-        self.ship_role = DrakeComboBox(
-            f_role, 
-            values=ROLE_OPTIONS,
-        )
-        self.ship_role.set("ROLE") # Placeholder
-        self.ship_role.pack(side="left", fill="x", expand=True, padx=(0,5))
-        
+        f_role.pack(pady=(2, 5), padx=50, fill="x")
+
         self.ship_career = DrakeComboBox(
-            f_role, 
-            values=CAREER_OPTIONS, 
+            f_role,
+            values=career_options,
         )
-        self.ship_career.set("CAREER") # Placeholder
-        self.ship_career.pack(side="left", fill="x", expand=True, padx=5)
-        
+        self.ship_career.set("CAREER")  # Placeholder
+        self.ship_career.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
         self.ship_size = DrakeEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
         self.ship_size.pack(side="left", padx=5)
-        
+
         self.ship_crew = DrakeEntry(f_role, placeholder_text="CREW", width=80, **entry_kwargs)
-        self.ship_crew.pack(side="right", padx=(5,0))
+        self.ship_crew.pack(side="right", padx=(5, 0))
 
         # --- SECTION : PROPULSION & SPEED ---
         self._add_section_title(self.tab_ships, "PROPULSION & NAVIGATION")
@@ -599,8 +593,11 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_expedite.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         # --- ACTIONS ---
+        self.btn_ocr_ship = DrakeButton(self.tab_ships, text="OCR SCREENSHOT IMPORT", command=self.import_ship_ocr, height=45)
+        self.btn_ocr_ship.pack(pady=(15, 8), padx=50, fill="x")
+
         self.btn_save_ship = DrakeButton(self.tab_ships, text="SYNC SHIP TO DATABASE", command=self.save_ship, height=45)
-        self.btn_save_ship.pack(pady=15, padx=50, fill="x")
+        self.btn_save_ship.pack(pady=(8, 15), padx=50, fill="x")
 
         # --- UTILS ---
         f_utils = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
@@ -613,6 +610,120 @@ class LoggerFrame(ctk.CTkFrame):
         """Petit utilitaire pour ajouter des titres de section Drake"""
         ctk.CTkLabel(parent, text=title, font=DrakeConfig.FONT_UI, 
                      text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", pady=(10, 2), padx=50)
+
+    def _set_ship_field(self, widget, value) -> None:
+        if value is None:
+            return
+        try:
+            widget.delete(0, "end")
+            widget.insert(0, str(value))
+        except Exception:
+            pass
+
+    def _set_ship_combo(self, widget, value) -> None:
+        if value in (None, ""):
+            return
+        raw_value = str(value).upper().strip()
+
+        def token_overlap_score(left: str, right: str) -> float:
+            left_tokens = set(left.split())
+            right_tokens = set(right.split())
+            if not left_tokens or not right_tokens:
+                return 0.0
+            return len(left_tokens & right_tokens) / max(len(right_tokens), 1)
+
+        # Récupère les valeurs du combo (DrakeComboBox stocke les valeurs dans self.values)
+        allowed_values = []
+        if hasattr(widget, 'values') and widget.values:
+            allowed_values = [str(v).upper() for v in widget.values]
+        
+        field_name = "ROLE" if widget is self.ship_role else "CAREER"
+
+        chosen = ""
+        if raw_value in allowed_values:
+            chosen = raw_value
+        elif allowed_values:
+            best_ratio = 0.0
+            best_value = ""
+            for candidate in allowed_values:
+                seq_ratio = SequenceMatcher(
+                    None,
+                    raw_value.replace(" ", ""),
+                    candidate.replace(" ", ""),
+                ).ratio()
+                overlap_ratio = token_overlap_score(raw_value, candidate)
+                ratio = max(seq_ratio, overlap_ratio)
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_value = candidate
+            if best_value and best_ratio >= 0.50:
+                chosen = best_value
+
+        try:
+            if chosen:
+                widget.set(chosen)
+            else:
+                placeholder = field_name
+                widget.set(placeholder)
+        except Exception:
+            try:
+                widget.delete(0, "end")
+                widget.insert(0, chosen or field_name)
+            except Exception:
+                pass
+
+    def _apply_ship_ocr_data(self, parsed: dict) -> None:
+        self.clear_ship_fields(full=True)
+
+        self._set_ship_field(self.ship_name, parsed.get("name"))
+        self._set_ship_field(self.ship_brand, parsed.get("brand"))
+        self._set_ship_combo(self.ship_role, parsed.get("role"))
+        self._set_ship_combo(self.ship_career, parsed.get("career"))
+        self._set_ship_field(self.ship_size, parsed.get("size"))
+        self._set_ship_field(self.ship_crew, parsed.get("crew_size"))
+        self._set_ship_field(self.ship_scm, parsed.get("scm_speed"))
+        self._set_ship_field(self.ship_scm_bf, parsed.get("scm_boost_forward"))
+        self._set_ship_field(self.ship_scm_bb, parsed.get("scm_boost_backward"))
+        self._set_ship_field(self.ship_nav, parsed.get("nav_max_speed"))
+        self._set_ship_field(self.ship_pitch, parsed.get("pitch"))
+        self._set_ship_field(self.ship_yaw, parsed.get("yaw"))
+        self._set_ship_field(self.ship_roll, parsed.get("roll"))
+        self._set_ship_field(self.ship_b_pitch, parsed.get("boosted_pitch"))
+        self._set_ship_field(self.ship_b_yaw, parsed.get("boosted_yaw"))
+        self._set_ship_field(self.ship_b_roll, parsed.get("boosted_roll"))
+        self._set_ship_field(self.ship_power, parsed.get("power_consumption"))
+        self._set_ship_field(self.ship_cm, parsed.get("cm_decoy_noise"))
+        self._set_ship_field(self.ship_hp, parsed.get("hp"))
+        self._set_ship_field(self.ship_cargo, parsed.get("cargo"))
+        self._set_ship_field(self.ship_dim, parsed.get("dimensions"))
+        self._set_ship_field(self.ship_mass, parsed.get("mass"))
+        self._set_ship_field(self.ship_h2, parsed.get("hydrogen_capacity"))
+        self._set_ship_field(self.ship_qt, parsed.get("qt_fuel_capacity"))
+        self._set_ship_field(self.ship_fee, parsed.get("expedition_fee"))
+        self._set_ship_field(self.ship_claim, parsed.get("claim_time"))
+        self._set_ship_field(self.ship_expedite, parsed.get("expedite_time"))
+
+    def import_ship_ocr(self):
+        image_path = filedialog.askopenfilename(
+            title="IMPORT SCREENSHOT SHIP STATS",
+            filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.webp")],
+        )
+        if not image_path:
+            return
+
+        try:
+            parsed = self.ship_controller.extract_ship_stats_from_screenshot(image_path)
+        except Exception as e:
+            DrakePopup.error("OCR", str(e), parent=self)
+            return
+
+        if not parsed:
+            DrakePopup.warning("OCR", "Aucune statistique reconnue dans ce screenshot.", parent=self)
+            return
+
+        self._apply_ship_ocr_data(parsed)
+        self.controller.log(f"OCR SHIP LOGGER: {len(parsed)} champ(s) detectes.", source="LOGGER")
+        DrakePopup.info("OCR", f"Import OCR termine: {len(parsed)} champ(s) detectes.", parent=self)
         
     def save_ship(self):
         """Sauvegarde sécurisée : bloque l'exécution si les données sont invalides."""
@@ -727,11 +838,28 @@ class LoggerFrame(ctk.CTkFrame):
         except Exception as e:
             self.controller.log(str(e), source="DATA ERROR")
 
-    def clear_ship_fields(self):
-        for attr in [self.ship_name, self.ship_brand, self.ship_role, 
-                     self.ship_career, self.ship_scm, self.ship_nav, 
-                     self.ship_hp, self.ship_cargo, self.ship_crew]:
-            attr.delete(0, "end")
+    def clear_ship_fields(self, full: bool = False):
+        basic_fields = [
+            self.ship_name, self.ship_brand, self.ship_role,
+            self.ship_career, self.ship_scm, self.ship_nav,
+            self.ship_hp, self.ship_cargo, self.ship_crew,
+        ]
+        all_fields = basic_fields + [
+            self.ship_size, self.ship_scm_bf, self.ship_scm_bb,
+            self.ship_h2, self.ship_qt, self.ship_pitch, self.ship_yaw,
+            self.ship_roll, self.ship_b_pitch, self.ship_b_yaw, self.ship_b_roll,
+            self.ship_power, self.ship_cm, self.ship_mass, self.ship_dim,
+            self.ship_fee, self.ship_claim, self.ship_expedite,
+        ]
+        targets = all_fields if full else basic_fields
+        for attr in targets:
+            try:
+                attr.delete(0, "end")
+            except Exception:
+                try:
+                    attr.set("")
+                except Exception:
+                    pass
 
     def validate_numbers(self, P):
         """Vérifie si la saisie est un nombre (utilisé par register_command)"""

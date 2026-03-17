@@ -5,7 +5,9 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 """
 
 import customtkinter as ctk
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton
+from tkinter import filedialog
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton, DrakeMultiSelect
+from controllers.ship_controller import SHIP_CAREER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
@@ -31,6 +33,9 @@ class ShipFrame(ctk.CTkFrame):
 
     def _setup_ui(self):
         """Initialise la structure globale de l'interface."""
+        self.role_options = self.controller.ship.list_ship_roles()
+        self.career_options = self.controller.ship.list_ship_careers()
+
         # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
@@ -592,6 +597,14 @@ class ShipFrame(ctk.CTkFrame):
             fg_color=DrakeConfig.BG_PANEL,
             resizable=True,
         )
+        try:
+            edit_win.grab_release()
+        except Exception:
+            pass
+        try:
+            edit_win.attributes("-topmost", False)
+        except Exception:
+            pass
 
         # Header stylisé
         header = ctk.CTkFrame(edit_win, fg_color=DrakeConfig.ACCENT_PRIMARY, height=50, corner_radius=0)
@@ -613,16 +626,49 @@ class ShipFrame(ctk.CTkFrame):
         def create_field(parent, label, key, default_val):
             self._create_form_label(parent, label)
             entry = DrakeEntry(parent, fg_color=DrakeConfig.BG_PANEL, border_color="#333333")
-            entry.insert(0, str(default_val))
+            entry.insert(0, "" if default_val is None else str(default_val))
             entry.pack(fill="x", padx=20, pady=5)
             self.edit_entries[key] = entry
+
+        def create_combo_field(parent, label, key, values, default_val, placeholder=None):
+            self._create_form_label(parent, label)
+            combo = DrakeComboBox(parent, values=values)
+            current_value = "" if default_val is None else str(default_val).upper().strip()
+            if current_value and current_value not in [str(v).upper() for v in values]:
+                combo.configure(values=list(values) + [current_value])
+            combo.set(current_value or (placeholder or (values[0] if values else "")))
+            combo.pack(fill="x", padx=20, pady=5)
+            self.edit_entries[key] = combo
+
+        def set_widget_value(widget, value):
+            text = "" if value is None else str(value)
+            if isinstance(widget, DrakeMultiSelect):
+                widget.set(text)
+                return
+            if isinstance(widget, DrakeComboBox):
+                current_values = [str(v).upper() for v in getattr(widget, "values", [])]
+                target = text.upper().strip()
+                if target and target not in current_values:
+                    widget.configure(values=list(getattr(widget, "values", [])) + [target])
+                widget.set(target or "")
+                return
+            widget.delete(0, "end")
+            if text:
+                widget.insert(0, text)
+
+        def create_multiselect_field(parent, label, key, options, default_val):
+            self._create_form_label(parent, label)
+            ms = DrakeMultiSelect(parent, values=options, height=140)
+            ms.set("" if default_val is None else str(default_val))
+            ms.pack(fill="x", padx=20, pady=5)
+            self.edit_entries[key] = ms
 
         # --- ONGLET 1 : GENERAL (Identité) ---
         create_field(tab_general, "MANUFACTURER", "brand", ship.brand)
         create_field(tab_general, "MODEL NAME", "name", ship.name)
         create_field(tab_general, "SIZE CLASS (S1-S6)", "size", ship.size)
-        create_field(tab_general, "PRIMARY ROLE", "role", ship.role)
-        create_field(tab_general, "CAREER", "career", ship.career)
+        create_multiselect_field(tab_general, "ROLE(S)", "role", self.role_options, ship.role)
+        create_combo_field(tab_general, "CAREER", "career", self.career_options or SHIP_CAREER_OPTIONS, ship.career, placeholder="CAREER")
 
         # --- ONGLET 2 : FLIGHT (Performances) ---
         f_container = ctk.CTkFrame(tab_flight, fg_color="transparent")
@@ -649,20 +695,55 @@ class ShipFrame(ctk.CTkFrame):
         create_field(tab_logistics, "CREW SIZE", "crew_size", ship.crew_size)
         create_field(tab_logistics, "CLAIM TIME (MINUTES)", "claim_time", ship.claim_time)
         create_field(tab_logistics, "EXPEDITE TIME (MINUTES)", "expedite_time", ship.expedite_time)
-        create_field(tab_logistics, "EXPEDITE COST (aUEC)", "expedite_cost", getattr(ship, 'expedite_cost', 0))
+        create_field(tab_logistics, "EXPEDITE COST (aUEC)", "expedition_fee", ship.expedition_fee)
 
         # --- BOUTON DE SAUVEGARDE GLOBALE ---
         def perform_full_update():
             try:
+                int_fields = {
+                    "scm_speed",
+                    "nav_max_speed",
+                    "hp",
+                    "crew_size",
+                }
+                float_fields = {
+                    "claim_time",
+                    "expedite_time",
+                    "pitch",
+                    "yaw",
+                    "roll",
+                    "cargo",
+                    "boosted_pitch",
+                    "boosted_yaw",
+                    "boosted_roll",
+                }
+
+                def parse_int(raw: str) -> int:
+                    txt = str(raw or "").strip().replace(",", ".")
+                    if txt == "":
+                        return 0
+                    return int(float(txt))
+
+                def parse_float(raw: str) -> float:
+                    txt = str(raw or "").strip().replace(",", ".")
+                    if txt == "":
+                        return 0.0
+                    if ":" in txt:
+                        parts = txt.split(":")
+                        if len(parts) == 3 and all(part.isdigit() for part in parts):
+                            hours, minutes, seconds = [int(part) for part in parts]
+                            return round(hours * 60 + minutes + (seconds / 60.0), 2)
+                    return float(txt)
+
                 # On compile toutes les entrées dans un dictionnaire
                 final_data = {}
                 for key, widget in self.edit_entries.items():
                     val = widget.get()
                     # Conversion auto si la clé est connue pour être numérique
-                    if key in ['scm_speed', 'nav_max_speed', 'hp', 'crew_size', 'claim_time', 'expedite_time']:
-                        final_data[key] = int(val)
-                    elif key in ['pitch', 'yaw', 'roll', 'cargo', 'boosted_pitch', 'boosted_yaw', 'boosted_roll']:
-                        final_data[key] = float(val)
+                    if key in int_fields:
+                        final_data[key] = parse_int(val)
+                    elif key in float_fields:
+                        final_data[key] = parse_float(val)
                     else:
                         final_data[key] = val.upper()
 
@@ -675,6 +756,73 @@ class ShipFrame(ctk.CTkFrame):
                 
             except ValueError as e:
                 self.controller.log(f"Invalid format in numeric field: {e}", source="SYSTEM ERROR")
+
+        def import_ocr_screenshot():
+            ocr_fields = {
+                "brand",
+                "role",
+                "career",
+                "size",
+                "crew_size",
+                "scm_speed",
+                "nav_max_speed",
+                "pitch",
+                "yaw",
+                "roll",
+                "hp",
+                "boosted_pitch",
+                "boosted_yaw",
+                "boosted_roll",
+                "cargo",
+                "claim_time",
+                "expedite_time",
+                "expedition_fee",
+            }
+
+            image_path = filedialog.askopenfilename(
+                title="IMPORT SCREENSHOT SHIP STATS",
+                filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.webp")],
+            )
+            if not image_path:
+                return
+
+            try:
+                parsed = self.controller.ship.extract_ship_stats_from_screenshot(image_path)
+            except Exception as e:
+                DrakePopup.error("OCR", str(e), parent=self)
+                return
+
+            if not parsed:
+                DrakePopup.warning("OCR", "Aucune statistique reconnue dans ce screenshot.", parent=self)
+                return
+
+            # Ne jamais renommer le ship automatiquement depuis OCR.
+            parsed.pop("name", None)
+
+            for key in ocr_fields:
+                widget = self.edit_entries.get(key)
+                if widget is None:
+                    continue
+                set_widget_value(widget, "")
+
+            for key, value in parsed.items():
+                if key not in self.edit_entries:
+                    continue
+                widget = self.edit_entries[key]
+                set_widget_value(widget, value)
+
+            self.controller.log(
+                f"OCR IMPORT: {len(parsed)} champ(s) detectes pour {ship_name}",
+                source="FLEET",
+            )
+            DrakePopup.info(
+                "OCR",
+                f"Import OCR termine: {len(parsed)} champ(s) detectes. Verifiez puis cliquez sur APPLY ALL MODIFICATIONS.",
+                parent=self,
+            )
+
+        ocr_btn = DrakeButton(edit_win, text="OCR SCREENSHOT IMPORT", command=import_ocr_screenshot)
+        ocr_btn.pack(pady=(10, 8), padx=40, fill="x")
 
         save_btn = DrakeButton(edit_win, text="APPLY ALL MODIFICATIONS", 
                                command=perform_full_update)

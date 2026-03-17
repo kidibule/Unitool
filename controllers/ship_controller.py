@@ -6,6 +6,18 @@ import csv
 from tkinter import filedialog, messagebox
 
 
+SHIP_CAREER_OPTIONS = [
+    "COMBAT",
+    "TRANSPORT",
+    "EXPLORATION",
+    "INDUSTRIAL",
+    "SCIENCE",
+    "COMPETITION",
+    "SUPPORT",
+    "INTERDICTION",
+]
+
+
 class ShipController:
     """Contrôleur métier pour CRUD ships/components/loadout."""
 
@@ -110,6 +122,23 @@ class ShipController:
     def list_ship_names(self) -> list[str]:
         rows = self.app.query("SELECT name FROM ships ORDER BY name")
         return [r[0] for r in rows]
+
+    def list_ship_roles(self) -> list[str]:
+        rows = self.app.query("SELECT name FROM ship_roles ORDER BY name")
+        roles = [str(r[0]).upper().strip() for r in rows if r and r[0]]
+        if roles:
+            return roles
+        rows = self.app.query("SELECT DISTINCT role FROM ships WHERE role IS NOT NULL AND TRIM(role) <> '' ORDER BY role")
+        return [str(r[0]).upper().strip() for r in rows if r and r[0]]
+
+    def list_ship_careers(self) -> list[str]:
+        rows = self.app.query("SELECT name FROM ship_careers ORDER BY name")
+        careers = [str(r[0]).upper().strip() for r in rows if r and r[0]]
+        if careers:
+            return careers
+        rows = self.app.query("SELECT DISTINCT career FROM ships WHERE career IS NOT NULL AND TRIM(career) <> '' ORDER BY career")
+        db_careers = [str(r[0]).upper().strip() for r in rows if r and r[0]]
+        return sorted(set(db_careers + SHIP_CAREER_OPTIONS))
 
     def search_ship_names(self, query_text: str, limit: int = 10) -> list[str]:
         if not query_text:
@@ -705,6 +734,47 @@ class ShipController:
         values.append(ship_name.upper())
         sql = f"UPDATE ships SET {set_clause} WHERE name = ?"
         self.app.commit(sql, tuple(values))
+
+    def extract_ship_stats_from_screenshot(self, image_path: str) -> dict:
+        """Lit un screenshot de fiche vaisseau et retourne les champs DB reconnus."""
+        from ship_ocr import extract_ship_stats
+
+        rows = self.app.query("SELECT DISTINCT name, brand, role, career FROM ships")
+        ship_records = []
+        for r in rows:
+            if not r or not r[0]:
+                continue
+            ship_records.append(
+                {
+                    "name": str(r[0]).upper().strip(),
+                    "brand": (str(r[1]).upper().strip() if len(r) > 1 and r[1] else ""),
+                    "role": (str(r[2]).upper().strip() if len(r) > 2 and r[2] else ""),
+                    "career": (str(r[3]).upper().strip() if len(r) > 3 and r[3] else ""),
+                }
+            )
+        names = [str(r[0]).upper() for r in rows if r and r[0]]
+        brands = [str(r[1]).upper() for r in rows if len(r) > 1 and r[1] and str(r[1]).upper() not in ("UNKNOWN",)]
+        roles_db = [str(r[2]).upper() for r in rows if len(r) > 2 and r[2]]
+        careers_db = [str(r[3]).upper() for r in rows if len(r) > 3 and r[3]]
+
+        roles_known = self.list_ship_roles()
+        careers_known = self.list_ship_careers()
+        brands_known = [
+            "AEGIS", "ANVIL AEROSPACE", "ARGO ASTRONAUTICS", "CONSOLIDATED OUTLAND",
+            "CRUSADER INDUSTRIES", "DRAKE INTERPLANETARY", "ESPERIA", "GATAC MANUFACTURE",
+            "KRUGER INTERGALACTIC", "MISC", "MIRAI", "ORIGIN JUMPWORKS", "RSI", "TUMBRIL",
+            "BANU", "VANDUUL",
+        ]
+
+        reference_data = {
+            "names": sorted(set(names)),
+            "brands": sorted(set(brands + brands_known)),
+            "roles": sorted(set(roles_db + roles_known)),
+            "careers": sorted(set(careers_db + careers_known)),
+            "ship_records": ship_records,
+        }
+
+        return extract_ship_stats(image_path, reference_data=reference_data)
 
     def clear_all_fields(self):
         pass
