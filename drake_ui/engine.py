@@ -674,75 +674,72 @@ class DrakeComboBox(ctk.CTkFrame):
 
         super().configure(**kwargs)
 
-class DrakeMultiSelect(ctk.CTkScrollableFrame):
-    """Multi-sélecteur par cases à cocher (ex : rôles de vaisseau).
+class DrakeDualComboBox(ctk.CTkFrame):
+    """Deux comboboxes côte à côte pour sélectionner jusqu'à 2 rôles.
 
     API compatible DrakeComboBox / DrakeEntry :
-    - get()          → str, valeurs cochées séparées par \", \"
-    - set(value)     → coche les entrées présentes dans la chaîne CSV
-    - delete(s, e)   → décoche tout (compat clear)
+    - get()          → str, "ROLE1, ROLE2" ou "ROLE1" ou ""
+    - set(value)     → parse et remplit les 2 selects
+    - delete(s, e)   → vide les 2
     - insert(i, v)   → alias set()
-    - values         → property, liste des clés disponibles
+    - values         → property, liste des valeurs disponibles
     """
 
-    def __init__(self, master, values: list = None, height: int = 120, **kwargs):
-        kwargs.setdefault("fg_color", DrakeConfig.BG_TERMINAL)
-        kwargs.setdefault("border_color", DrakeConfig.BORDER_COLOR)
-        kwargs.setdefault("border_width", 1)
-        super().__init__(master, height=height, **kwargs)
-        self._vars: dict[str, ctk.BooleanVar] = {}
-        self._rebuild(values or [])
+    def __init__(self, master, values: list = None, **kwargs):
+        fg_color = kwargs.pop("fg_color", "transparent")
+        super().__init__(master, fg_color=fg_color, **kwargs)
 
-    def _rebuild(self, values: list) -> None:
-        for w in self.winfo_children():
-            w.destroy()
-        self._vars = {}
-        for v in values:
-            key = str(v).upper().strip()
-            var = ctk.BooleanVar()
-            cb = ctk.CTkCheckBox(
-                self,
-                text=key,
-                variable=var,
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_MAIN,
-                fg_color=DrakeConfig.ACCENT_PRIMARY,
-                hover_color=DrakeConfig.ACCENT_HOVER,
-                checkmark_color="#000000",
-                border_color=DrakeConfig.BORDER_COLOR,
-            )
-            cb.pack(anchor="w", padx=5, pady=1)
-            self._vars[key] = var
+        self.placeholder = "ROLE"
+        self.values = values or []
 
-    @property
-    def values(self) -> list:
-        return list(self._vars.keys())
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+
+        self.role1 = DrakeComboBox(self, values=self.values, width=150)
+        self.role1.set(self.placeholder)
+        self.role1.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+
+        self.role2 = DrakeComboBox(self, values=self.values, width=150)
+        self.role2.set(self.placeholder)
+        self.role2.grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
     def get(self) -> str:
-        return ", ".join(k for k, var in self._vars.items() if var.get())
+        r1 = self.role1.get().strip()
+        r2 = self.role2.get().strip()
+        if r1 == self.placeholder:
+            r1 = ""
+        if r2 == self.placeholder:
+            r2 = ""
+        if r1 and r2:
+            return f"{r1}, {r2}"
+        return r1 or r2 or ""
 
     def set(self, value: str) -> None:
-        for var in self._vars.values():
-            var.set(False)
+        self.role1.set(self.placeholder)
+        self.role2.set(self.placeholder)
         if not value:
             return
-        parts = {p.strip().upper() for p in str(value).split(",") if p.strip()}
-        for p in parts:
-            if p in self._vars:
-                self._vars[p].set(True)
+        parts = [p.strip().upper() for p in str(value).split(",") if p.strip()]
+        if len(parts) >= 1:
+            self.role1.set(parts[0])
+        if len(parts) >= 2:
+            self.role2.set(parts[1])
 
     def delete(self, start, end) -> None:
-        """Compat DrakeEntry/DrakeComboBox : décoche tout."""
-        for var in self._vars.values():
-            var.set(False)
+        """Vide les 2 combobox."""
+        self.role1.set(self.placeholder)
+        self.role2.set(self.placeholder)
 
     def insert(self, index, value: str) -> None:
-        """Compat DrakeEntry/DrakeComboBox : alias set()."""
+        """Alias set()."""
         self.set(value)
 
     def configure(self, **kwargs):
         if "values" in kwargs:
-            self._rebuild(kwargs.pop("values"))
+            new_vals = kwargs.pop("values")
+            self.values = new_vals
+            self.role1.configure(values=new_vals)
+            self.role2.configure(values=new_vals)
         super().configure(**kwargs)
 
 

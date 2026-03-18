@@ -5,7 +5,7 @@ import csv
 from difflib import SequenceMatcher
 from datetime import datetime
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeMultiSelect
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeDualComboBox
 from controllers.ship_controller import ShipController
 
 
@@ -498,25 +498,28 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_brand = DrakeEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
         self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-        # --- ROLE(S) (multi-sélecteur cases à cocher) ---
-        self.ship_role = DrakeMultiSelect(self.tab_ships, values=role_options, height=110)
-        self.ship_role.pack(pady=(5, 2), padx=50, fill="x")
+        # --- ROLE(S) (2 combobox côte à côte) ---
+        f_roles = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_roles.pack(pady=5, padx=50, fill="x")
+        
+        self.ship_role = DrakeDualComboBox(f_roles, values=role_options)
+        self.ship_role.pack(side="left", fill="x", expand=True)
 
         # --- CAREER & SPECS ---
-        f_role = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
-        f_role.pack(pady=(2, 5), padx=50, fill="x")
-
+        f_specs = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        f_specs.pack(pady=5, padx=50, fill="x")
+        
         self.ship_career = DrakeComboBox(
-            f_role,
+            f_specs,
             values=career_options,
         )
         self.ship_career.set("CAREER")  # Placeholder
         self.ship_career.pack(side="left", fill="x", expand=True, padx=(0, 5))
-
-        self.ship_size = DrakeEntry(f_role, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
+        
+        self.ship_size = DrakeEntry(f_specs, placeholder_text="SIZE (1-6)", width=80, **entry_kwargs)
         self.ship_size.pack(side="left", padx=5)
-
-        self.ship_crew = DrakeEntry(f_role, placeholder_text="CREW", width=80, **entry_kwargs)
+        
+        self.ship_crew = DrakeEntry(f_specs, placeholder_text="CREW", width=80, **entry_kwargs)
         self.ship_crew.pack(side="right", padx=(5, 0))
 
         # --- SECTION : PROPULSION & SPEED ---

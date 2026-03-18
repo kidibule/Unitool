@@ -6,7 +6,7 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 
 import customtkinter as ctk
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton, DrakeMultiSelect
+from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton, DrakeDualComboBox
 from controllers.ship_controller import SHIP_CAREER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
@@ -642,7 +642,7 @@ class ShipFrame(ctk.CTkFrame):
 
         def set_widget_value(widget, value):
             text = "" if value is None else str(value)
-            if isinstance(widget, DrakeMultiSelect):
+            if isinstance(widget, DrakeDualComboBox):
                 widget.set(text)
                 return
             if isinstance(widget, DrakeComboBox):
@@ -658,7 +658,7 @@ class ShipFrame(ctk.CTkFrame):
 
         def create_multiselect_field(parent, label, key, options, default_val):
             self._create_form_label(parent, label)
-            ms = DrakeMultiSelect(parent, values=options, height=140)
+            ms = DrakeDualComboBox(parent, values=options)
             ms.set("" if default_val is None else str(default_val))
             ms.pack(fill="x", padx=20, pady=5)
             self.edit_entries[key] = ms
