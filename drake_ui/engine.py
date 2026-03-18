@@ -9,6 +9,7 @@ Contient :
 """
 
 import customtkinter as ctk
+import tkinter.font as tkfont
 from typing import Tuple, Optional
 
 
@@ -549,7 +550,8 @@ class DrakeComboBox(ctk.CTkFrame):
         self.update_idletasks()
         x = self.winfo_rootx()
         y = self.winfo_rooty() + self.winfo_height()
-        width = self.winfo_width()
+        field_width = self.winfo_width()
+        dropdown_width = self._compute_dropdown_width(field_width)
 
         # Création du Toplevel
         self.dropdown = ctk.CTkToplevel(self)
@@ -558,13 +560,14 @@ class DrakeComboBox(ctk.CTkFrame):
         
         # --- Liaison pour suivre le mouvement ---
         self._parent_window = self.winfo_toplevel()
-        self._bind_id = self._parent_window.bind("<Configure>", self._update_pos, add="+")
+        self._move_bind_id = self._parent_window.bind("<Configure>", self._update_pos, add="+")
+        self._click_bind_id = self._parent_window.bind("<ButtonPress-1>", self._on_parent_click, add="+")
         
         self._reposition_dropdown()
 
         # Hauteur dynamique
         height = min(len(self.values) * 35 + 10, 200)
-        self.dropdown.geometry(f"{width}x{height}+{x}+{y}")
+        self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
         self.dropdown.configure(fg_color=DrakeConfig.ACCENT_PRIMARY)
 
         # Frame de bordure style Drake
@@ -597,20 +600,26 @@ class DrakeComboBox(ctk.CTkFrame):
 
         # --- LOGIQUE DE FERMETURE ---
         self.dropdown.after(10, self.dropdown.focus_set)
-        self.dropdown.bind("<ButtonPress-1>", self._on_click_outside, add="+")
+        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(), add="+")
 
-    def _on_click_outside(self, event):
-        """Ferme si le clic est en dehors de la zone du dropdown."""
-        if self.dropdown:
-            x, y = event.x_root, event.y_root
-            # Zone du dropdown
-            x1 = self.dropdown.winfo_rootx()
-            y1 = self.dropdown.winfo_rooty()
-            x2 = x1 + self.dropdown.winfo_width()
-            y2 = y1 + self.dropdown.winfo_height()
-            
-            if not (x1 <= x <= x2 and y1 <= y <= y2):
-                self.close_dropdown()
+    def _point_in_widget(self, widget, x_root: int, y_root: int) -> bool:
+        if widget is None or not widget.winfo_exists():
+            return False
+        x1 = widget.winfo_rootx()
+        y1 = widget.winfo_rooty()
+        x2 = x1 + widget.winfo_width()
+        y2 = y1 + widget.winfo_height()
+        return x1 <= x_root <= x2 and y1 <= y_root <= y2
+
+    def _on_parent_click(self, event):
+        """Ferme la liste si clic hors combobox ET hors dropdown."""
+        if not self.is_open or not self.dropdown:
+            return
+        x, y = event.x_root, event.y_root
+        in_combo = self._point_in_widget(self, x, y)
+        in_dropdown = self._point_in_widget(self.dropdown, x, y)
+        if not in_combo and not in_dropdown:
+            self.close_dropdown()
 
     def _reposition_dropdown(self):
         """Calcule et applique la position."""
@@ -618,10 +627,39 @@ class DrakeComboBox(ctk.CTkFrame):
             self.update_idletasks()
             x = self.winfo_rootx()
             y = self.winfo_rooty() + self.winfo_height()
-            width = self.winfo_width()
+            field_width = self.winfo_width()
+            dropdown_width = self._compute_dropdown_width(field_width)
             
             height = min(len(self.values) * 35 + 10, 200)
-            self.dropdown.geometry(f"{width}x{height}+{x}+{y}")
+            self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
+
+    def _compute_dropdown_width(self, field_width: int) -> int:
+        """Largeur du dropdown = largeur du champ, sauf si un item est plus long."""
+        try:
+            font_obj = tkfont.Font(font=self.entry.cget("font"))
+        except Exception:
+            font_obj = tkfont.nametofont("TkDefaultFont")
+
+        max_item_px = 0
+        for value in self.values:
+            text_px = font_obj.measure(str(value).upper())
+            if text_px > max_item_px:
+                max_item_px = text_px
+
+        # Marge interne + scrollbar + respirations visuelles
+        required_width = max_item_px + 56
+        raw_width = max(field_width, required_width)
+
+        # Sous Windows avec scaling (125%, 150%...), geometry() applique un facteur
+        # supplémentaire; on compense pour conserver la largeur visuelle du champ.
+        try:
+            tk_scaling = float(self.tk.call("tk", "scaling"))
+        except Exception:
+            tk_scaling = 1.0
+        if tk_scaling <= 0:
+            tk_scaling = 1.0
+
+        return max(1, int(round(raw_width / tk_scaling)))
 
     def _update_pos(self, event=None):
         """Appelé quand la fenêtre principale bouge."""
@@ -630,8 +668,12 @@ class DrakeComboBox(ctk.CTkFrame):
 
     def close_dropdown(self):
         if self.dropdown:
-            if hasattr(self, "_bind_id"):
-                self._parent_window.unbind("<Configure>", self._bind_id)
+            if hasattr(self, "_move_bind_id"):
+                self._parent_window.unbind("<Configure>", self._move_bind_id)
+                delattr(self, "_move_bind_id")
+            if hasattr(self, "_click_bind_id"):
+                self._parent_window.unbind("<ButtonPress-1>", self._click_bind_id)
+                delattr(self, "_click_bind_id")
 
             self.dropdown.destroy()
             self.dropdown = None
@@ -673,6 +715,236 @@ class DrakeComboBox(ctk.CTkFrame):
             self.entry.configure(text_color=color)
 
         super().configure(**kwargs)
+
+class DrakeComboBoxLight(ctk.CTkFrame):
+    """Variante plus claire de DrakeComboBox, optimisée pour les fonds noirs.
+
+    Identique à DrakeComboBox, mais avec un fond #2b2b2b et une bordure #555555
+    pour améliorer la visibilité lorsque le widget est posé sur un fond noir.
+    """
+
+    # Couleurs spécifiques à cette variante
+    _BG      = "#2b2b2b"  # BG_PANEL — clairement distinct du fond noir
+    _BORDER  = "#555555"  # Bordure plus lumineuse que BORDER_COLOR (#333333)
+    _HOVER   = "#3a3a3a"  # Hover de la zone de texte
+
+    def __init__(self, master, values=None, command=None, variable=None, width=200, **kwargs):
+        if "variable" in kwargs:
+            variable = kwargs.pop("variable")
+
+        fg_color     = kwargs.pop("fg_color", self._BG)
+        border_color = kwargs.pop("border_color", self._BORDER)
+
+        super().__init__(
+            master,
+            fg_color=fg_color,
+            border_color=border_color,
+            border_width=1,
+            corner_radius=6,
+            height=30,
+            width=width,
+            **kwargs
+        )
+
+        self.values = values or []
+        self.command = command
+        self.is_open = False
+
+        if variable:
+            self.selected_value = variable
+        else:
+            self.selected_value = ctk.StringVar(value=self.values[0] if self.values else "")
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # --- ENTRY AREA ---
+        self.entry = ctk.CTkButton(
+            self,
+            textvariable=self.selected_value,
+            text_color=DrakeConfig.TEXT_MAIN,
+            fg_color="transparent",
+            hover_color=self._HOVER,
+            anchor="w",
+            corner_radius=6,
+            command=self.toggle_dropdown
+        )
+        self.entry.grid(row=0, column=0, sticky="nsew", padx=(5, 35))
+
+        # --- ARROW BUTTON ---
+        self.button = ctk.CTkButton(
+            self,
+            text="▼",
+            width=32,
+            fg_color=DrakeConfig.ACCENT_PRIMARY,
+            hover_color=DrakeConfig.ACCENT_HOVER,
+            text_color="#000000",
+            corner_radius=4,
+            command=self.toggle_dropdown
+        )
+        self.button.place(relx=1, rely=0, anchor="ne", relheight=1)
+
+        self.dropdown = None
+
+    def toggle_dropdown(self):
+        if self.is_open:
+            self.close_dropdown()
+        else:
+            self.close_dropdown()
+            self.open_dropdown()
+
+    def open_dropdown(self):
+        if self.is_open:
+            self.close_dropdown()
+            return
+
+        self.is_open = True
+
+        self.update_idletasks()
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        field_width = self.winfo_width()
+        dropdown_width = self._compute_dropdown_width(field_width)
+
+        self.dropdown = ctk.CTkToplevel(self)
+        self.dropdown.overrideredirect(True)
+        self.dropdown.attributes("-topmost", True)
+
+        self._parent_window = self.winfo_toplevel()
+        self._move_bind_id = self._parent_window.bind("<Configure>", self._update_pos, add="+")
+        self._click_bind_id = self._parent_window.bind("<ButtonPress-1>", self._on_parent_click, add="+")
+
+        self._reposition_dropdown()
+
+        height = min(len(self.values) * 35 + 10, 200)
+        self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
+        self.dropdown.configure(fg_color=DrakeConfig.ACCENT_PRIMARY)
+
+        border_frame = ctk.CTkFrame(
+            self.dropdown,
+            fg_color=DrakeConfig.BG_PANEL,
+            border_color=DrakeConfig.ACCENT_PRIMARY,
+            border_width=1,
+            corner_radius=0
+        )
+        border_frame.pack(fill="both", expand=True)
+
+        scroll = ctk.CTkScrollableFrame(border_frame, fg_color="transparent", corner_radius=0)
+        scroll.pack(fill="both", expand=True, padx=2, pady=2)
+
+        for value in self.values:
+            item = ctk.CTkButton(
+                scroll,
+                text=str(value).upper(),
+                fg_color="transparent",
+                hover_color=DrakeConfig.ACCENT_PRIMARY,
+                text_color=DrakeConfig.TEXT_MAIN,
+                anchor="w",
+                height=30,
+                corner_radius=0,
+                command=lambda v=value: self.select(v)
+            )
+            item.pack(fill="x", pady=1)
+
+        self.dropdown.after(10, self.dropdown.focus_set)
+        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(), add="+")
+
+    def _point_in_widget(self, widget, x_root: int, y_root: int) -> bool:
+        if widget is None or not widget.winfo_exists():
+            return False
+        x1 = widget.winfo_rootx()
+        y1 = widget.winfo_rooty()
+        x2 = x1 + widget.winfo_width()
+        y2 = y1 + widget.winfo_height()
+        return x1 <= x_root <= x2 and y1 <= y_root <= y2
+
+    def _on_parent_click(self, event):
+        if not self.is_open or not self.dropdown:
+            return
+        x, y = event.x_root, event.y_root
+        in_combo = self._point_in_widget(self, x, y)
+        in_dropdown = self._point_in_widget(self.dropdown, x, y)
+        if not in_combo and not in_dropdown:
+            self.close_dropdown()
+
+    def _reposition_dropdown(self):
+        if self.dropdown:
+            self.update_idletasks()
+            x = self.winfo_rootx()
+            y = self.winfo_rooty() + self.winfo_height()
+            field_width = self.winfo_width()
+            dropdown_width = self._compute_dropdown_width(field_width)
+            height = min(len(self.values) * 35 + 10, 200)
+            self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
+
+    def _compute_dropdown_width(self, field_width: int) -> int:
+        try:
+            font_obj = tkfont.Font(font=self.entry.cget("font"))
+        except Exception:
+            font_obj = tkfont.nametofont("TkDefaultFont")
+
+        max_item_px = 0
+        for value in self.values:
+            text_px = font_obj.measure(str(value).upper())
+            if text_px > max_item_px:
+                max_item_px = text_px
+
+        required_width = max_item_px + 56
+        raw_width = max(field_width, required_width)
+
+        try:
+            tk_scaling = float(self.tk.call("tk", "scaling"))
+        except Exception:
+            tk_scaling = 1.0
+        if tk_scaling <= 0:
+            tk_scaling = 1.0
+
+        return max(1, int(round(raw_width / tk_scaling)))
+
+    def _update_pos(self, event=None):
+        if self.is_open and self.dropdown:
+            self._reposition_dropdown()
+
+    def close_dropdown(self):
+        if self.dropdown:
+            if hasattr(self, "_move_bind_id"):
+                self._parent_window.unbind("<Configure>", self._move_bind_id)
+                delattr(self, "_move_bind_id")
+            if hasattr(self, "_click_bind_id"):
+                self._parent_window.unbind("<ButtonPress-1>", self._click_bind_id)
+                delattr(self, "_click_bind_id")
+            self.dropdown.destroy()
+            self.dropdown = None
+        self.is_open = False
+
+    def select(self, value):
+        self.selected_value.set(value)
+        self.close_dropdown()
+        if self.command:
+            self.command(value)
+
+    def get(self):
+        return self.selected_value.get()
+
+    def set(self, value):
+        self.selected_value.set(value)
+
+    def configure(self, **kwargs):
+        if "values" in kwargs:
+            self.values = kwargs.pop("values")
+            if self.get() not in self.values and self.values:
+                self.set(self.values[0])
+        if "command" in kwargs:
+            self.command = kwargs.pop("command")
+        if "variable" in kwargs:
+            new_var = kwargs.pop("variable")
+            self.selected_value = new_var
+            self.entry.configure(textvariable=self.selected_value)
+        if "text_color" in kwargs:
+            color = kwargs.pop("text_color")
+            self.entry.configure(text_color=color)
+        super().configure(**kwargs)
+
 
 class DrakeDualComboBox(ctk.CTkFrame):
     """Deux comboboxes côte à côte pour sélectionner jusqu'à 2 rôles.

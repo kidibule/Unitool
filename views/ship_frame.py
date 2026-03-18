@@ -5,8 +5,9 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 """
 
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeTerminal, DrakeButton, DrakeComboBox, DrakeEntry, DrakePopup, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeClearButton, DrakeDualComboBox
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight,DrakePopup
 from controllers.ship_controller import SHIP_CAREER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
@@ -18,6 +19,15 @@ class ShipFrame(ctk.CTkFrame):
         self.controller = controller
         self.component_popup = None
         self.component_editing_name = None
+        self.lo_slot_widgets = []
+        self.cfg_slot_selected_key = ""
+        self._loadout_ship_values = []
+        self._ship_suggestion_popup = None
+        self._ship_suggestion_listbox = None
+        self._ship_suggestion_owner = None
+        self._ship_suggestions_current = []
+        self._ship_suggestion_index = -1
+        self._validated_loadout_ship = ""
         
         # Mapping des types pour le formulaire
         self.mapping_types = {
@@ -29,6 +39,7 @@ class ShipFrame(ctk.CTkFrame):
 
         self._setup_ui()
         self._suspend_cfg_slot_pick = False
+        self.winfo_toplevel().bind("<Configure>", self._update_ship_popup_pos, add="+")
 
     # --- INITIALISATION UI ---
 
@@ -67,6 +78,7 @@ class ShipFrame(ctk.CTkFrame):
     def refresh(self):
         """Rafraîchissement appelé quand la page SHIPS est affichée."""
         try:
+            self._reset_loadout_ship_entry_on_page_load()
             self.update_selectors()
             if hasattr(self, "cfg_slot_ship"):
                 self.refresh_config_tab()
@@ -261,9 +273,23 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeTitle2(ctrl_scroll, text="SHIP SELECTION").pack(pady=(15, 5))
 
-        # Sélecteur de vaisseau
-        self.lo_ship_selector = DrakeComboBox(ctrl_scroll, values=["SHIP"], command=self.on_ship_selected)
+        # Champ de recherche ship avec suggestions (style Contracts target/client)
+        self.lo_ship_selector = DrakeEntry(ctrl_scroll, placeholder_text="SEARCH SHIP (NAME)...")
         self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
+        self.lo_ship_selector.bind("<KeyRelease>", self._on_ship_key_release)
+        self.lo_ship_selector.bind("<FocusOut>", self._on_ship_focus_out)
+        self.lo_ship_selector.bind("<Return>", self._confirm_ship_selection)
+        self.lo_ship_selector.bind("<Tab>", self._on_ship_tab_cycle)
+        self.lo_ship_selector.bind("<Shift-Tab>", self._on_ship_shift_tab_cycle)
+        self.lo_ship_selector.bind("<ISO_Left_Tab>", self._on_ship_shift_tab_cycle)
+
+        self.lo_ship_cycle_indicator = ctk.CTkLabel(
+            ctrl_scroll,
+            text="",
+            font=("Consolas", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        )
+        self.lo_ship_cycle_indicator.pack(pady=(0, 4), padx=15, anchor="e")
 
         DrakeTitle4(ctrl_scroll, text="LOADOUT PROFILE").pack(pady=(15, 0))
 
@@ -286,10 +312,6 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_status_terminal = DrakeTerminal(ctrl_scroll, height=250)
         self.lo_status_terminal.pack(pady=5, padx=15, fill="x")
 
-        # Bouton Purge (en bas)
-        DrakeClearButton(ctrl_panel, text="CLEAR ALL SLOTS", command=self.action_clear_loadout,
-                    fg_color="#440000", hover_color="#770000").pack(side="bottom", pady=20, padx=15, fill="x")
-
         # --- PANNEAU DES SLOTS (DROITE) ---
         self.lo_slots_frame = ctk.CTkScrollableFrame(
             self.lo_container, 
@@ -301,6 +323,240 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_slots_frame.pack(side="right", fill="both", expand=True)
 
         self.update_selectors()
+
+    def _reset_loadout_ship_entry_on_page_load(self):
+        """Réinitialise le champ ship quand on revient sur la page SHIPS (menu latéral)."""
+        if not self._widget_exists("lo_ship_selector"):
+            return
+        self._close_ship_popup()
+        self._ship_suggestions_current = []
+        self._ship_suggestion_index = -1
+        self._validated_loadout_ship = ""
+        self.lo_ship_selector.delete(0, "end")
+        self.lo_ship_selector.configure(placeholder_text="ENTER A SHIP...")
+        self._set_ship_cycle_indicator(0, 0)
+        self._clear_loadout_preview_pending_validation()
+
+    def _set_ship_cycle_indicator(self, index: int, total: int):
+        if not self._widget_exists("lo_ship_cycle_indicator"):
+            return
+        if total <= 0:
+            self.lo_ship_cycle_indicator.configure(text="")
+            return
+        safe_index = max(0, min(index, total))
+        self.lo_ship_cycle_indicator.configure(text=f"{safe_index}/{total}")
+
+    def _clear_loadout_preview_pending_validation(self):
+        if self._widget_exists("lo_slots_frame"):
+            for widget in self.lo_slots_frame.winfo_children():
+                widget.destroy()
+        self.lo_slot_widgets = []
+        if self._widget_exists("lo_status_terminal"):
+            self.lo_status_terminal.delete("0.0", "end")
+            self.lo_status_terminal.insert("end", "> SELECT A SHIP AND VALIDATE SUGGESTION (ENTER/CLICK).\n", "ACCENT")
+
+    def _close_ship_popup(self):
+        if self._ship_suggestion_popup:
+            self._ship_suggestion_popup.destroy()
+            self._ship_suggestion_popup = None
+            self._ship_suggestion_listbox = None
+            self._ship_suggestion_owner = None
+        self._set_ship_cycle_indicator(0, 0)
+
+    def _widget_is_descendant(self, widget, ancestor) -> bool:
+        if widget is None or ancestor is None:
+            return False
+        try:
+            current = widget
+            while current is not None:
+                if current == ancestor:
+                    return True
+                current = current.master
+        except Exception:
+            return False
+        return False
+
+    def _close_ship_popup_if_unfocused(self):
+        if not self._ship_suggestion_popup:
+            return
+
+        focus_widget = self.focus_get()
+        if focus_widget == self.lo_ship_selector:
+            return
+        if self._ship_suggestion_listbox and focus_widget == self._ship_suggestion_listbox:
+            return
+        if self._widget_is_descendant(focus_widget, self._ship_suggestion_popup):
+            return
+
+        self._close_ship_popup()
+
+    def _compute_ship_suggestions(self, raw_query: str, limit: int = 10):
+        query = (raw_query or "").strip().upper()
+        ships = [str(s).strip().upper() for s in self._loadout_ship_values]
+        if not ships:
+            return []
+        if not query:
+            return ships[:limit]
+
+        starts = [s for s in ships if s.startswith(query)]
+        contains = [s for s in ships if query in s and s not in starts]
+        return (starts + contains)[:limit]
+
+    def _set_ship_from_suggestion(self, ship_name: str, validate: bool = False):
+        selected = (ship_name or "").strip().upper()
+        if not selected:
+            return
+        self.lo_ship_selector.delete(0, "end")
+        self.lo_ship_selector.insert(0, selected)
+        if validate:
+            self.on_ship_selected(selected)
+
+    def _cycle_ship_suggestion(self, reverse: bool = False):
+        # Important: on garde la liste de suggestions courante pendant le cycle TAB.
+        # Sinon, apres auto-completion du champ, le filtre devient trop strict.
+        suggestions = list(self._ship_suggestions_current) if self._ship_suggestions_current else []
+        if not suggestions:
+            current_text = self.lo_ship_selector.get().strip().upper()
+            suggestions = self._compute_ship_suggestions(current_text)
+        if not suggestions:
+            self._close_ship_popup()
+            return "break"
+
+        if suggestions != self._ship_suggestions_current:
+            self._ship_suggestions_current = suggestions
+            self._ship_suggestion_index = -1
+
+        step = -1 if reverse else 1
+        self._ship_suggestion_index = (self._ship_suggestion_index + step) % len(suggestions)
+        selected = suggestions[self._ship_suggestion_index]
+
+        self._set_ship_from_suggestion(selected, validate=False)
+        self._show_ship_popup(self.lo_ship_selector, suggestions, selected_item=selected)
+        return "break"
+
+    def _on_ship_tab_cycle(self, event=None):
+        return self._cycle_ship_suggestion(reverse=False)
+
+    def _on_ship_shift_tab_cycle(self, event=None):
+        return self._cycle_ship_suggestion(reverse=True)
+
+    def _on_ship_focus_out(self, event):
+        self.after(120, self._close_ship_popup_if_unfocused)
+
+    def _update_ship_popup_pos(self, event=None):
+        if self._ship_suggestion_popup and self._ship_suggestion_owner:
+            x = self._ship_suggestion_owner.winfo_rootx()
+            y = self._ship_suggestion_owner.winfo_rooty() + self._ship_suggestion_owner.winfo_height()
+            w = self._ship_suggestion_owner.winfo_width()
+            self._ship_suggestion_popup.geometry(f"{w}x{self._ship_suggestion_popup.winfo_height()}+{x}+{y}")
+
+    def _show_ship_popup(self, entry_widget, items, selected_item=None):
+        self._close_ship_popup()
+        self.update_idletasks()
+
+        self._ship_suggestion_popup = tk.Toplevel(self)
+        self._ship_suggestion_popup.wm_overrideredirect(True)
+        self._ship_suggestion_popup.attributes("-topmost", True)
+
+        x = entry_widget.winfo_rootx()
+        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        w = entry_widget.winfo_width()
+
+        lb = tk.Listbox(
+            self._ship_suggestion_popup,
+            bg=DrakeConfig.BG_PANEL,
+            fg=DrakeConfig.TEXT_MAIN,
+            font=(DrakeConfig.FONT_LOGS[0], 10),
+            selectbackground=DrakeConfig.ACCENT_PRIMARY,
+            selectforeground=DrakeConfig.BG_MAIN,
+            highlightthickness=1,
+            highlightbackground=DrakeConfig.BORDER_COLOR,
+            bd=0,
+            activestyle="none",
+        )
+        for item in items:
+            lb.insert(tk.END, item)
+        lb.pack(fill="both", expand=True)
+        self._ship_suggestion_listbox = lb
+
+        if selected_item:
+            for idx, item in enumerate(items):
+                if str(item).strip().upper() == str(selected_item).strip().upper():
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(idx)
+                    lb.activate(idx)
+                    self._set_ship_cycle_indicator(idx + 1, len(items))
+                    break
+        else:
+            self._set_ship_cycle_indicator(0, len(items))
+
+        self._ship_suggestion_popup.geometry(f"{w}x{len(items) * 22}+{x}+{y}")
+        self._ship_suggestion_popup.lift()
+        lb.bind("<ButtonRelease-1>", lambda e: self._select_ship_item(entry_widget, lb))
+        self._ship_suggestion_owner = entry_widget
+
+    def _select_ship_item(self, entry_widget, listbox):
+        selection = listbox.curselection()
+        if selection:
+            ship_name = listbox.get(selection[0]).strip().upper()
+            self._set_ship_from_suggestion(ship_name, validate=True)
+            self._set_ship_cycle_indicator(selection[0] + 1, listbox.size())
+        self._close_ship_popup()
+
+    def _on_ship_key_release(self, event):
+        value = self.lo_ship_selector.get().strip().upper()
+        if event.keysym in ("Return", "Escape", "Tab"):
+            if event.keysym == "Escape":
+                self._close_ship_popup()
+            return
+        if event.keysym in ("Up", "Down"):
+            return
+        if not value:
+            self._ship_suggestions_current = []
+            self._ship_suggestion_index = -1
+            self._validated_loadout_ship = ""
+            self._close_ship_popup()
+            self._clear_loadout_preview_pending_validation()
+            return
+
+        if value != self._validated_loadout_ship:
+            self._clear_loadout_preview_pending_validation()
+
+        suggestions = self._compute_ship_suggestions(value)
+        self._ship_suggestions_current = suggestions
+        self._ship_suggestion_index = -1
+        if suggestions:
+            self._show_ship_popup(self.lo_ship_selector, suggestions)
+        else:
+            self._close_ship_popup()
+
+    def _confirm_ship_selection(self, event=None):
+        raw = self.lo_ship_selector.get().strip().upper()
+        if not raw:
+            self._close_ship_popup()
+            return
+
+        selected = ""
+        for candidate in self._compute_ship_suggestions(raw, limit=1000):
+            if candidate == raw:
+                selected = candidate
+                break
+
+        if not selected:
+            for candidate in self._compute_ship_suggestions(raw, limit=1000):
+                if candidate.startswith(raw):
+                    selected = candidate
+                    break
+
+        if not selected:
+            selected = raw
+
+        self.lo_ship_selector.delete(0, "end")
+        self.lo_ship_selector.insert(0, selected)
+        self._ship_suggestions_current = []
+        self._ship_suggestion_index = -1
+        self.on_ship_selected(selected)
+        self._close_ship_popup()
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
@@ -368,15 +624,15 @@ class ShipFrame(ctk.CTkFrame):
         row1.pack(fill="x", padx=12)
 
         DrakeTitle4(row1, text="SHIP").pack(pady=(0, 4))
-        self.cfg_slot_ship = DrakeComboBox(row1, values=ship_values, command=self.on_cfg_slot_ship_change)
+        self.cfg_slot_ship =  DrakeComboBoxLight(row1, values=ship_values, command=self.on_cfg_slot_ship_change)
         self.cfg_slot_ship.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="CATÉGORIE").pack(pady=(0, 4))
-        self.cfg_slot_category = DrakeComboBox(row1, values=categories, command=self.on_cfg_slot_category_change)
+        self.cfg_slot_category = DrakeComboBoxLight(row1, values=categories, command=self.on_cfg_slot_category_change)
         self.cfg_slot_category.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="TYPE").pack(pady=(0, 4))
-        self.cfg_slot_subtype = DrakeComboBox(row1, values=[])
+        self.cfg_slot_subtype = DrakeComboBoxLight(row1, values=[])
         self.cfg_slot_subtype.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="MAX QTY").pack(pady=(0, 4))
@@ -387,18 +643,21 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_slot_size = DrakeEntry(row1, placeholder_text="ex: 1")
         self.cfg_slot_size.pack(pady=4, fill="x")
 
-        DrakeTitle4(row1, text="EXISTING SLOTS").pack(pady=(0, 4))
-        self.cfg_slot_selector = DrakeComboBox(row1, values=[], command=self.on_cfg_slot_pick)
-        self.cfg_slot_selector.pack(pady=4, fill="x")
-
         slot_actions = ctk.CTkFrame(right, fg_color="transparent")
         slot_actions.pack(pady=10, padx=12, fill="x")
         DrakeButton(slot_actions, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
         DrakeButton(slot_actions, text="REFRESH", command=self.refresh_config_tab).pack(side="left", padx=4)
-        DrakeClearButton(slot_actions, text="DELETE SLOT", command=self.action_delete_slot_spec).pack(side="right", padx=4)
 
-        self.cfg_slot_terminal = DrakeTerminal(right)
-        self.cfg_slot_terminal.pack(padx=12, pady=8, fill="both", expand=True)
+        self.cfg_slot_list = ctk.CTkScrollableFrame(
+            right,
+            label_text="REGISTERED SLOT SPECS",
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text_color=DrakeConfig.TEXT_SECONDARY,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.cfg_slot_list.pack(padx=12, pady=8, fill="both", expand=True)
 
         if categories:
             self.cfg_type_category.set(categories[0])
@@ -433,7 +692,28 @@ class ShipFrame(ctk.CTkFrame):
             self.ship_results.insert("end", " ■ ", "ACCENT") 
             self.ship_results.insert("end", f"{ship.brand} {ship.name} ", (tag, "ship_name_white"))
             self.ship_results.insert("end", f"[{ship.size.upper()}]\n", "info_label")
-            self.ship_results.insert("end", f"   ROLE: {ship.role} | CREW: {ship.crew_size} | CARGO: {ship.cargo} SCU\n")
+            self.ship_results.insert("end", f"   ROLE: {ship.role} | CAREER: {ship.career}\n")
+            self.ship_results.insert("end", "   [GENERAL]\n", "ACCENT")
+            self.ship_results.insert(
+                "end",
+                f"   - CARGO: {ship.cargo} SCU | CLAIM: {ship.claim_time} min | EXPEDITE: {ship.expedite_time} min\n"
+            )
+            self.ship_results.insert("end", f"   - EXPEDITE COST: {ship.expedition_fee} aUEC\n")
+            self.ship_results.insert("end", f"   - CREW: {ship.crew_size}\n")
+
+            self.ship_results.insert("end", "   [FLIGHT]\n", "ACCENT")
+            self.ship_results.insert(
+                "end",
+                f"   - SCM: {ship.scm_speed} | NAV: {ship.nav_max_speed} | HP: {ship.hp}\n"
+            )
+            self.ship_results.insert(
+                "end",
+                f"   - PITCH/YAW/ROLL: {ship.pitch}/{ship.yaw}/{ship.roll}\n"
+            )
+            self.ship_results.insert(
+                "end",
+                f"   - BOOST P/Y/R: {ship.boosted_pitch}/{ship.boosted_yaw}/{ship.boosted_roll}\n"
+            )
             self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
 
             # Affichage du loadout par défaut complet (inclut les slots vides).
@@ -507,7 +787,7 @@ class ShipFrame(ctk.CTkFrame):
                 lines.append(f"   {category}")
                 current_category = category
 
-            for slot_index in range(1, max_qty + 1):
+            for slot_index in range(max_qty):
                 key = (category, subtype, slot_index)
                 equipped_name = loadout_map.get(key)
                 if equipped_name and equipped_name in comp_map:
@@ -1082,13 +1362,14 @@ class ShipFrame(ctk.CTkFrame):
     def refresh_loadout_view(self, ship_name):
         """Affiche les slots à droite et met à jour le terminal à gauche."""
         if not ship_name:
-            ship_name = self.lo_ship_selector.get()
+            ship_name = self.lo_ship_selector.get().strip().upper()
         if not ship_name:
             return
 
         profile_name = self._get_active_profile()
 
         # 1. Nettoyage de l'existant
+        self.lo_slot_widgets = []
         for widget in self.lo_slots_frame.winfo_children():
             widget.destroy()
         self.lo_status_terminal.delete("0.0", "end")
@@ -1102,8 +1383,6 @@ class ShipFrame(ctk.CTkFrame):
         if not slot_specs:
             self.lo_status_terminal.insert("end", "> NO SLOT SPECS FOUND FOR THIS SHIP.\n")
             return
-
-        self.lo_status_terminal.insert("end", f"> ANALYZING {ship_name} [{profile_name}]...\n", "ACCENT")
 
         # 3. Création des lignes par catégorie + sous-type
         current_cat = None
@@ -1144,14 +1423,130 @@ class ShipFrame(ctk.CTkFrame):
                 combo = DrakeComboBox(card, values=["EMPTY"] + available, width=220)
                 combo.set(current)
                 combo.pack(side="left", padx=10, pady=5)
+                self.lo_slot_widgets.append((cat, subtype, i, combo))
 
                 # Bouton de sauvegarde INDIVIDUEL
                 save_btn = DrakeButton(card, text="SAVE", width=60, 
                                     command=lambda c=combo, ct=cat, st=subtype, idx=i: self.action_mount(ct, st, idx, c.get()))
                 save_btn.pack(side="right", padx=10)
 
-                # Ajout au terminal de gauche pour le récapitulatif
-                self.lo_status_terminal.insert("end", f"[{cat}::{subtype_label}] SLT{i+1}: {current}\n")
+        self._refresh_loadout_status_terminal_from_widgets(ship_name)
+        self._render_loadout_global_actions()
+
+    def _refresh_loadout_status_terminal_from_widgets(self, ship_name=None):
+        """Rafraîchit le résumé avec les valeurs actuellement visibles dans les combos."""
+        if not self._widget_exists("lo_status_terminal"):
+            return
+
+        if not ship_name:
+            ship_name = self.lo_ship_selector.get().strip().upper()
+        profile_name = self._get_active_profile()
+
+        self.lo_status_terminal.delete("0.0", "end")
+        self.lo_status_terminal.insert("end", f"> ANALYZING {ship_name} [{profile_name}]...\n", "ACCENT")
+
+        for category, subtype_name, slot_index, combo in self.lo_slot_widgets:
+            subtype_label = subtype_name if subtype_name != "GENERIC" else "ALL TYPES"
+            try:
+                selection = (combo.get() or "EMPTY").strip().upper() or "EMPTY"
+            except Exception:
+                selection = "EMPTY"
+            self.lo_status_terminal.insert(
+                "end",
+                f"[{category}::{subtype_label}] SLT{slot_index + 1}: {selection}\n",
+            )
+
+    def _render_loadout_global_actions(self):
+        """Affiche les actions globales à la fin de la liste des slots (zone droite)."""
+        if not self._widget_exists("lo_slots_frame"):
+            return
+
+        actions_wrap = ctk.CTkFrame(self.lo_slots_frame, fg_color="transparent")
+        actions_wrap.pack(fill="x", pady=(14, 8))
+
+        actions = ctk.CTkFrame(actions_wrap, fg_color="transparent")
+        actions.pack(anchor="center")
+
+        DrakeButton(
+            actions,
+            text="SAVE ALL SLOTS",
+            command=self.action_save_all_slots,
+            width=180,
+        ).pack(side="left", padx=(0, 8))
+
+        DrakeClearButton(
+            actions,
+            text="CLEAR ALL TO EMPTY",
+            command=self.action_clear_all_slots_to_empty,
+            fg_color="#440000",
+            hover_color="#770000",
+            width=180,
+        ).pack(side="left")
+
+    def action_save_all_slots(self):
+        """Enregistre tous les slots visibles d'un coup pour le profil actif."""
+        ship_name = self.lo_ship_selector.get().strip().upper()
+        profile_name = self._get_active_profile()
+        if not ship_name:
+            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
+            return
+        if not self.lo_slot_widgets:
+            DrakePopup.warning("SYSTEM", "NO SLOT TO SAVE.", parent=self)
+            return
+
+        total = 0
+        failed = 0
+        for category, subtype_name, slot_index, combo in self.lo_slot_widgets:
+            selection = (combo.get() or "EMPTY").strip().upper() or "EMPTY"
+            total += 1
+            ok = self.controller.ship.mount_component(
+                ship_name,
+                category,
+                subtype_name,
+                slot_index,
+                selection,
+                profile_name,
+            )
+            if not ok:
+                failed += 1
+
+        self.refresh_loadout_view(ship_name)
+
+        if failed:
+            self.controller.log(
+                f"BATCH SAVE PARTIAL: {ship_name} [{profile_name}] {total - failed}/{total} slots saved.",
+                source="FLEET",
+            )
+            DrakePopup.warning(
+                "SYSTEM",
+                f"SAVE PARTIAL: {total - failed}/{total} slots saved.",
+                parent=self,
+            )
+            return
+
+        self.controller.log(
+            f"BATCH SAVE OK: {ship_name} [{profile_name}] {total} slots saved.",
+            source="FLEET",
+        )
+
+    def action_clear_all_slots_to_empty(self):
+        """Vide tous les slots visibles (EMPTY) puis sauvegarde en lot."""
+        ship_name = self.lo_ship_selector.get().strip().upper()
+        profile_name = self._get_active_profile()
+        if not ship_name:
+            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
+            return
+        if not self.lo_slot_widgets:
+            DrakePopup.warning("SYSTEM", "NO SLOT TO CLEAR.", parent=self)
+            return
+
+        if not DrakePopup.yesno("SYSTEM", f"SET ALL SLOTS TO EMPTY FOR [{profile_name}] ?", parent=self):
+            return
+
+        for _, _, _, combo in self.lo_slot_widgets:
+            combo.set("EMPTY")
+
+        self.action_save_all_slots()
 
     def save_slot_config(self, ship_name, category, subtype_name, slot_index, combo_widget):
         """Action du bouton SET : Enregistre la config via le contrôleur."""
@@ -1167,14 +1562,14 @@ class ShipFrame(ctk.CTkFrame):
         
     def action_mount(self, category, subtype_name, slot_index, component_name):
         """Enregistre le composant sélectionné en base de données."""
-        ship_name = self.lo_ship_selector.get()
+        ship_name = self.lo_ship_selector.get().strip().upper()
         profile_name = self._get_active_profile()
         if not ship_name: return
 
         # Appel au contrôleur pour sauvegarder en DB
         if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, component_name, profile_name):
-            # On rafraîchit TOUTE la vue pour mettre à jour le terminal de gauche
-            self.refresh_loadout_view(ship_name)
+            # On garde les autres modifications locales non sauvegardées intactes.
+            self._refresh_loadout_status_terminal_from_widgets(ship_name)
             self.controller.log(
                 f"Component mounted: {ship_name} [{profile_name}] {category}/{subtype_name} -> {component_name}",
                 source="FLEET",
@@ -1184,7 +1579,7 @@ class ShipFrame(ctk.CTkFrame):
     
     def action_clear_loadout(self):
         """Supprime tous les composants installés sur le vaisseau actuel."""
-        ship_name = self.lo_ship_selector.get()
+        ship_name = self.lo_ship_selector.get().strip().upper()
         profile_name = self._get_active_profile()
         if not ship_name: return
         
@@ -1197,11 +1592,15 @@ class ShipFrame(ctk.CTkFrame):
         """Rafraîchit la liste des vaisseaux dans le menu déroulant."""
         try:
             ships = self.controller.ship.list_ship_names()
-            # On configure le ComboBox avec ces noms
-            self.lo_ship_selector.configure(values=ships)
-            if ships and self.lo_ship_selector.get() not in ships:
-                self.lo_ship_selector.set(ships[0])
-                self.on_ship_selected(ships[0])
+            self._loadout_ship_values = ships or []
+            self._ship_suggestions_current = []
+            self._ship_suggestion_index = -1
+            current = self.lo_ship_selector.get().strip().upper() if self._widget_exists("lo_ship_selector") else ""
+            known_ships = [str(s).strip().upper() for s in ships]
+            if ships and current and current not in known_ships:
+                self.lo_ship_selector.delete(0, "end")
+                self.lo_ship_selector.insert(0, str(ships[0]).strip().upper())
+                self.on_ship_selected(str(ships[0]).strip().upper())
 
             if hasattr(self, "cfg_slot_ship"):
                 self.cfg_slot_ship.configure(values=ships)
@@ -1301,11 +1700,12 @@ class ShipFrame(ctk.CTkFrame):
     def _set_slot_type_locked(self, locked: bool):
         if not hasattr(self, "cfg_slot_subtype"):
             return
+        subtype_hover = getattr(self.cfg_slot_subtype, "_HOVER", DrakeConfig.BG_PANEL)
         if locked:
             self.cfg_slot_subtype.entry.configure(
                 command=lambda: None,
                 text_color="#6f6f6f",
-                hover_color=DrakeConfig.BG_TERMINAL,
+                hover_color=subtype_hover,
             )
             self.cfg_slot_subtype.button.configure(
                 command=lambda: None,
@@ -1317,7 +1717,7 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_slot_subtype.entry.configure(
                 command=self.cfg_slot_subtype.toggle_dropdown,
                 text_color=DrakeConfig.TEXT_MAIN,
-                hover_color=DrakeConfig.BG_TERMINAL,
+                hover_color=subtype_hover,
             )
             self.cfg_slot_subtype.button.configure(
                 command=self.cfg_slot_subtype.toggle_dropdown,
@@ -1347,39 +1747,114 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_slot_subtype.set("GENERIC")
 
     def refresh_slot_terminal(self):
-        if not hasattr(self, "cfg_slot_terminal"):
+        if not hasattr(self, "cfg_slot_list"):
             return
         ship_name = self.cfg_slot_ship.get().strip().upper() if hasattr(self, "cfg_slot_ship") else ""
-        current_selection = self.cfg_slot_selector.get().strip().upper() if hasattr(self, "cfg_slot_selector") else ""
-        self._suspend_cfg_slot_pick = True
-        self.cfg_slot_selector.configure(values=["NO DATA"])
-        self.cfg_slot_selector.set("NO DATA")
-        self._suspend_cfg_slot_pick = False
-        self.cfg_slot_terminal.delete("0.0", "end")
+        current_selection = (self.cfg_slot_selected_key or "").strip().upper()
+
+        for widget in self.cfg_slot_list.winfo_children():
+            widget.destroy()
+
         if not ship_name:
             return
         specs = self.controller.ship.list_subtype_specs(ship_name)
-        self.cfg_slot_terminal.insert("end", f"> SLOT SPECS - {ship_name}\n", "ACCENT")
+
+        ctk.CTkLabel(
+            self.cfg_slot_list,
+            text=f"SLOT SPECS - {ship_name}",
+            font=("Orbitron", 12, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(anchor="w", padx=10, pady=(8, 6))
+
         keys = []
         for cat, subtype, qty, size in specs:
             key = f"{cat}::{subtype}"
             keys.append(key)
-            self.cfg_slot_terminal.insert("end", f"[{cat}] {subtype:<20} | QTY={qty} | SIZE=S{size}\n")
 
-        self._suspend_cfg_slot_pick = True
-        self.cfg_slot_selector.configure(values=keys if keys else ["NO DATA"])
+            card = ctk.CTkFrame(
+                self.cfg_slot_list,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.BORDER_COLOR,
+            )
+            card.pack(fill="x", padx=8, pady=3)
+
+            left = ctk.CTkFrame(card, fg_color="transparent")
+            left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
+
+            ctk.CTkLabel(
+                left,
+                text=f"{cat} :: {subtype}",
+                font=("Segoe UI", 11, "bold"),
+                anchor="w",
+            ).pack(anchor="w")
+            ctk.CTkLabel(
+                left,
+                text=f"QTY {qty}  |  SIZE S{size}",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                anchor="w",
+            ).pack(anchor="w")
+
+            right = ctk.CTkFrame(card, fg_color="transparent")
+            right.pack(side="right", padx=10, pady=7)
+
+            DrakeButton(
+                right,
+                text="EDIT",
+                width=52,
+                height=24,
+                command=lambda selection=key: self._pick_slot_spec_from_list(selection),
+            ).pack(side="left", padx=(0, 6))
+            DrakeClearButton(
+                right,
+                text="DELETE",
+                width=68,
+                height=24,
+                command=lambda c=cat, st=subtype: self.action_delete_slot_spec_direct(c, st),
+            ).pack(side="left")
+
+        if not specs:
+            ctk.CTkLabel(
+                self.cfg_slot_list,
+                text="AUCUN SLOT SPEC ENREGISTRE",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=(4, 10))
+
         if keys:
-            selection = current_selection if current_selection in keys else keys[0]
-            self.cfg_slot_selector.set(selection)
+            self.cfg_slot_selected_key = current_selection if current_selection in keys else keys[0]
         else:
-            self.cfg_slot_selector.set("NO DATA")
-        self._suspend_cfg_slot_pick = False
+            self.cfg_slot_selected_key = ""
+
+    def _pick_slot_spec_from_list(self, selection):
+        """Sélectionne un slot depuis la liste visuelle et remplit le formulaire."""
+        if not selection or "::" not in selection:
+            return
+        self.cfg_slot_selected_key = selection.strip().upper()
+        self.on_cfg_slot_pick(selection)
+
+    def action_delete_slot_spec_direct(self, category, subtype):
+        """Suppression directe depuis une ligne de la liste des specs."""
+        ship_name = self.cfg_slot_ship.get().strip().upper()
+        cat = (category or "").strip().upper()
+        st = (subtype or "").strip().upper()
+        if not ship_name or not cat or not st:
+            return
+        if not DrakePopup.yesno("SYSTEM", f"DELETE SLOT SPEC {cat}::{st} ?", parent=self):
+            return
+        self.controller.ship.delete_subtype_spec(ship_name, cat, st)
+        self.refresh_slot_terminal()
+        if self.lo_ship_selector.get().strip().upper() == ship_name:
+            self.refresh_loadout_view(ship_name)
 
     def on_cfg_slot_pick(self, selection):
         if getattr(self, "_suspend_cfg_slot_pick", False):
             return
         if not selection or selection == "NO DATA" or "::" not in selection:
             return
+        self.cfg_slot_selected_key = selection.strip().upper()
         ship_name = self.cfg_slot_ship.get().strip().upper()
         cat, subtype = selection.split("::", 1)
         self.cfg_slot_category.set(cat)
@@ -1417,7 +1892,7 @@ class ShipFrame(ctk.CTkFrame):
 
     def action_delete_slot_spec(self):
         ship_name = self.cfg_slot_ship.get().strip().upper()
-        selection = self.cfg_slot_selector.get().strip().upper()
+        selection = (self.cfg_slot_selected_key or "").strip().upper()
         if not ship_name or not selection or selection == "NO DATA" or "::" not in selection:
             return
         cat, subtype = selection.split("::", 1)
@@ -1453,13 +1928,15 @@ class ShipFrame(ctk.CTkFrame):
         return profile or "DEFAULT"
 
     def on_ship_selected(self, ship_name):
+        ship_name = (ship_name or "").strip().upper()
         if not ship_name:
             return
+        self._validated_loadout_ship = ship_name
         self.update_profile_list(ship_name)
         self.refresh_loadout_view(ship_name)
 
     def action_create_profile(self):
-        ship_name = self.lo_ship_selector.get()
+        ship_name = self.lo_ship_selector.get().strip().upper()
         if not ship_name:
             DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
             return
@@ -1486,7 +1963,7 @@ class ShipFrame(ctk.CTkFrame):
 
     def action_load_profile(self, profile_name):
         """Charge la configuration d'un profil spécifique."""
-        ship_name = self.lo_ship_selector.get()
+        ship_name = self.lo_ship_selector.get().strip().upper()
         if not ship_name or ship_name == "":
             return
         self.refresh_loadout_view(ship_name)
