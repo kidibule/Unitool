@@ -257,6 +257,56 @@ class ShipController:
         )
         self.app.commit(sql, params)
 
+    def update_component_in_db(self, original_name: str, data: dict) -> None:
+        old_name = (original_name or "").strip().upper()
+        new_name = (data.get("name") or "").strip().upper()
+        if not old_name or not new_name:
+            raise ValueError("Nom de composant invalide.")
+
+        params = (
+            new_name,
+            (data.get("brand") or "UNKNOWN").strip().upper(),
+            (data.get("type_name") or "GENERIC").strip().upper(),
+            (data.get("category") or "SYSTEMS").strip().upper(),
+            self._safe_int(data.get("size")),
+            (data.get("grade") or "C").strip().upper(),
+            data.get("stats", "{}"),
+            old_name,
+        )
+
+        self.app.commit(
+            """
+            UPDATE components
+            SET name = ?, brand = ?, type_name = ?, category = ?, size = ?, grade = ?, stats = ?
+            WHERE UPPER(name) = UPPER(?)
+            """,
+            params,
+        )
+
+        if old_name != new_name:
+            self.app.commit(
+                """
+                UPDATE ship_loadout
+                SET component_name = ?
+                WHERE UPPER(component_name) = UPPER(?)
+                """,
+                (new_name, old_name),
+            )
+
+    def delete_component_from_db(self, component_name: str) -> None:
+        name = (component_name or "").strip().upper()
+        if not name:
+            return
+
+        self.app.commit(
+            "DELETE FROM ship_loadout WHERE UPPER(component_name) = UPPER(?)",
+            (name,),
+        )
+        self.app.commit(
+            "DELETE FROM components WHERE UPPER(name) = UPPER(?)",
+            (name,),
+        )
+
     def list_components_catalog(self) -> list[tuple]:
         sql = "SELECT name, brand, type_name, category, size, grade FROM components ORDER BY category, name"
         return self.app.query(sql)

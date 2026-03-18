@@ -17,6 +17,7 @@ class ShipFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         self.component_popup = None
+        self.component_editing_name = None
         
         # Mapping des types pour le formulaire
         self.mapping_types = {
@@ -156,25 +157,31 @@ class ShipFrame(ctk.CTkFrame):
         )
         self.component_popup.protocol("WM_DELETE_WINDOW", self._close_component_manager)
 
-        self.comp_container = ctk.CTkFrame(self.component_popup, fg_color="transparent")
-        self.comp_container.pack(fill="both", expand=True, padx=20, pady=20)
+        container = ctk.CTkFrame(self.component_popup, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Panneau de contrôle (Gauche)
-        self.add_comp_frame = ctk.CTkFrame(self.comp_container, width=250, fg_color=DrakeConfig.BG_MAIN)
+        DrakeTitle2(container, text="COMPONENT DATABASE").pack(pady=(0, 10))
+
+        content = ctk.CTkFrame(container, fg_color="transparent")
+        content.pack(fill="both", expand=True)
+
+        self.add_comp_frame = ctk.CTkFrame(content, width=250, fg_color=DrakeConfig.BG_MAIN)
         self.add_comp_frame.pack(side="left", fill="y", padx=(0, 10))
         self.add_comp_frame.pack_propagate(False)
 
         self.add_comp_scroll = ctk.CTkScrollableFrame(self.add_comp_frame, fg_color="transparent")
         self.add_comp_scroll.pack(fill="both", expand=True, padx=0, pady=0)
-        
+
         DrakeTitle2(self.add_comp_scroll, text="ADD COMPONENT").pack(pady=15)
 
-        # Champs du formulaire
-        DrakeTitle4(self.add_comp_scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
         categories = self._get_all_component_categories()
-        self.new_comp_category = DrakeComboBox(self.add_comp_scroll, 
-                            values=categories, 
-                                                command=self.on_category_change)
+
+        DrakeTitle4(self.add_comp_scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
+        self.new_comp_category = DrakeComboBox(
+            self.add_comp_scroll,
+            values=categories,
+            command=self.on_category_change,
+        )
         self.new_comp_category.pack(pady=5, padx=15, fill="x")
 
         DrakeTitle4(self.add_comp_scroll, "MODULE TYPE").pack(pady=(0, 2), padx=10)
@@ -183,7 +190,7 @@ class ShipFrame(ctk.CTkFrame):
 
         self.new_comp_name = DrakeEntry(self.add_comp_scroll, placeholder_text="MODEL NAME (ex: FR-66)")
         self.new_comp_name.pack(pady=5, padx=15, fill="x")
-        
+
         self.new_comp_brand = DrakeEntry(self.add_comp_scroll, placeholder_text="MANUFACTURER (ex: AEGIS)")
         self.new_comp_brand.pack(pady=5, padx=15, fill="x")
 
@@ -196,9 +203,12 @@ class ShipFrame(ctk.CTkFrame):
         self.new_comp_grade.set("C")
         self.new_comp_grade.pack(pady=5, padx=15, fill="x")
 
-        DrakeButton(self.add_comp_scroll, text="SAVE TO DATABASE", 
-                    command=self.save_new_component).pack(pady=(0, 8), padx=15, fill="x")
-        
+        DrakeButton(
+            self.add_comp_scroll,
+            text="SAVE TO DATABASE",
+            command=self.save_new_component,
+        ).pack(pady=(0, 8), padx=15, fill="x")
+
         self.update_selectors()
 
         # Initialisation par défaut
@@ -206,12 +216,16 @@ class ShipFrame(ctk.CTkFrame):
         self.new_comp_category.set(default_cat)
         self.on_category_change(default_cat)
 
-        # Zone principale (Droite)
-        comp_main = ctk.CTkFrame(self.comp_container, fg_color=DrakeConfig.BG_TERMINAL)
-        comp_main.pack(side="right", fill="both", expand=True)
-
-        self.comp_list_terminal = DrakeTerminal(comp_main)
-        self.comp_list_terminal.pack(fill="both", expand=True)
+        self.comp_list_scroll = ctk.CTkScrollableFrame(
+            content,
+            label_text="REGISTERED COMPONENTS",
+            fg_color=DrakeConfig.BG_TERMINAL,
+            label_text_color=DrakeConfig.TEXT_SECONDARY,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.comp_list_scroll.pack(side="right", fill="both", expand=True)
 
         self.run_component_scan()
 
@@ -571,18 +585,255 @@ class ShipFrame(ctk.CTkFrame):
                 self.refresh_loadout_view(ship)
 
     def run_component_scan(self):
-        """Liste hiérarchique des composants en DB."""
-        if not self._widget_exists("comp_list_terminal"):
+        """Affiche le catalogue de composants dans une liste scrollable."""
+        if not self._widget_exists("comp_list_scroll"):
             return
 
-        self.comp_list_terminal.delete("0.0", "end")
+        for widget in self.comp_list_scroll.winfo_children():
+            widget.destroy()
+
         rows = self.controller.ship.list_components_catalog()
+        if not rows:
+            ctk.CTkLabel(
+                self.comp_list_scroll,
+                text="AUCUN COMPONENT ENREGISTRE",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=12)
+            return
+
         last_cat = None
         for r in rows:
             if r[3] != last_cat:
-                self.comp_list_terminal.insert("end", f"\n▼ {r[3]}\n", "ACCENT")
+                ctk.CTkLabel(
+                    self.comp_list_scroll,
+                    text=r[3],
+                    font=("Orbitron", 12, "bold"),
+                    text_color=DrakeConfig.ACCENT_PRIMARY,
+                ).pack(anchor="w", padx=10, pady=(12, 4))
                 last_cat = r[3]
-            self.comp_list_terminal.insert("end", f"   • {r[1]:<12} | {r[0]:<18} | S{r[4]} | GR-{r[5]}\n")
+
+            card = ctk.CTkFrame(
+                self.comp_list_scroll,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.BORDER_COLOR,
+            )
+            card.pack(fill="x", padx=8, pady=3)
+
+            component = {
+                "name": r[0],
+                "brand": r[1],
+                "type_name": r[2],
+                "category": r[3],
+                "size": r[4],
+                "grade": r[5],
+            }
+
+            if self.component_editing_name == r[0]:
+                self._render_component_edit_row(card, component)
+            else:
+                self._render_component_display_row(card, component)
+
+    def _render_component_display_row(self, parent, component):
+        left = ctk.CTkFrame(parent, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=10, pady=8)
+
+        ctk.CTkLabel(
+            left,
+            text=component["name"],
+            font=("Segoe UI", 12, "bold"),
+            anchor="w",
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            left,
+            text=f"{component['brand']}  |  {component['type_name']}",
+            font=DrakeConfig.FONT_LOGS,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w")
+
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=8)
+
+        ctk.CTkLabel(
+            right,
+            text=f"S{component['size']}",
+            font=("Segoe UI", 11, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            width=36,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(
+            right,
+            text=f"GR-{component['grade']}",
+            font=("Segoe UI", 11, "bold"),
+            text_color=DrakeConfig.TEXT_MAIN,
+            width=54,
+        ).pack(side="left", padx=(0, 12))
+        DrakeButton(
+            right,
+            text="EDIT",
+            width=52,
+            height=26,
+            command=lambda name=component["name"]: self.start_component_edit(name),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            right,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda name=component["name"]: self.delete_component_row(name),
+        ).pack(side="left")
+
+    def _render_component_edit_row(self, parent, component):
+        editor = ctk.CTkFrame(parent, fg_color="transparent")
+        editor.pack(fill="x", expand=True, padx=8, pady=8)
+
+        top = ctk.CTkFrame(editor, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 6))
+
+        categories = self._get_all_component_categories()
+        category_combo = DrakeComboBox(top, values=categories)
+        category_combo.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        category_combo.set(component["category"])
+
+        subtype_values = self.controller.ship.list_component_subtypes(component["category"])
+        if not subtype_values:
+            subtype_values = self.mapping_types.get(component["category"], [])
+        subtype_combo = DrakeComboBox(top, values=subtype_values if subtype_values else [component["type_name"]])
+        subtype_combo.pack(side="left", expand=True, fill="x")
+        subtype_combo.set(component["type_name"])
+
+        middle = ctk.CTkFrame(editor, fg_color="transparent")
+        middle.pack(fill="x", pady=(0, 6))
+
+        name_entry = DrakeEntry(middle, placeholder_text="MODEL NAME")
+        name_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        name_entry.insert(0, component["name"])
+
+        brand_entry = DrakeEntry(middle, placeholder_text="MANUFACTURER")
+        brand_entry.pack(side="left", expand=True, fill="x")
+        brand_entry.insert(0, component["brand"])
+
+        bottom = ctk.CTkFrame(editor, fg_color="transparent")
+        bottom.pack(fill="x")
+
+        size_combo = DrakeComboBox(bottom, values=["0", "1", "2", "3", "4", "5"])
+        size_combo.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        size_combo.set(str(component["size"]))
+
+        grade_combo = DrakeComboBox(bottom, values=["A", "B", "C", "D"])
+        grade_combo.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        grade_combo.set(component["grade"])
+
+        def on_inline_category_change(choice):
+            values = self.controller.ship.list_component_subtypes(choice)
+            if not values:
+                values = self.mapping_types.get(choice, [])
+            subtype_combo.configure(values=values if values else ["GENERIC"])
+            subtype_combo.set(values[0] if values else "GENERIC")
+
+        category_combo.configure(command=on_inline_category_change)
+
+        DrakeButton(
+            bottom,
+            text="SAVE",
+            width=52,
+            height=26,
+            command=lambda original=component["name"]: self.save_component_row(
+                original,
+                name_entry,
+                brand_entry,
+                category_combo,
+                subtype_combo,
+                size_combo,
+                grade_combo,
+            ),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="CANCEL",
+            width=70,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            command=self.cancel_component_edit,
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda name=component["name"]: self.delete_component_row(name),
+        ).pack(side="left")
+
+    def start_component_edit(self, component_name):
+        self.component_editing_name = (component_name or "").strip().upper()
+        self.run_component_scan()
+
+    def cancel_component_edit(self):
+        self.component_editing_name = None
+        self.run_component_scan()
+
+    def save_component_row(self, original_name, name_entry, brand_entry, category_combo, subtype_combo, size_combo, grade_combo):
+        name = name_entry.get().strip().upper()
+        brand = brand_entry.get().strip().upper() or "UNKNOWN"
+        category = category_combo.get().strip().upper()
+        type_name = subtype_combo.get().strip().upper()
+        grade = grade_combo.get().strip().upper()
+        size_value = size_combo.get().strip()
+
+        if not name or not category or not type_name or not size_value or not grade:
+            DrakePopup.warning("SYSTEM", "Tous les champs du component sont requis.", parent=self.component_popup)
+            return
+
+        try:
+            data = {
+                "name": name,
+                "brand": brand,
+                "category": category,
+                "type_name": type_name,
+                "size": int(size_value),
+                "grade": grade,
+                "stats": "{}",
+            }
+            self.controller.ship.update_component_in_db(original_name, data)
+            self.component_editing_name = None
+            self.run_component_scan()
+            self.update_selectors()
+            if self.lo_ship_selector.get():
+                self.refresh_loadout_view(self.lo_ship_selector.get())
+        except Exception as e:
+            DrakePopup.error("SYSTEM", str(e), parent=self.component_popup)
+
+    def delete_component_row(self, component_name):
+        name = (component_name or "").strip().upper()
+        if not name:
+            return
+        if not DrakePopup.yesno("SYSTEM", f"DELETE COMPONENT {name} ?", parent=self.component_popup):
+            return
+        try:
+            self.controller.ship.delete_component_from_db(name)
+            if self.component_editing_name == name:
+                self.component_editing_name = None
+            self.run_component_scan()
+            self.update_selectors()
+            if self.lo_ship_selector.get():
+                self.refresh_loadout_view(self.lo_ship_selector.get())
+        except Exception as e:
+            DrakePopup.error("SYSTEM", str(e), parent=self.component_popup)
 
     def open_edit_window(self, ship_name):
         """Ouvre une interface de modification complète (Full Access) pour un vaisseau."""
