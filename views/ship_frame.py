@@ -6,7 +6,7 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 
 import customtkinter as ctk
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakePopup, DrakeSuggestionManager
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeEntryLight, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakePopup, DrakeSuggestionManager
 from controllers.ship_controller import SHIP_CAREER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
@@ -472,17 +472,18 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_slot_subtype.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="MAX QTY").pack(pady=(0, 4))
-        self.cfg_slot_qty = DrakeEntry(row1, placeholder_text="ex: 2")
+        self.cfg_slot_qty = DrakeEntryLight(row1, placeholder_text="ex: 2")
         self.cfg_slot_qty.pack(pady=4, fill="x")
 
         DrakeTitle4(row1, text="MAX SIZE").pack(pady=(0, 4))
-        self.cfg_slot_size = DrakeEntry(row1, placeholder_text="ex: 1")
+        self.cfg_slot_size = DrakeEntryLight(row1, placeholder_text="ex: 1")
         self.cfg_slot_size.pack(pady=4, fill="x")
 
         slot_actions = ctk.CTkFrame(right, fg_color="transparent")
         slot_actions.pack(pady=10, padx=12, fill="x")
-        DrakeButton(slot_actions, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
-        DrakeButton(slot_actions, text="REFRESH", command=self.refresh_config_tab).pack(side="left", padx=4)
+        slot_actions_inner = ctk.CTkFrame(slot_actions, fg_color="transparent")
+        slot_actions_inner.pack(anchor="center")
+        DrakeButton(slot_actions_inner, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
 
         self.cfg_slot_list = ctk.CTkScrollableFrame(
             right,

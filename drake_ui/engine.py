@@ -161,6 +161,23 @@ class DrakeEntry(ctk.CTkEntry):
         super().__init__(master, **defaults)
 
 
+class DrakeEntryLight(ctk.CTkEntry):
+    """Variante plus claire de DrakeEntry, optimisée pour les fonds noirs."""
+
+    def __init__(self, master, **kwargs) -> None:
+        defaults = {
+            "font": DrakeConfig.FONT_LOGS,
+            "fg_color": "#2b2b2b",
+            "text_color": DrakeConfig.TEXT_MAIN,
+            "border_color": "#555555",
+            "border_width": 1,
+            "corner_radius": 6,
+            "height": 35,
+        }
+        defaults.update(kwargs)
+        super().__init__(master, **defaults)
+
+
 class DrakeSuggestionManager:
     """Gestionnaire réutilisable de suggestions pour les champs texte.
 
