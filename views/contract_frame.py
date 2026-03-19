@@ -131,6 +131,17 @@ class ContractFrame(ctk.CTkFrame):
         # --- INITIALISATION ---
         self.refresh()
         self.update_type_menu()
+        self._restore_contract_placeholders()
+
+    def _restore_contract_placeholders(self):
+        """Force l'affichage des placeholders des champs d'ajout de contrat."""
+        for entry in (self.target_in, self.client_in, self.reward_in):
+            try:
+                entry.delete(0, "end")
+                if hasattr(entry, "_activate_placeholder"):
+                    entry._activate_placeholder()
+            except Exception:
+                pass
 
     def refresh(self):
         """Rafraîchit l'UI via le sub-controller 'contract'."""
@@ -186,7 +197,7 @@ class ContractFrame(ctk.CTkFrame):
             contract_type=None if self.type_var.get() == "TYPE" else self.type_var.get()
         )
         self.refresh()
-        for e in [self.target_in, self.client_in, self.reward_in]: e.delete(0, "end")
+        self._restore_contract_placeholders()
 
     def complete_contract(self, cid, target):
         self.controller.contract.complete_contract(cid, target)
@@ -227,11 +238,7 @@ class ContractFrame(ctk.CTkFrame):
     def _on_page_leave(self):
         """Nettoie les champs principaux en quittant la page CONTRACTS."""
         self._close_popup()
-        for entry in (self.target_in, self.client_in, self.reward_in):
-            try:
-                entry.delete(0, "end")
-            except Exception:
-                pass
+        self._restore_contract_placeholders()
 
     def open_type_manager(self):
         """Ouvre la fenêtre de configuration des types de contrats."""
