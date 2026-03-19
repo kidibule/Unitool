@@ -225,11 +225,32 @@ class DrakeSuggestionManager:
         self._entry_state[entry_widget] = {"items": [], "index": -1}
 
         entry_widget.bind("<KeyRelease>", lambda e, w=entry_widget: self._on_key_release(e, w), add="+")
+        entry_widget.bind("<FocusIn>", lambda e, w=entry_widget: self._on_focus_in(w), add="+")
         entry_widget.bind("<FocusOut>", lambda e, w=entry_widget: self._on_focus_out(e, w), add="+")
         entry_widget.bind("<Return>", lambda e, w=entry_widget: self._confirm_entry(w), add="+")
         entry_widget.bind("<KeyPress-Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=False), add="+")
         entry_widget.bind("<KeyPress-ISO_Left_Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=True), add="+")
         entry_widget.bind("<Shift-KeyPress-Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=True), add="+")
+
+    def _on_focus_in(self, entry_widget):
+        if self._owner is not None and self._owner != entry_widget:
+            self._destroy_popup_visual()
+
+    def _get_entry_text(self, entry_widget) -> str:
+        """Retourne la saisie effective en ignorant un éventuel placeholder affiché comme texte."""
+        try:
+            value = str(entry_widget.get() or "")
+        except Exception:
+            return ""
+
+        try:
+            placeholder = str(entry_widget.cget("placeholder_text") or "")
+        except Exception:
+            placeholder = ""
+
+        if placeholder and value.strip().upper() == placeholder.strip().upper():
+            return ""
+        return value
 
     def close_all(self) -> None:
         self._destroy_popup_visual()
@@ -281,7 +302,7 @@ class DrakeSuggestionManager:
         if keysym in ("Down", "Up", "Return", "Tab"):
             return
 
-        value = entry_widget.get().strip()
+        value = self._get_entry_text(entry_widget).strip()
         state = self._state(entry_widget)
         if not value:
             state["items"] = []
@@ -311,7 +332,7 @@ class DrakeSuggestionManager:
         state = self._state(entry_widget)
         items = list(state.get("items") or [])
         if self._owner != entry_widget or not items:
-            items = self._compute_items(entry_widget, entry_widget.get())
+            items = self._compute_items(entry_widget, self._get_entry_text(entry_widget))
             state["items"] = items
             state["index"] = -1
 
@@ -338,7 +359,7 @@ class DrakeSuggestionManager:
         if self._cfg(entry_widget) is None:
             return "break"
 
-        raw = entry_widget.get().strip()
+        raw = self._get_entry_text(entry_widget).strip()
         if not raw:
             if self._owner == entry_widget:
                 self._destroy_popup_visual()

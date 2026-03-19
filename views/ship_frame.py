@@ -60,6 +60,10 @@ class ShipFrame(ctk.CTkFrame):
             text_color="white"
         )
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        try:
+            self.tabview.configure(command=self._on_ship_tab_changed)
+        except Exception:
+            pass
 
         self.tab_ships = self.tabview.add("SHIPS")
         self.tab_loadout = self.tabview.add("LOADOUT")
@@ -323,13 +327,27 @@ class ShipFrame(ctk.CTkFrame):
         self.update_selectors()
 
     def _reset_loadout_ship_entry_on_page_load(self):
-        """Réinitialise le champ ship quand on revient sur la page SHIPS (menu latéral)."""
+        """Nettoie l'état de suggestion quand on revient sur la page SHIPS."""
         if not self._widget_exists("lo_ship_selector"):
             return
         self._close_ship_popup()
         self._validated_loadout_ship = ""
-        self.lo_ship_selector.delete(0, "end")
-        self.lo_ship_selector.configure(placeholder_text="ENTER A SHIP...")
+        self._set_ship_cycle_indicator(0, 0)
+        text = self.lo_ship_selector.get().strip().upper()
+        if text:
+            self._clear_loadout_preview_pending_validation()
+
+    def _on_page_leave(self):
+        """Réinitialise le champ ship en quittant le menu SHIPS."""
+        self._close_ship_popup()
+        self._validated_loadout_ship = ""
+        if self._widget_exists("lo_ship_selector"):
+            try:
+                self.lo_ship_selector.delete(0, "end")
+                if hasattr(self.lo_ship_selector, "_activate_placeholder"):
+                    self.lo_ship_selector._activate_placeholder()
+            except Exception:
+                pass
         self._set_ship_cycle_indicator(0, 0)
         self._clear_loadout_preview_pending_validation()
 
@@ -363,6 +381,12 @@ class ShipFrame(ctk.CTkFrame):
         if getattr(event, "keysym", "") in ("Return", "Tab", "ISO_Left_Tab", "Escape"):
             return
         value = self.lo_ship_selector.get().strip().upper()
+        try:
+            placeholder = str(self.lo_ship_selector.cget("placeholder_text") or "").strip().upper()
+        except Exception:
+            placeholder = ""
+        if placeholder and value == placeholder:
+            value = ""
         if not value:
             return
         if value != self._validated_loadout_ship:
@@ -393,6 +417,15 @@ class ShipFrame(ctk.CTkFrame):
             except Exception:
                 pass
         self._set_ship_cycle_indicator(0, 0)
+
+    def _on_ship_tab_changed(self, *_args):
+        # Ferme les suggestions loadout si l'utilisateur quitte l'onglet LOADOUT.
+        try:
+            current_tab = self.tabview.get()
+        except Exception:
+            current_tab = ""
+        if current_tab != "LOADOUT":
+            self._close_ship_popup()
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""

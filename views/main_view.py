@@ -210,18 +210,27 @@ class MainView(ctk.CTkFrame):
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""
         frame = self.frames[page_name]
+        previous_page = getattr(self, "_current_page_name", None)
 
-        # Ferme proprement les popups de suggestion éventuelles avant reset
-        try:
-            if hasattr(frame, "_close_popup"):
-                frame._close_popup()
-            if hasattr(frame, "_close_ship_popup"):
-                frame._close_ship_popup()
-        except Exception:
-            pass
+        # Réinitialisation ciblée de la page quittée (sans manipuler les placeholders internes)
+        if previous_page and previous_page in self.frames and previous_page != page_name:
+            previous_frame = self.frames[previous_page]
+            try:
+                if hasattr(previous_frame, "_on_page_leave"):
+                    previous_frame._on_page_leave()
+            except Exception:
+                pass
 
-        # Reset global des placeholders à chaque changement de menu latéral
-        self._reset_placeholders_in_frame(frame)
+        # Ferme les popups de suggestion sur toutes les pages,
+        # y compris celle que l'on quitte.
+        for candidate in self.frames.values():
+            try:
+                if hasattr(candidate, "_close_popup"):
+                    candidate._close_popup()
+                if hasattr(candidate, "_close_ship_popup"):
+                    candidate._close_ship_popup()
+            except Exception:
+                pass
 
         frame.tkraise()
         # Appel du refresh interne de la page si disponible
@@ -229,6 +238,7 @@ class MainView(ctk.CTkFrame):
             frame.refresh()
         # Mise à jour globale du panel intel
         self.refresh_intel()
+        self._current_page_name = page_name
 
     def _iter_children_recursive(self, widget):
         """Parcourt récursivement l'arborescence des widgets enfants."""
@@ -249,9 +259,17 @@ class MainView(ctk.CTkFrame):
                 continue
 
             try:
+                # Reset robuste: état neutre puis réactivation visuelle du placeholder.
+                if hasattr(widget, "_deactivate_placeholder"):
+                    widget._deactivate_placeholder()
                 widget.delete(0, "end")
                 if hasattr(widget, "_activate_placeholder"):
-                    widget._activate_placeholder()
+                    try:
+                        focus_widget = widget.winfo_toplevel().focus_get()
+                    except Exception:
+                        focus_widget = None
+                    if focus_widget != widget:
+                        widget._activate_placeholder()
             except Exception:
                 # Certains champs peuvent être temporaires/disabled: on ignore.
                 pass

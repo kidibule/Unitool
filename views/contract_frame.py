@@ -224,6 +224,15 @@ class ContractFrame(ctk.CTkFrame):
             except Exception:
                 pass
 
+    def _on_page_leave(self):
+        """Nettoie les champs principaux en quittant la page CONTRACTS."""
+        self._close_popup()
+        for entry in (self.target_in, self.client_in, self.reward_in):
+            try:
+                entry.delete(0, "end")
+            except Exception:
+                pass
+
     def open_type_manager(self):
         """Ouvre la fenêtre de configuration des types de contrats."""
         toplevel = DrakeConfig.create_modal_window(
