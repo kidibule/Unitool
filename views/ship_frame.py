@@ -1247,8 +1247,8 @@ class ShipFrame(ctk.CTkFrame):
                 source="FLEET",
             )
 
-        ocr_btn = DrakeButton(edit_win, text="OCR SCREENSHOT IMPORT", command=import_ocr_screenshot)
-        ocr_btn.pack(pady=(10, 8), padx=20, fill="x")
+        #ocr_btn = DrakeButton(edit_win, text="OCR SCREENSHOT IMPORT", command=import_ocr_screenshot)
+        #ocr_btn.pack(pady=(10, 8), padx=20, fill="x")
 
         btn_cancel = DrakeButton(
             edit_win,
