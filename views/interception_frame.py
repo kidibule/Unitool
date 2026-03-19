@@ -55,9 +55,9 @@ class InterceptionFrame(ctk.CTkFrame):
         ).pack(anchor="ne", padx=10, pady=(8, 2))
 
         snare_container = ctk.CTkFrame(tab_snare, fg_color="transparent")
-        snare_container.pack(fill="both", expand=True, padx=12, pady=(4, 12))
+        snare_container.pack(fill="both", expand=True, padx=20, pady=(4, 20))
 
-        left = ctk.CTkFrame(snare_container, width=280, fg_color=DrakeConfig.BG_MAIN)
+        left = ctk.CTkFrame(snare_container, width=250, fg_color=DrakeConfig.BG_MAIN)
         left.pack(side="left", fill="y", padx=(0, 10))
         left.pack_propagate(False)
 

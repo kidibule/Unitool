@@ -439,8 +439,14 @@ class ShipFrame(ctk.CTkFrame):
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
+        # Réserve la même hauteur visuelle que la rangée "EDIT COMPONENTS"
+        # de l'onglet LOADOUT pour éviter un décalage vertical entre tabs.
+        top_spacer = ctk.CTkFrame(self.tab_config, fg_color="transparent", height=20)
+        top_spacer.pack(fill="x", padx=20, pady=(8, 2))
+        top_spacer.pack_propagate(False)
+
         root = ctk.CTkFrame(self.tab_config, fg_color="transparent")
-        root.pack(fill="both", expand=True, padx=20, pady=20)
+        root.pack(fill="both", expand=True, padx=20, pady=(4, 20))
 
         left = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_MAIN, width=250)
         left.pack(side="left", fill="y", padx=(0, 10))
