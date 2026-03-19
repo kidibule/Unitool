@@ -122,6 +122,21 @@ class DrakeConfig:
 
         return popup
 
+    @staticmethod
+    def harmonize_tabview_segments(tabview, *, height: int = 32, font: Optional[Tuple[str, int, str]] = None) -> None:
+        """Uniformise la taille visuelle des onglets de CTkTabview sans casser les versions anciennes."""
+        try:
+            segmented = getattr(tabview, "_segmented_button", None)
+            if segmented is None:
+                return
+            kwargs = {"height": int(height)}
+            if font is not None:
+                kwargs["font"] = font
+            segmented.configure(**kwargs)
+        except Exception:
+            # Compatible avec les versions CustomTkinter qui exposent différemment le widget interne.
+            pass
+
 
 # ==========================================
 # 2. COMPOSANTS PRÉ-STYLISEZ (BIBLIOTHÈQUE)
@@ -1300,21 +1315,22 @@ class DrakeDualComboBox(ctk.CTkFrame):
     - values         → property, liste des valeurs disponibles
     """
 
-    def __init__(self, master, values: list = None, **kwargs):
+    def __init__(self, master, values: list = None, combo_class=None, **kwargs):
         fg_color = kwargs.pop("fg_color", "transparent")
         super().__init__(master, fg_color=fg_color, **kwargs)
 
         self.placeholder = "ROLE"
         self.values = values or []
+        self._combo_class = combo_class or DrakeComboBox
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
-        self.role1 = DrakeComboBox(self, values=self.values, width=150)
+        self.role1 = self._combo_class(self, values=self.values, width=150)
         self.role1.set(self.placeholder)
         self.role1.grid(row=0, column=0, sticky="ew", padx=(0, 5))
 
-        self.role2 = DrakeComboBox(self, values=self.values, width=150)
+        self.role2 = self._combo_class(self, values=self.values, width=150)
         self.role2.set(self.placeholder)
         self.role2.grid(row=0, column=1, sticky="ew", padx=(5, 0))
 

@@ -7,7 +7,7 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 import customtkinter as ctk
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeEntryLight, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakePopup, DrakeSuggestionManager
-from controllers.ship_controller import SHIP_CAREER_OPTIONS
+from controllers.ship_controller import SHIP_CAREER_OPTIONS, SHIP_MANUFACTURER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
@@ -60,6 +60,7 @@ class ShipFrame(ctk.CTkFrame):
             text_color="white"
         )
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        DrakeConfig.harmonize_tabview_segments(self.tabview)
         try:
             self.tabview.configure(command=self._on_ship_tab_changed)
         except Exception:
@@ -1009,15 +1010,16 @@ class ShipFrame(ctk.CTkFrame):
         except Exception:
             pass
 
-        # Header stylisé
-        header = ctk.CTkFrame(edit_win, fg_color=DrakeConfig.ACCENT_PRIMARY, height=50, corner_radius=0)
-        header.pack(fill="x", pady=(0, 2))
-        ctk.CTkLabel(header, text=f"UNAUTHORIZED ACCESS // DATA OVERRIDE // {ship_name.upper()}", 
-                     font=("Orbitron", 14, "bold"), text_color="black").pack(pady=12)
+        ctk.CTkLabel(
+            edit_win,
+            text=f"EDIT SHIP DATA: {ship_name.upper()}",
+            font=DrakeConfig.FONT_UI,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(12, 4))
 
         # Système d'onglets internes à la fenêtre d'édition
         inner_tabview = ctk.CTkTabview(edit_win, fg_color=DrakeConfig.BG_TERMINAL)
-        inner_tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        inner_tabview.pack(fill="both", expand=True, padx=10, pady=(10, 10))
         
         tab_general = inner_tabview.add("GENERAL")
         tab_flight = inner_tabview.add("FLIGHT")
@@ -1028,14 +1030,14 @@ class ShipFrame(ctk.CTkFrame):
 
         def create_field(parent, label, key, default_val):
             self._create_form_label(parent, label)
-            entry = DrakeEntry(parent, fg_color=DrakeConfig.BG_PANEL, border_color="#333333")
+            entry = DrakeEntryLight(parent)
             entry.insert(0, "" if default_val is None else str(default_val))
             entry.pack(fill="x", padx=20, pady=5)
             self.edit_entries[key] = entry
 
         def create_combo_field(parent, label, key, values, default_val, placeholder=None):
             self._create_form_label(parent, label)
-            combo = DrakeComboBox(parent, values=values)
+            combo = DrakeComboBoxLight(parent, values=values)
             current_value = "" if default_val is None else str(default_val).upper().strip()
             if current_value and current_value not in [str(v).upper() for v in values]:
                 combo.configure(values=list(values) + [current_value])
@@ -1048,7 +1050,7 @@ class ShipFrame(ctk.CTkFrame):
             if isinstance(widget, DrakeDualComboBox):
                 widget.set(text)
                 return
-            if isinstance(widget, DrakeComboBox):
+            if isinstance(widget, (DrakeComboBox, DrakeComboBoxLight)):
                 current_values = [str(v).upper() for v in getattr(widget, "values", [])]
                 target = text.upper().strip()
                 if target and target not in current_values:
@@ -1061,13 +1063,20 @@ class ShipFrame(ctk.CTkFrame):
 
         def create_multiselect_field(parent, label, key, options, default_val):
             self._create_form_label(parent, label)
-            ms = DrakeDualComboBox(parent, values=options)
+            ms = DrakeDualComboBox(parent, values=options, combo_class=DrakeComboBoxLight)
             ms.set("" if default_val is None else str(default_val))
             ms.pack(fill="x", padx=20, pady=5)
             self.edit_entries[key] = ms
 
         # --- ONGLET 1 : GENERAL (Identité) ---
-        create_field(tab_general, "MANUFACTURER", "brand", ship.brand)
+        create_combo_field(
+            tab_general,
+            "MANUFACTURER",
+            "brand",
+            SHIP_MANUFACTURER_OPTIONS,
+            ship.brand,
+            placeholder="MANUFACTURER",
+        )
         create_field(tab_general, "MODEL NAME", "name", ship.name)
         create_field(tab_general, "SIZE CLASS (S1-S6)", "size", ship.size)
         create_multiselect_field(tab_general, "ROLE(S)", "role", self.role_options, ship.role)
@@ -1224,11 +1233,25 @@ class ShipFrame(ctk.CTkFrame):
             )
 
         ocr_btn = DrakeButton(edit_win, text="OCR SCREENSHOT IMPORT", command=import_ocr_screenshot)
-        ocr_btn.pack(pady=(10, 8), padx=40, fill="x")
+        ocr_btn.pack(pady=(10, 8), padx=20, fill="x")
 
-        save_btn = DrakeButton(edit_win, text="APPLY ALL MODIFICATIONS", 
-                               command=perform_full_update)
-        save_btn.pack(pady=20, padx=40, fill="x")
+        btn_cancel = DrakeButton(
+            edit_win,
+            text="CANCEL",
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            command=edit_win.destroy,
+        )
+        btn_cancel.pack(side="bottom", fill="x", padx=20, pady=(0, 20))
+
+        btn_save = DrakeButton(
+            edit_win,
+            text="SAVE CHANGES",
+            command=perform_full_update,
+            height=40,
+        )
+        btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 5))
 
     def refresh_loadout_view(self, ship_name):
         """Affiche les slots à droite et met à jour le terminal à gauche."""

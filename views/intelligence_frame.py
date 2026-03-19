@@ -29,16 +29,20 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.last_scanned_data = None
 
+        DrakeConfig.create_title(self, "INTELLIGENCE UPLINK")
+
         # --- TABS SETUP (Style Drake) ---
 
         self.tabview = ctk.CTkTabview(
             self,
+            fg_color=DrakeConfig.BG_PANEL,
             segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
-            segmented_button_selected_hover_color=DrakeConfig.ACCENT_HOVER,
-            segmented_button_unselected_color=DrakeConfig.BG_PANEL,
+            segmented_button_selected_hover_color="#e67e22",
+            text_color="white",
         )
 
-        self.tabview.pack(padx=DrakeConfig.PADDING, pady=5, fill="both", expand=True)
+        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        DrakeConfig.harmonize_tabview_segments(self.tabview)
 
         self.tab_player = self.tabview.add("TRACK PLAYER")
 

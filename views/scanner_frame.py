@@ -61,6 +61,7 @@ class ScannerFrame(ctk.CTkFrame):
             text_color="white"
         )
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        DrakeConfig.harmonize_tabview_segments(self.tabview)
 
         self.tab_targets = self.tabview.add("TARGETS")
         self.tab_orgs = self.tabview.add("ORGANIZATIONS")

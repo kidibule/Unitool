@@ -17,6 +17,27 @@ SHIP_CAREER_OPTIONS = [
     "INTERDICTION",
 ]
 
+SHIP_MANUFACTURER_OPTIONS = [
+    "Aegis Dynamics",
+    "Anvil Aerospace",
+    "Aopoa",
+    "Argo Astronautics",
+    "Banu",
+    "Consolidated Outland",
+    "Crusader Industries",
+    "Drake Interplanetary",
+    "Esperia",
+    "Gatac Manufacture",
+    "Greycat Industrial",
+    "Kruger Intergalactic",
+    "Mirai",
+    "Musashi Industrial & Starflight Concern (MISC)",
+    "Origin Jumpworks",
+    "Roberts Space Industries (RSI)",
+    "Vanduul",
+    "Xi'an",
+]
+
 
 class ShipController:
     """Contrôleur métier pour CRUD ships/components/loadout."""

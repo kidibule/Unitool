@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 from datetime import datetime
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeDualComboBox
-from controllers.ship_controller import ShipController
+from controllers.ship_controller import ShipController, SHIP_MANUFACTURER_OPTIONS
 
 
 class LoggerFrame(ctk.CTkFrame):
@@ -30,6 +30,7 @@ class LoggerFrame(ctk.CTkFrame):
             text_color="white"
         )
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        DrakeConfig.harmonize_tabview_segments(self.tabview)
 
         self.tabview.add("PLAYERS")
         self.tabview.add("ORGANIZATIONS")
@@ -484,6 +485,7 @@ class LoggerFrame(ctk.CTkFrame):
         }
 
         # --- VALEURS STANDARDS ---
+        manufacturer_options = SHIP_MANUFACTURER_OPTIONS.copy()
         career_options = self.ship_controller.list_ship_careers()
         role_options = self.ship_controller.list_ship_roles()
 
@@ -495,8 +497,9 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_name.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.ship_name.bind("<Return>", self.load_ship)
 
-        self.ship_brand = DrakeEntry(f_identity, placeholder_text="MANUFACTURER", **entry_kwargs)
+        self.ship_brand = DrakeComboBox(f_identity, values=manufacturer_options)
         self.ship_brand.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        self.ship_brand.set("MANUFACTURER")
 
         # --- ROLE(S) (2 combobox côte à côte) ---
         f_roles = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
@@ -679,7 +682,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.clear_ship_fields(full=True)
 
         self._set_ship_field(self.ship_name, parsed.get("name"))
-        self._set_ship_field(self.ship_brand, parsed.get("brand"))
+        self._set_ship_combo(self.ship_brand, parsed.get("brand"))
         self._set_ship_combo(self.ship_role, parsed.get("role"))
         self._set_ship_combo(self.ship_career, parsed.get("career"))
         self._set_ship_field(self.ship_size, parsed.get("size"))
@@ -804,16 +807,15 @@ class LoggerFrame(ctk.CTkFrame):
             self.controller.log(f"No record for {name}", source="SYSTEM ERROR")
             return
 
-        self.ship_brand.delete(0, "end"); self.ship_brand.insert(0, ship.brand)
-        self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
-        self.ship_career.delete(0, "end"); self.ship_career.insert(0, ship.career)
+        self._set_ship_combo(self.ship_brand, ship.brand)
+        self._set_ship_combo(self.ship_role, ship.role)
+        self._set_ship_combo(self.ship_career, ship.career)
         self.ship_scm.delete(0, "end"); self.ship_scm.insert(0, ship.scm_speed)
         self.ship_hp.delete(0, "end"); self.ship_hp.insert(0, str(ship.hp))
         self.ship_cargo.delete(0, "end"); self.ship_cargo.insert(0, str(ship.cargo))
         self.ship_crew.delete(0, "end"); self.ship_crew.insert(0, str(ship.crew_size))
         self.ship_nav.delete(0, "end"); self.ship_nav.insert(0, ship.nav_max_speed)
         self.ship_name.delete(0, "end"); self.ship_name.insert(0, ship.name)
-        self.ship_role.delete(0, "end"); self.ship_role.insert(0, ship.role)
         
         self.controller.log(f"Specs for {ship.name} loaded.", source="SYSTEM")
     
@@ -863,6 +865,18 @@ class LoggerFrame(ctk.CTkFrame):
                     attr.set("")
                 except Exception:
                     pass
+
+        if hasattr(self, "ship_brand"):
+            try:
+                self.ship_brand.set("MANUFACTURER")
+            except Exception:
+                pass
+
+        if hasattr(self, "ship_career"):
+            try:
+                self.ship_career.set("CAREER")
+            except Exception:
+                pass
 
     def validate_numbers(self, P):
         """Vérifie si la saisie est un nombre (utilisé par register_command)"""
