@@ -209,12 +209,52 @@ class MainView(ctk.CTkFrame):
 
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""
-        self.frames[page_name].tkraise()
+        frame = self.frames[page_name]
+
+        # Ferme proprement les popups de suggestion éventuelles avant reset
+        try:
+            if hasattr(frame, "_close_popup"):
+                frame._close_popup()
+            if hasattr(frame, "_close_ship_popup"):
+                frame._close_ship_popup()
+        except Exception:
+            pass
+
+        # Reset global des placeholders à chaque changement de menu latéral
+        self._reset_placeholders_in_frame(frame)
+
+        frame.tkraise()
         # Appel du refresh interne de la page si disponible
-        if hasattr(self.frames[page_name], "refresh"):
-            self.frames[page_name].refresh()
+        if hasattr(frame, "refresh"):
+            frame.refresh()
         # Mise à jour globale du panel intel
         self.refresh_intel()
+
+    def _iter_children_recursive(self, widget):
+        """Parcourt récursivement l'arborescence des widgets enfants."""
+        for child in widget.winfo_children():
+            yield child
+            yield from self._iter_children_recursive(child)
+
+    def _reset_placeholders_in_frame(self, frame):
+        """Réinitialise les CTkEntry avec placeholder lors d'un changement de menu."""
+        for widget in self._iter_children_recursive(frame):
+            if not isinstance(widget, ctk.CTkEntry):
+                continue
+            try:
+                placeholder = widget.cget("placeholder_text")
+            except Exception:
+                placeholder = ""
+            if not placeholder:
+                continue
+
+            try:
+                widget.delete(0, "end")
+                if hasattr(widget, "_activate_placeholder"):
+                    widget._activate_placeholder()
+            except Exception:
+                # Certains champs peuvent être temporaires/disabled: on ignore.
+                pass
 
     def log_message(self, message, source="SYS"):
         """Méthode centrale pour envoyer des logs vers le panneau de droite"""

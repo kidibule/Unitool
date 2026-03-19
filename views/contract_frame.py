@@ -1,8 +1,7 @@
 """Frame pour la gestion des contrats / bounty board."""
 
 import customtkinter as ctk
-import tkinter as tk
-from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton, DrakeEntry
+from drake_ui.engine import DrakeComboBox, DrakeConfig, DrakeButton, DrakeEntry, DrakeSuggestionManager
 
 
 def format_int_with_dots(value) -> str:
@@ -26,15 +25,7 @@ class ContractFrame(ctk.CTkFrame):
         """Construit la board contrats et initialise les listes d'affichage."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
-        
-
-        # --- Variables de gestion du popup ---
-        self._suggestion_popup = None
-        self._suggestion_listbox = None
-        self._suggestion_owner = None
-        self._suggestions_current = []
-        self._suggestion_index = -1
-        self.winfo_toplevel().bind("<Configure>", self._update_popup_pos, add="+")
+        self._suggestion_manager = DrakeSuggestionManager(self)
         # --- TITRE ---
         DrakeConfig.create_title(self, "BOUNTY BOARD")
 
@@ -60,21 +51,21 @@ class ContractFrame(ctk.CTkFrame):
         # On utilise .grid() au lieu de .pack()
         self.target_in = DrakeEntry(f_add, placeholder_text="TARGET ID", **entry_kwargs)
         self.target_in.grid(row=0, column=0, padx=5, pady=15, sticky="ew")
-        self.target_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.target_in))
-        self.target_in.bind("<FocusOut>", self._on_focus_out)
-        self.target_in.bind("<Return>", lambda e: self._confirm_entry_selection(self.target_in))
-        self.target_in.bind("<Tab>", lambda e: self._on_tab_cycle(e, self.target_in, reverse=False))
-        self.target_in.bind("<Shift-Tab>", lambda e: self._on_tab_cycle(e, self.target_in, reverse=True))
-        self.target_in.bind("<ISO_Left_Tab>", lambda e: self._on_tab_cycle(e, self.target_in, reverse=True))
+        self._suggestion_manager.attach(
+            self.target_in,
+            get_items=self._contract_suggestions,
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=12,
+        )
 
         self.client_in = DrakeEntry(f_add, placeholder_text="CLIENT ID", **entry_kwargs)
         self.client_in.grid(row=0, column=1, padx=5, pady=15, sticky="ew")
-        self.client_in.bind("<KeyRelease>", lambda e: self._on_key_release(e, self.client_in))
-        self.client_in.bind("<FocusOut>", self._on_focus_out)
-        self.client_in.bind("<Return>", lambda e: self._confirm_entry_selection(self.client_in))
-        self.client_in.bind("<Tab>", lambda e: self._on_tab_cycle(e, self.client_in, reverse=False))
-        self.client_in.bind("<Shift-Tab>", lambda e: self._on_tab_cycle(e, self.client_in, reverse=True))
-        self.client_in.bind("<ISO_Left_Tab>", lambda e: self._on_tab_cycle(e, self.client_in, reverse=True))
+        self._suggestion_manager.attach(
+            self.client_in,
+            get_items=self._contract_suggestions,
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=12,
+        )
         
         self.reward_in = DrakeEntry(f_add, placeholder_text="REWARD", **entry_kwargs)
         self.reward_in.grid(row=0, column=2, padx=5, pady=15, sticky="ew")
@@ -140,7 +131,6 @@ class ContractFrame(ctk.CTkFrame):
         # --- INITIALISATION ---
         self.refresh()
         self.update_type_menu()
-        self.winfo_toplevel().bind("<Configure>", self._update_popup_pos, add="+")
 
     def refresh(self):
         """Rafraîchit l'UI via le sub-controller 'contract'."""
@@ -221,202 +211,18 @@ class ContractFrame(ctk.CTkFrame):
             self.reward_in.delete(0, "end")
             self.reward_in.insert(0, format_int_with_dots(reward))
 
-    def _on_key_release(self, event, entry_widget):
-        val = entry_widget.get().strip()
-        if event.keysym == "Escape":
-            self._close_popup()
-            return
-        if event.keysym in ("Down", "Up", "Return", "Tab"):
-            return
-        if not val:
-            if self._suggestion_owner == entry_widget:
-                self._suggestions_current = []
-                self._suggestion_index = -1
-            self._close_popup()
-            return
-
-        suggestions = self._compute_suggestions(val)
-        if suggestions:
-            self._suggestions_current = suggestions
-            self._suggestion_index = -1
-            self._show_popup(entry_widget, suggestions)
-        else:
-            self._close_popup()
-
-    def _compute_suggestions(self, value: str):
-        val = (value or "").strip()
-        if not val:
-            return []
+    def _contract_suggestions(self, value: str):
         try:
-            return self.controller.contract.get_suggestions(val) or []
+            return self.controller.contract.get_suggestions(value)
         except Exception:
             return []
-
-    def _set_entry_value(self, entry_widget, value: str):
-        entry_widget.delete(0, "end")
-        entry_widget.insert(0, str(value))
-
-    def _cycle_suggestion(self, entry_widget, reverse: bool = False):
-        if self._suggestion_owner != entry_widget:
-            current = entry_widget.get().strip()
-            suggestions = self._compute_suggestions(current)
-            if not suggestions:
-                return None
-            self._suggestions_current = suggestions
-            self._suggestion_index = -1
-
-        suggestions = list(self._suggestions_current) if self._suggestions_current else []
-        if not suggestions:
-            return None
-
-        step = -1 if reverse else 1
-        self._suggestion_index = (self._suggestion_index + step) % len(suggestions)
-        selected = suggestions[self._suggestion_index]
-
-        self._set_entry_value(entry_widget, selected)
-        self._show_popup(entry_widget, suggestions, selected_item=selected)
-        return "break"
-
-    def _on_tab_cycle(self, event, entry_widget, reverse: bool = False):
-        res = self._cycle_suggestion(entry_widget, reverse=reverse)
-        return res if res is not None else None
-
-    def _confirm_entry_selection(self, entry_widget):
-        raw = entry_widget.get().strip()
-        if not raw:
-            self._close_popup()
-            return "break"
-
-        suggestions = []
-        if self._suggestion_owner == entry_widget and self._suggestions_current:
-            suggestions = list(self._suggestions_current)
-        else:
-            suggestions = self._compute_suggestions(raw)
-
-        selected = ""
-        raw_up = raw.upper()
-        for candidate in suggestions:
-            cand = str(candidate).strip()
-            if cand.upper() == raw_up:
-                selected = cand
-                break
-
-        if not selected:
-            for candidate in suggestions:
-                cand = str(candidate).strip()
-                if cand.upper().startswith(raw_up):
-                    selected = cand
-                    break
-
-        if not selected:
-            selected = raw
-
-        self._set_entry_value(entry_widget, selected)
-        self._close_popup()
-        return "break"
-
-    def _show_popup(self, entry_widget, items, selected_item=None):
-        self._close_popup()
-
-        # CRUCIAL : Force Windows à calculer la position réelle du widget
-        self.update_idletasks()
-
-        self._suggestion_popup = tk.Toplevel(self)
-        self._suggestion_popup.wm_overrideredirect(True)
-        self._suggestion_popup.attributes("-topmost", True)
-
-        # Calcul de position
-        x = entry_widget.winfo_rootx()
-        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
-        w = entry_widget.winfo_width()
-        
-        lb = tk.Listbox(
-            self._suggestion_popup, 
-            bg=DrakeConfig.BG_PANEL, 
-            fg=DrakeConfig.TEXT_MAIN,
-            font=(DrakeConfig.FONT_LOGS[0], 10),
-            selectbackground=DrakeConfig.ACCENT_PRIMARY,
-            selectforeground=DrakeConfig.BG_MAIN,
-            highlightthickness=1,
-            highlightbackground=DrakeConfig.BORDER_COLOR,
-            bd=0,
-            activestyle="none"
-        )
-        for item in items:
-            lb.insert(tk.END, item)
-        lb.pack(fill="both", expand=True)
-
-        if selected_item is not None:
-            selected_norm = str(selected_item).strip().upper()
-            for idx, item in enumerate(items):
-                if str(item).strip().upper() == selected_norm:
-                    lb.selection_clear(0, tk.END)
-                    lb.selection_set(idx)
-                    lb.activate(idx)
-                    break
-
-        # On définit la taille et la position
-        self._suggestion_popup.geometry(f"{w}x{len(items)*22}+{x}+{y}")
-        self._suggestion_popup.lift()
-        
-        lb.bind("<ButtonRelease-1>", lambda e: self._select_item(entry_widget, lb))
-        self._suggestion_listbox = lb
-        self._suggestion_owner = entry_widget
-
-    def _select_item(self, entry_widget, listbox):
-        selection = listbox.curselection()
-        if selection:
-            self._set_entry_value(entry_widget, listbox.get(selection[0]))
-        self._close_popup()
-
-    def _on_focus_out(self, event):
-        self.after(120, self._close_popup_if_unfocused)
-
-    def _widget_is_descendant(self, widget, ancestor) -> bool:
-        if widget is None or ancestor is None:
-            return False
-        try:
-            current = widget
-            while current is not None:
-                if current == ancestor:
-                    return True
-                current = current.master
-        except Exception:
-            return False
-        return False
-
-    def _close_popup_if_unfocused(self):
-        if not self._suggestion_popup:
-            return
-
-        focus_widget = self.focus_get()
-        if focus_widget == self._suggestion_owner:
-            return
-        if self._suggestion_listbox and focus_widget == self._suggestion_listbox:
-            return
-        if self._widget_is_descendant(focus_widget, self._suggestion_popup):
-            return
-        self._close_popup()
-    
-    def _update_popup_pos(self, event=None):
-        """Recalcule la position du popup si la fenêtre principale bouge."""
-        if self._suggestion_popup and self._suggestion_owner:
-            # On récupère les nouvelles coordonnées du champ (owner)
-            x = self._suggestion_owner.winfo_rootx()
-            y = self._suggestion_owner.winfo_rooty() + self._suggestion_owner.winfo_height()
-            w = self._suggestion_owner.winfo_width()
-            
-            # On applique la nouvelle géométrie
-            self._suggestion_popup.geometry(f"{w}x{self._suggestion_popup.winfo_height()}+{x}+{y}")
 
     def _close_popup(self):
-        if self._suggestion_popup:
-            self._suggestion_popup.destroy()
-            self._suggestion_popup = None
-            self._suggestion_listbox = None
-            self._suggestion_owner = None
-            self._suggestions_current = []
-            self._suggestion_index = -1
+        if hasattr(self, "_suggestion_manager"):
+            try:
+                self._suggestion_manager.close_all()
+            except Exception:
+                pass
 
     def open_type_manager(self):
         """Ouvre la fenêtre de configuration des types de contrats."""

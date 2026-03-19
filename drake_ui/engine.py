@@ -9,8 +9,9 @@ Contient :
 """
 
 import customtkinter as ctk
+import tkinter as tk
 import tkinter.font as tkfont
-from typing import Tuple, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 # ==========================================
@@ -158,6 +159,310 @@ class DrakeEntry(ctk.CTkEntry):
         }
         defaults.update(kwargs)
         super().__init__(master, **defaults)
+
+
+class DrakeSuggestionManager:
+    """Gestionnaire réutilisable de suggestions pour les champs texte.
+
+    Usage:
+        manager = DrakeSuggestionManager(self)
+        manager.attach(
+            entry_widget,
+            get_items=lambda q: [...],
+            on_validate=lambda entry, value: ...,  # optionnel
+        )
+    """
+
+    def __init__(self, root) -> None:
+        self.root = root
+        self._popup = None
+        self._listbox = None
+        self._owner = None
+        self._entry_cfg: Dict[Any, Dict[str, Any]] = {}
+        self._entry_state: Dict[Any, Dict[str, Any]] = {}
+
+        try:
+            self.root.winfo_toplevel().bind("<Configure>", self._update_popup_pos, add="+")
+        except Exception:
+            pass
+
+    def attach(
+        self,
+        entry_widget,
+        *,
+        get_items: Callable[[str], list],
+        on_validate: Optional[Callable[[Any, str], None]] = None,
+        on_preview: Optional[Callable[[Any, str, int, int], None]] = None,
+        on_clear: Optional[Callable[[Any], None]] = None,
+        normalize: Optional[Callable[[str], str]] = None,
+        max_items: int = 10,
+    ) -> None:
+        self._entry_cfg[entry_widget] = {
+            "get_items": get_items,
+            "on_validate": on_validate,
+            "on_preview": on_preview,
+            "on_clear": on_clear,
+            "normalize": normalize or (lambda s: str(s)),
+            "max_items": max_items,
+        }
+        self._entry_state[entry_widget] = {"items": [], "index": -1}
+
+        entry_widget.bind("<KeyRelease>", lambda e, w=entry_widget: self._on_key_release(e, w), add="+")
+        entry_widget.bind("<FocusOut>", lambda e, w=entry_widget: self._on_focus_out(e, w), add="+")
+        entry_widget.bind("<Return>", lambda e, w=entry_widget: self._confirm_entry(w), add="+")
+        entry_widget.bind("<KeyPress-Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=False), add="+")
+        entry_widget.bind("<KeyPress-ISO_Left_Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=True), add="+")
+        entry_widget.bind("<Shift-KeyPress-Tab>", lambda e, w=entry_widget: self._on_tab_cycle(e, w, reverse=True), add="+")
+
+    def close_all(self) -> None:
+        self._destroy_popup_visual()
+        for state in self._entry_state.values():
+            state["items"] = []
+            state["index"] = -1
+
+    def _state(self, entry_widget):
+        return self._entry_state.setdefault(entry_widget, {"items": [], "index": -1})
+
+    def _cfg(self, entry_widget):
+        return self._entry_cfg.get(entry_widget)
+
+    def _normalize(self, entry_widget, value: str) -> str:
+        cfg = self._cfg(entry_widget)
+        if not cfg:
+            return str(value)
+        try:
+            return cfg["normalize"](str(value))
+        except Exception:
+            return str(value)
+
+    def _set_entry_value(self, entry_widget, value: str) -> None:
+        entry_widget.delete(0, "end")
+        entry_widget.insert(0, self._normalize(entry_widget, str(value)))
+
+    def _compute_items(self, entry_widget, raw_value: str) -> list:
+        cfg = self._cfg(entry_widget)
+        if not cfg:
+            return []
+        val = (raw_value or "").strip()
+        if not val:
+            return []
+        try:
+            items = cfg["get_items"](val) or []
+        except Exception:
+            items = []
+        max_items = int(cfg.get("max_items", 10) or 10)
+        return list(items)[:max_items]
+
+    def _on_key_release(self, event, entry_widget):
+        if self._cfg(entry_widget) is None:
+            return
+
+        keysym = getattr(event, "keysym", "")
+        if keysym == "Escape":
+            self.close_all()
+            return
+        if keysym in ("Down", "Up", "Return", "Tab"):
+            return
+
+        value = entry_widget.get().strip()
+        state = self._state(entry_widget)
+        if not value:
+            state["items"] = []
+            state["index"] = -1
+            if self._owner == entry_widget:
+                self._destroy_popup_visual()
+            cfg = self._cfg(entry_widget)
+            if cfg and cfg.get("on_clear"):
+                try:
+                    cfg["on_clear"](entry_widget)
+                except Exception:
+                    pass
+            return
+
+        items = self._compute_items(entry_widget, value)
+        state["items"] = items
+        state["index"] = -1
+        if items:
+            self._show_popup(entry_widget, items)
+        elif self._owner == entry_widget:
+            self._destroy_popup_visual()
+
+    def _on_tab_cycle(self, _event, entry_widget, reverse: bool = False):
+        if self._cfg(entry_widget) is None:
+            return "break"
+
+        state = self._state(entry_widget)
+        items = list(state.get("items") or [])
+        if self._owner != entry_widget or not items:
+            items = self._compute_items(entry_widget, entry_widget.get())
+            state["items"] = items
+            state["index"] = -1
+
+        if not items:
+            if self._owner == entry_widget:
+                self._destroy_popup_visual()
+            return "break"
+
+        step = -1 if reverse else 1
+        state["index"] = (int(state.get("index", -1)) + step) % len(items)
+        selected = items[state["index"]]
+        self._set_entry_value(entry_widget, selected)
+        self._show_popup(entry_widget, items, selected_item=selected)
+
+        cfg = self._cfg(entry_widget)
+        if cfg and cfg.get("on_preview"):
+            try:
+                cfg["on_preview"](entry_widget, self._normalize(entry_widget, str(selected)), state["index"] + 1, len(items))
+            except Exception:
+                pass
+        return "break"
+
+    def _confirm_entry(self, entry_widget):
+        if self._cfg(entry_widget) is None:
+            return "break"
+
+        raw = entry_widget.get().strip()
+        if not raw:
+            if self._owner == entry_widget:
+                self._destroy_popup_visual()
+            return "break"
+
+        state = self._state(entry_widget)
+        items = list(state.get("items") or [])
+        if self._owner != entry_widget or not items:
+            items = self._compute_items(entry_widget, raw)
+
+        selected = raw
+        raw_up = raw.upper()
+        for candidate in items:
+            cand = str(candidate).strip()
+            if cand.upper() == raw_up:
+                selected = cand
+                break
+        else:
+            for candidate in items:
+                cand = str(candidate).strip()
+                if cand.upper().startswith(raw_up):
+                    selected = cand
+                    break
+
+        self._set_entry_value(entry_widget, selected)
+        state["items"] = []
+        state["index"] = -1
+        if self._owner == entry_widget:
+            self._destroy_popup_visual()
+
+        cfg = self._cfg(entry_widget)
+        if cfg and cfg.get("on_validate"):
+            try:
+                cfg["on_validate"](entry_widget, self._normalize(entry_widget, str(selected)))
+            except Exception:
+                pass
+        return "break"
+
+    def _show_popup(self, entry_widget, items, selected_item=None):
+        self._destroy_popup_visual()
+        self.root.update_idletasks()
+
+        popup = tk.Toplevel(self.root)
+        popup.wm_overrideredirect(True)
+        popup.attributes("-topmost", True)
+
+        x = entry_widget.winfo_rootx()
+        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        w = entry_widget.winfo_width()
+
+        lb = tk.Listbox(
+            popup,
+            bg=DrakeConfig.BG_PANEL,
+            fg=DrakeConfig.TEXT_MAIN,
+            font=(DrakeConfig.FONT_LOGS[0], 10),
+            selectbackground=DrakeConfig.ACCENT_PRIMARY,
+            selectforeground=DrakeConfig.BG_MAIN,
+            highlightthickness=1,
+            highlightbackground=DrakeConfig.BORDER_COLOR,
+            bd=0,
+            activestyle="none",
+        )
+        for item in items:
+            lb.insert(tk.END, self._normalize(entry_widget, str(item)))
+        lb.pack(fill="both", expand=True)
+
+        if selected_item is not None:
+            selected_norm = self._normalize(entry_widget, str(selected_item)).strip().upper()
+            for idx, item in enumerate(items):
+                if self._normalize(entry_widget, str(item)).strip().upper() == selected_norm:
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(idx)
+                    lb.activate(idx)
+                    break
+
+        popup.geometry(f"{w}x{len(items) * 22}+{x}+{y}")
+        popup.lift()
+        lb.bind("<ButtonRelease-1>", lambda _e, w=entry_widget, l=lb: self._select_item(w, l), add="+")
+
+        self._popup = popup
+        self._listbox = lb
+        self._owner = entry_widget
+
+    def _select_item(self, entry_widget, listbox):
+        selection = listbox.curselection()
+        if selection:
+            self._set_entry_value(entry_widget, listbox.get(selection[0]))
+            cfg = self._cfg(entry_widget)
+            if cfg and cfg.get("on_validate"):
+                try:
+                    cfg["on_validate"](entry_widget, entry_widget.get().strip())
+                except Exception:
+                    pass
+        state = self._state(entry_widget)
+        state["items"] = []
+        state["index"] = -1
+        self._destroy_popup_visual()
+
+    def _on_focus_out(self, _event, entry_widget):
+        if self._owner != entry_widget:
+            return
+        self.root.after(120, self._close_if_unfocused)
+
+    def _widget_is_descendant(self, widget, ancestor) -> bool:
+        if widget is None or ancestor is None:
+            return False
+        try:
+            current = widget
+            while current is not None:
+                if current == ancestor:
+                    return True
+                current = current.master
+        except Exception:
+            return False
+        return False
+
+    def _close_if_unfocused(self):
+        if not self._popup:
+            return
+        focus_widget = self.root.focus_get()
+        if focus_widget == self._owner:
+            return
+        if self._listbox and focus_widget == self._listbox:
+            return
+        if self._widget_is_descendant(focus_widget, self._popup):
+            return
+        self._destroy_popup_visual()
+
+    def _update_popup_pos(self, _event=None):
+        if self._popup and self._owner:
+            x = self._owner.winfo_rootx()
+            y = self._owner.winfo_rooty() + self._owner.winfo_height()
+            w = self._owner.winfo_width()
+            self._popup.geometry(f"{w}x{self._popup.winfo_height()}+{x}+{y}")
+
+    def _destroy_popup_visual(self):
+        if self._popup:
+            self._popup.destroy()
+        self._popup = None
+        self._listbox = None
+        self._owner = None
 
 
 class DrakeTerminal(ctk.CTkTextbox):

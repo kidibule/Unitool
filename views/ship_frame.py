@@ -5,9 +5,8 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 """
 
 import customtkinter as ctk
-import tkinter as tk
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight,DrakePopup
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakePopup, DrakeSuggestionManager
 from controllers.ship_controller import SHIP_CAREER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
@@ -22,12 +21,8 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_slot_widgets = []
         self.cfg_slot_selected_key = ""
         self._loadout_ship_values = []
-        self._ship_suggestion_popup = None
-        self._ship_suggestion_listbox = None
-        self._ship_suggestion_owner = None
-        self._ship_suggestions_current = []
-        self._ship_suggestion_index = -1
         self._validated_loadout_ship = ""
+        self._loadout_suggestion_manager = DrakeSuggestionManager(self)
         
         # Mapping des types pour le formulaire
         self.mapping_types = {
@@ -39,7 +34,6 @@ class ShipFrame(ctk.CTkFrame):
 
         self._setup_ui()
         self._suspend_cfg_slot_pick = False
-        self.winfo_toplevel().bind("<Configure>", self._update_ship_popup_pos, add="+")
 
     # --- INITIALISATION UI ---
 
@@ -276,12 +270,16 @@ class ShipFrame(ctk.CTkFrame):
         # Champ de recherche ship avec suggestions (style Contracts target/client)
         self.lo_ship_selector = DrakeEntry(ctrl_scroll, placeholder_text="SEARCH SHIP (NAME)...")
         self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
-        self.lo_ship_selector.bind("<KeyRelease>", self._on_ship_key_release)
-        self.lo_ship_selector.bind("<FocusOut>", self._on_ship_focus_out)
-        self.lo_ship_selector.bind("<Return>", self._confirm_ship_selection)
-        self.lo_ship_selector.bind("<Tab>", self._on_ship_tab_cycle)
-        self.lo_ship_selector.bind("<Shift-Tab>", self._on_ship_shift_tab_cycle)
-        self.lo_ship_selector.bind("<ISO_Left_Tab>", self._on_ship_shift_tab_cycle)
+        self._loadout_suggestion_manager.attach(
+            self.lo_ship_selector,
+            get_items=self._loadout_ship_suggestions,
+            on_validate=self._on_loadout_ship_validated,
+            on_preview=self._on_loadout_ship_preview,
+            on_clear=self._on_loadout_ship_cleared,
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=10,
+        )
+        self.lo_ship_selector.bind("<KeyRelease>", self._on_loadout_ship_text_changed, add="+")
 
         self.lo_ship_cycle_indicator = ctk.CTkLabel(
             ctrl_scroll,
@@ -329,13 +327,46 @@ class ShipFrame(ctk.CTkFrame):
         if not self._widget_exists("lo_ship_selector"):
             return
         self._close_ship_popup()
-        self._ship_suggestions_current = []
-        self._ship_suggestion_index = -1
         self._validated_loadout_ship = ""
         self.lo_ship_selector.delete(0, "end")
         self.lo_ship_selector.configure(placeholder_text="ENTER A SHIP...")
         self._set_ship_cycle_indicator(0, 0)
         self._clear_loadout_preview_pending_validation()
+
+    def _loadout_ship_suggestions(self, raw_query: str):
+        query = (raw_query or "").strip().upper()
+        ships = [str(s).strip().upper() for s in self._loadout_ship_values]
+        if not ships:
+            return []
+        if not query:
+            return ships[:10]
+
+        starts = [s for s in ships if s.startswith(query)]
+        contains = [s for s in ships if query in s and s not in starts]
+        return (starts + contains)[:10]
+
+    def _on_loadout_ship_preview(self, _entry_widget, value: str, index: int, total: int):
+        self._set_ship_cycle_indicator(index, total)
+        if value != self._validated_loadout_ship:
+            self._clear_loadout_preview_pending_validation()
+
+    def _on_loadout_ship_validated(self, _entry_widget, value: str):
+        self._set_ship_cycle_indicator(0, 0)
+        self.on_ship_selected(value)
+
+    def _on_loadout_ship_cleared(self, _entry_widget):
+        self._validated_loadout_ship = ""
+        self._set_ship_cycle_indicator(0, 0)
+        self._clear_loadout_preview_pending_validation()
+
+    def _on_loadout_ship_text_changed(self, event):
+        if getattr(event, "keysym", "") in ("Return", "Tab", "ISO_Left_Tab", "Escape"):
+            return
+        value = self.lo_ship_selector.get().strip().upper()
+        if not value:
+            return
+        if value != self._validated_loadout_ship:
+            self._clear_loadout_preview_pending_validation()
 
     def _set_ship_cycle_indicator(self, index: int, total: int):
         if not self._widget_exists("lo_ship_cycle_indicator"):
@@ -356,207 +387,12 @@ class ShipFrame(ctk.CTkFrame):
             self.lo_status_terminal.insert("end", "> SELECT A SHIP AND VALIDATE SUGGESTION (ENTER/CLICK).\n", "ACCENT")
 
     def _close_ship_popup(self):
-        if self._ship_suggestion_popup:
-            self._ship_suggestion_popup.destroy()
-            self._ship_suggestion_popup = None
-            self._ship_suggestion_listbox = None
-            self._ship_suggestion_owner = None
+        if hasattr(self, "_loadout_suggestion_manager"):
+            try:
+                self._loadout_suggestion_manager.close_all()
+            except Exception:
+                pass
         self._set_ship_cycle_indicator(0, 0)
-
-    def _widget_is_descendant(self, widget, ancestor) -> bool:
-        if widget is None or ancestor is None:
-            return False
-        try:
-            current = widget
-            while current is not None:
-                if current == ancestor:
-                    return True
-                current = current.master
-        except Exception:
-            return False
-        return False
-
-    def _close_ship_popup_if_unfocused(self):
-        if not self._ship_suggestion_popup:
-            return
-
-        focus_widget = self.focus_get()
-        if focus_widget == self.lo_ship_selector:
-            return
-        if self._ship_suggestion_listbox and focus_widget == self._ship_suggestion_listbox:
-            return
-        if self._widget_is_descendant(focus_widget, self._ship_suggestion_popup):
-            return
-
-        self._close_ship_popup()
-
-    def _compute_ship_suggestions(self, raw_query: str, limit: int = 10):
-        query = (raw_query or "").strip().upper()
-        ships = [str(s).strip().upper() for s in self._loadout_ship_values]
-        if not ships:
-            return []
-        if not query:
-            return ships[:limit]
-
-        starts = [s for s in ships if s.startswith(query)]
-        contains = [s for s in ships if query in s and s not in starts]
-        return (starts + contains)[:limit]
-
-    def _set_ship_from_suggestion(self, ship_name: str, validate: bool = False):
-        selected = (ship_name or "").strip().upper()
-        if not selected:
-            return
-        self.lo_ship_selector.delete(0, "end")
-        self.lo_ship_selector.insert(0, selected)
-        if validate:
-            self.on_ship_selected(selected)
-
-    def _cycle_ship_suggestion(self, reverse: bool = False):
-        # Important: on garde la liste de suggestions courante pendant le cycle TAB.
-        # Sinon, apres auto-completion du champ, le filtre devient trop strict.
-        suggestions = list(self._ship_suggestions_current) if self._ship_suggestions_current else []
-        if not suggestions:
-            current_text = self.lo_ship_selector.get().strip().upper()
-            suggestions = self._compute_ship_suggestions(current_text)
-        if not suggestions:
-            self._close_ship_popup()
-            return "break"
-
-        if suggestions != self._ship_suggestions_current:
-            self._ship_suggestions_current = suggestions
-            self._ship_suggestion_index = -1
-
-        step = -1 if reverse else 1
-        self._ship_suggestion_index = (self._ship_suggestion_index + step) % len(suggestions)
-        selected = suggestions[self._ship_suggestion_index]
-
-        self._set_ship_from_suggestion(selected, validate=False)
-        self._show_ship_popup(self.lo_ship_selector, suggestions, selected_item=selected)
-        return "break"
-
-    def _on_ship_tab_cycle(self, event=None):
-        return self._cycle_ship_suggestion(reverse=False)
-
-    def _on_ship_shift_tab_cycle(self, event=None):
-        return self._cycle_ship_suggestion(reverse=True)
-
-    def _on_ship_focus_out(self, event):
-        self.after(120, self._close_ship_popup_if_unfocused)
-
-    def _update_ship_popup_pos(self, event=None):
-        if self._ship_suggestion_popup and self._ship_suggestion_owner:
-            x = self._ship_suggestion_owner.winfo_rootx()
-            y = self._ship_suggestion_owner.winfo_rooty() + self._ship_suggestion_owner.winfo_height()
-            w = self._ship_suggestion_owner.winfo_width()
-            self._ship_suggestion_popup.geometry(f"{w}x{self._ship_suggestion_popup.winfo_height()}+{x}+{y}")
-
-    def _show_ship_popup(self, entry_widget, items, selected_item=None):
-        self._close_ship_popup()
-        self.update_idletasks()
-
-        self._ship_suggestion_popup = tk.Toplevel(self)
-        self._ship_suggestion_popup.wm_overrideredirect(True)
-        self._ship_suggestion_popup.attributes("-topmost", True)
-
-        x = entry_widget.winfo_rootx()
-        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
-        w = entry_widget.winfo_width()
-
-        lb = tk.Listbox(
-            self._ship_suggestion_popup,
-            bg=DrakeConfig.BG_PANEL,
-            fg=DrakeConfig.TEXT_MAIN,
-            font=(DrakeConfig.FONT_LOGS[0], 10),
-            selectbackground=DrakeConfig.ACCENT_PRIMARY,
-            selectforeground=DrakeConfig.BG_MAIN,
-            highlightthickness=1,
-            highlightbackground=DrakeConfig.BORDER_COLOR,
-            bd=0,
-            activestyle="none",
-        )
-        for item in items:
-            lb.insert(tk.END, item)
-        lb.pack(fill="both", expand=True)
-        self._ship_suggestion_listbox = lb
-
-        if selected_item:
-            for idx, item in enumerate(items):
-                if str(item).strip().upper() == str(selected_item).strip().upper():
-                    lb.selection_clear(0, tk.END)
-                    lb.selection_set(idx)
-                    lb.activate(idx)
-                    self._set_ship_cycle_indicator(idx + 1, len(items))
-                    break
-        else:
-            self._set_ship_cycle_indicator(0, len(items))
-
-        self._ship_suggestion_popup.geometry(f"{w}x{len(items) * 22}+{x}+{y}")
-        self._ship_suggestion_popup.lift()
-        lb.bind("<ButtonRelease-1>", lambda e: self._select_ship_item(entry_widget, lb))
-        self._ship_suggestion_owner = entry_widget
-
-    def _select_ship_item(self, entry_widget, listbox):
-        selection = listbox.curselection()
-        if selection:
-            ship_name = listbox.get(selection[0]).strip().upper()
-            self._set_ship_from_suggestion(ship_name, validate=True)
-            self._set_ship_cycle_indicator(selection[0] + 1, listbox.size())
-        self._close_ship_popup()
-
-    def _on_ship_key_release(self, event):
-        value = self.lo_ship_selector.get().strip().upper()
-        if event.keysym in ("Return", "Escape", "Tab"):
-            if event.keysym == "Escape":
-                self._close_ship_popup()
-            return
-        if event.keysym in ("Up", "Down"):
-            return
-        if not value:
-            self._ship_suggestions_current = []
-            self._ship_suggestion_index = -1
-            self._validated_loadout_ship = ""
-            self._close_ship_popup()
-            self._clear_loadout_preview_pending_validation()
-            return
-
-        if value != self._validated_loadout_ship:
-            self._clear_loadout_preview_pending_validation()
-
-        suggestions = self._compute_ship_suggestions(value)
-        self._ship_suggestions_current = suggestions
-        self._ship_suggestion_index = -1
-        if suggestions:
-            self._show_ship_popup(self.lo_ship_selector, suggestions)
-        else:
-            self._close_ship_popup()
-
-    def _confirm_ship_selection(self, event=None):
-        raw = self.lo_ship_selector.get().strip().upper()
-        if not raw:
-            self._close_ship_popup()
-            return
-
-        selected = ""
-        for candidate in self._compute_ship_suggestions(raw, limit=1000):
-            if candidate == raw:
-                selected = candidate
-                break
-
-        if not selected:
-            for candidate in self._compute_ship_suggestions(raw, limit=1000):
-                if candidate.startswith(raw):
-                    selected = candidate
-                    break
-
-        if not selected:
-            selected = raw
-
-        self.lo_ship_selector.delete(0, "end")
-        self.lo_ship_selector.insert(0, selected)
-        self._ship_suggestions_current = []
-        self._ship_suggestion_index = -1
-        self.on_ship_selected(selected)
-        self._close_ship_popup()
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
@@ -1593,8 +1429,6 @@ class ShipFrame(ctk.CTkFrame):
         try:
             ships = self.controller.ship.list_ship_names()
             self._loadout_ship_values = ships or []
-            self._ship_suggestions_current = []
-            self._ship_suggestion_index = -1
             current = self.lo_ship_selector.get().strip().upper() if self._widget_exists("lo_ship_selector") else ""
             known_ships = [str(s).strip().upper() for s in ships]
             if ships and current and current not in known_ships:
