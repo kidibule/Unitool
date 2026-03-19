@@ -26,18 +26,16 @@ class InterceptionFrame(ctk.CTkFrame):
         DrakeConfig.create_title(self, "QUANTUM INTERCEPTION SYSTEM")
 
         self.int_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.int_container.pack(fill="both", expand=True, padx=20, pady=20)
+        self.int_container.pack(fill="both", expand=True, padx=20, pady=10)
 
         location_list = self.get_location_names()
 
-        self.int_tabview = ctk.CTkTabview(
+        self.int_tabview = DrakeConfig.create_tabview(
             self.int_container,
-            fg_color=DrakeConfig.BG_PANEL,
-            segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
             segmented_button_selected_hover_color=DrakeConfig.ACCENT_HOVER,
-            text_color="white",
+            pack_padx=0,
+            pack_pady=0,
         )
-        self.int_tabview.pack(fill="both", expand=True, padx=0, pady=0)
 
         tab_snare = self.int_tabview.add("SNARE")
 

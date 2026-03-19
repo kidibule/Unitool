@@ -9,7 +9,7 @@ import webbrowser
 import csv
 import json
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox, DrakeEntry
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox, DrakeEntry, DrakeTitle1
 from views.ship_frame import ShipFrame
 
 
@@ -48,18 +48,10 @@ class ScannerFrame(ctk.CTkFrame):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
 
-        self.title_label = ctk.CTkLabel(header, text="DATABASE", font=("Orbitron", 16, "bold"), text_color="#ff8c00")
+        self.title_label = DrakeTitle1(header, text="DATABASE")
         self.title_label.pack(side="left", expand=True, padx=(0, 0))
 
-        self.tabview = ctk.CTkTabview(
-            self, 
-            fg_color=DrakeConfig.BG_PANEL, 
-            segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
-            segmented_button_selected_hover_color="#e67e22",
-            text_color="white"
-        )
-        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
-        DrakeConfig.harmonize_tabview_segments(self.tabview)
+        self.tabview = DrakeConfig.create_tabview(self)
 
         self.tab_targets = self.tabview.add("TARGETS")
         self.tab_orgs = self.tabview.add("ORGANIZATIONS")

@@ -33,16 +33,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         # --- TABS SETUP (Style Drake) ---
 
-        self.tabview = ctk.CTkTabview(
-            self,
-            fg_color=DrakeConfig.BG_PANEL,
-            segmented_button_selected_color=DrakeConfig.ACCENT_PRIMARY,
-            segmented_button_selected_hover_color="#e67e22",
-            text_color="white",
-        )
-
-        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
-        DrakeConfig.harmonize_tabview_segments(self.tabview)
+        self.tabview = DrakeConfig.create_tabview(self)
 
         self.tab_player = self.tabview.add("TRACK PLAYER")
 

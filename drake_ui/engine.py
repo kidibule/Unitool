@@ -40,10 +40,13 @@ class DrakeConfig:
     CORNER_RADIUS = 5
     BORDER_WIDTH = 1
     FONT_TITLE = ("Orbitron", 16, "bold")
+    PAGE_TITLE_PADY = (5, 10)
+    PAGE_TABVIEW_PADX = 20
+    PAGE_TABVIEW_PADY = 10
 
     @staticmethod
     def create_title(
-        parent, text: str, pady: Tuple[int, int] = (20, 10), with_line: bool = False
+        parent, text: str, pady: Optional[Tuple[int, int]] = None, with_line: bool = False
     ):
         """Crée un label de titre stylisé.
 
@@ -53,12 +56,19 @@ class DrakeConfig:
             pady: padding vertical
             with_line: ajoute une ligne visuelle en dessous
         """
-        label = ctk.CTkLabel(
-            parent,
-            text=text.upper(),
-            font=DrakeConfig.FONT_TITLE,
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-        )
+        if pady is None:
+            pady = DrakeConfig.PAGE_TITLE_PADY
+
+        title_cls = globals().get("DrakeTitle1")
+        if title_cls is not None:
+            label = title_cls(parent, text=text)
+        else:
+            label = ctk.CTkLabel(
+                parent,
+                text=text.upper(),
+                font=DrakeConfig.FONT_TITLE,
+                text_color=DrakeConfig.ACCENT_PRIMARY,
+            )
         label.pack(pady=pady)
 
         if with_line:
@@ -124,18 +134,70 @@ class DrakeConfig:
 
     @staticmethod
     def harmonize_tabview_segments(tabview, *, height: int = 32, font: Optional[Tuple[str, int, str]] = None) -> None:
-        """Uniformise la taille visuelle des onglets de CTkTabview sans casser les versions anciennes."""
-        try:
-            segmented = getattr(tabview, "_segmented_button", None)
-            if segmented is None:
-                return
-            kwargs = {"height": int(height)}
-            if font is not None:
-                kwargs["font"] = font
-            segmented.configure(**kwargs)
-        except Exception:
-            # Compatible avec les versions CustomTkinter qui exposent différemment le widget interne.
-            pass
+        """Uniformise la taille visuelle des onglets de CTkTabview, y compris ceux ajoutés ensuite."""
+
+        def _apply_style() -> None:
+            try:
+                segmented = getattr(tabview, "_segmented_button", None)
+                if segmented is None:
+                    return
+                kwargs = {"height": int(height)}
+                if font is not None:
+                    kwargs["font"] = font
+                segmented.configure(**kwargs)
+            except Exception:
+                # Compatible avec les versions CustomTkinter qui exposent différemment le widget interne.
+                pass
+
+        # Applique immédiatement sur les onglets déjà présents.
+        _apply_style()
+
+        # Patch léger de add() pour que chaque nouvel onglet hérite automatiquement du style.
+        if getattr(tabview, "_drake_harmonize_hooked", False):
+            return
+        original_add = getattr(tabview, "add", None)
+        if callable(original_add):
+            def _drake_add(*args, **kwargs):
+                result = original_add(*args, **kwargs)
+                _apply_style()
+                return result
+
+            tabview.add = _drake_add
+            tabview._drake_harmonize_hooked = True
+
+    @staticmethod
+    def create_tabview(
+        parent,
+        *,
+        fg_color: Optional[str] = None,
+        segmented_button_selected_color: Optional[str] = None,
+        segmented_button_selected_hover_color: str = "#e67e22",
+        text_color: str = "white",
+        pack_tabview: bool = True,
+        pack_padx: Optional[int] = None,
+        pack_pady: Optional[int] = None,
+        **kwargs,
+    ):
+        """Crée un CTkTabview Drake et applique les espacements/page standards."""
+        tabview = ctk.CTkTabview(
+            parent,
+            fg_color=fg_color or DrakeConfig.BG_PANEL,
+            segmented_button_selected_color=segmented_button_selected_color or DrakeConfig.ACCENT_PRIMARY,
+            segmented_button_selected_hover_color=segmented_button_selected_hover_color,
+            text_color=text_color,
+            **kwargs,
+        )
+
+        if pack_tabview:
+            tabview.pack(
+                pady=DrakeConfig.PAGE_TABVIEW_PADY if pack_pady is None else pack_pady,
+                padx=DrakeConfig.PAGE_TABVIEW_PADX if pack_padx is None else pack_padx,
+                fill="both",
+                expand=True,
+            )
+
+        DrakeConfig.harmonize_tabview_segments(tabview)
+        return tabview
 
 
 # ==========================================
