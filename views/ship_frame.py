@@ -463,7 +463,7 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_slot_ship =  DrakeComboBoxLight(row1, values=ship_values, command=self.on_cfg_slot_ship_change)
         self.cfg_slot_ship.pack(pady=4, fill="x")
 
-        DrakeTitle4(row1, text="CATÉGORIE").pack(pady=(0, 4))
+        DrakeTitle4(row1, text="CATEGORY").pack(pady=(0, 4))
         self.cfg_slot_category = DrakeComboBoxLight(row1, values=categories, command=self.on_cfg_slot_category_change)
         self.cfg_slot_category.pack(pady=4, fill="x")
 
@@ -713,7 +713,7 @@ class ShipFrame(ctk.CTkFrame):
         if not rows:
             ctk.CTkLabel(
                 self.comp_list_scroll,
-                text="AUCUN COMPONENT ENREGISTRE",
+                text="NO COMPONENT REGISTERED",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=12, pady=12)
@@ -913,7 +913,7 @@ class ShipFrame(ctk.CTkFrame):
         size_value = size_combo.get().strip()
 
         if not name or not category or not type_name or not size_value or not grade:
-            DrakePopup.warning("SYSTEM", "Tous les champs du component sont requis.", parent=self.component_popup)
+            self.controller.log("COMPONENT SAVE ABORTED: all component fields are required.", source="FLEET")
             return
 
         try:
@@ -932,8 +932,9 @@ class ShipFrame(ctk.CTkFrame):
             self.update_selectors()
             if self.lo_ship_selector.get():
                 self.refresh_loadout_view(self.lo_ship_selector.get())
+            self.controller.log(f"COMPONENT UPDATED: {original_name} -> {name}", source="FLEET")
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self.component_popup)
+            self.controller.log(f"COMPONENT SAVE FAILED: {e}", source="SYSTEM ERROR")
 
     def delete_component_row(self, component_name):
         name = (component_name or "").strip().upper()
@@ -949,8 +950,9 @@ class ShipFrame(ctk.CTkFrame):
             self.update_selectors()
             if self.lo_ship_selector.get():
                 self.refresh_loadout_view(self.lo_ship_selector.get())
+            self.controller.log(f"COMPONENT DELETED: {name}", source="FLEET")
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self.component_popup)
+            self.controller.log(f"COMPONENT DELETE FAILED: {e}", source="SYSTEM ERROR")
 
     def open_edit_window(self, ship_name):
         """Ouvre une interface de modification complète (Full Access) pour un vaisseau."""
@@ -1157,11 +1159,11 @@ class ShipFrame(ctk.CTkFrame):
             try:
                 parsed = self.controller.ship.extract_ship_stats_from_screenshot(image_path)
             except Exception as e:
-                DrakePopup.error("OCR", str(e), parent=self)
+                self.controller.log(f"OCR IMPORT FAILED: {e}", source="SYSTEM ERROR")
                 return
 
             if not parsed:
-                DrakePopup.warning("OCR", "Aucune statistique reconnue dans ce screenshot.", parent=self)
+                self.controller.log("OCR IMPORT: no stats detected in this screenshot.", source="FLEET")
                 return
 
             # Ne jamais renommer le ship automatiquement depuis OCR.
@@ -1180,13 +1182,12 @@ class ShipFrame(ctk.CTkFrame):
                 set_widget_value(widget, value)
 
             self.controller.log(
-                f"OCR IMPORT: {len(parsed)} champ(s) detectes pour {ship_name}",
+                f"OCR IMPORT: {len(parsed)} field(s) detected for {ship_name}",
                 source="FLEET",
             )
-            DrakePopup.info(
-                "OCR",
-                f"Import OCR termine: {len(parsed)} champ(s) detectes. Verifiez puis cliquez sur APPLY ALL MODIFICATIONS.",
-                parent=self,
+            self.controller.log(
+                f"OCR IMPORT READY: review the {len(parsed)} detected field(s), then click APPLY ALL MODIFICATIONS.",
+                source="FLEET",
             )
 
         ocr_btn = DrakeButton(edit_win, text="OCR SCREENSHOT IMPORT", command=import_ocr_screenshot)
@@ -1352,10 +1353,10 @@ class ShipFrame(ctk.CTkFrame):
         ship_name = self.lo_ship_selector.get().strip().upper()
         profile_name = self._get_active_profile()
         if not ship_name:
-            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
+            self.controller.log("LOADOUT SAVE ABORTED: select a ship first.", source="FLEET")
             return
         if not self.lo_slot_widgets:
-            DrakePopup.warning("SYSTEM", "NO SLOT TO SAVE.", parent=self)
+            self.controller.log("LOADOUT SAVE ABORTED: no slot to save.", source="FLEET")
             return
 
         total = 0
@@ -1381,11 +1382,6 @@ class ShipFrame(ctk.CTkFrame):
                 f"BATCH SAVE PARTIAL: {ship_name} [{profile_name}] {total - failed}/{total} slots saved.",
                 source="FLEET",
             )
-            DrakePopup.warning(
-                "SYSTEM",
-                f"SAVE PARTIAL: {total - failed}/{total} slots saved.",
-                parent=self,
-            )
             return
 
         self.controller.log(
@@ -1398,10 +1394,10 @@ class ShipFrame(ctk.CTkFrame):
         ship_name = self.lo_ship_selector.get().strip().upper()
         profile_name = self._get_active_profile()
         if not ship_name:
-            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
+            self.controller.log("CLEAR ALL ABORTED: select a ship first.", source="FLEET")
             return
         if not self.lo_slot_widgets:
-            DrakePopup.warning("SYSTEM", "NO SLOT TO CLEAR.", parent=self)
+            self.controller.log("CLEAR ALL ABORTED: no slot to clear.", source="FLEET")
             return
 
         if not DrakePopup.yesno("SYSTEM", f"SET ALL SLOTS TO EMPTY FOR [{profile_name}] ?", parent=self):
@@ -1409,6 +1405,11 @@ class ShipFrame(ctk.CTkFrame):
 
         for _, _, _, combo in self.lo_slot_widgets:
             combo.set("EMPTY")
+
+        self.controller.log(
+            f"CLEAR ALL REQUESTED: {ship_name} [{profile_name}] set to EMPTY before batch save.",
+            source="FLEET",
+        )
 
         self.action_save_all_slots()
 
@@ -1451,6 +1452,10 @@ class ShipFrame(ctk.CTkFrame):
             self.controller.ship.clear_ship_loadout(ship_name, profile_name)
             # Rafraîchissement de l'interface
             self.refresh_loadout_view(ship_name)
+            self.controller.log(
+                f"PROFILE WIPE OK: {ship_name} [{profile_name}] cleared.",
+                source="FLEET",
+            )
     
     def update_selectors(self):
         """Rafraîchit la liste des vaisseaux dans le menu déroulant."""
@@ -1495,7 +1500,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_type(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            DrakePopup.warning("SYSTEM", "TYPE requis", parent=self)
+            self.controller.log("ADD TYPE ABORTED: type is required.", source="FLEET")
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -1505,8 +1510,9 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_slot_category.set(category)
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
+            self.controller.log(f"CATEGORY CREATED: {category}", source="FLEET")
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self)
+            self.controller.log(f"CATEGORY CREATE FAILED: {e}", source="SYSTEM ERROR")
 
     def refresh_type_terminal(self):
         return
@@ -1514,7 +1520,7 @@ class ShipFrame(ctk.CTkFrame):
     def action_add_category(self):
         category = self.cfg_type_new_category.get().strip().upper()
         if not category:
-            DrakePopup.warning("SYSTEM", "CATÉGORIE requise", parent=self)
+            self.controller.log("ADD CATEGORY ABORTED: category is required.", source="FLEET")
             return
         try:
             self.controller.ship.create_component_category(category)
@@ -1524,14 +1530,15 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_slot_category.set(category)
             self.on_cfg_type_category_change(category)
             self.on_cfg_slot_category_change(category)
+            self.controller.log(f"CATEGORY CREATED: {category}", source="FLEET")
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self)
+            self.controller.log(f"CATEGORY CREATE FAILED: {e}", source="SYSTEM ERROR")
 
     def action_add_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
         subtype = self.cfg_type_entry.get().strip().upper()
         if not category or not subtype:
-            DrakePopup.warning("SYSTEM", "CATÉGORIE et TYPE requis", parent=self)
+            self.controller.log("ADD SUBTYPE ABORTED: category and type are required.", source="FLEET")
             return
         try:
             self.controller.ship.create_component_subtype(category, subtype)
@@ -1540,8 +1547,9 @@ class ShipFrame(ctk.CTkFrame):
             self.on_cfg_slot_category_change(self.cfg_slot_category.get())
             if self._widget_exists("new_comp_category"):
                 self.on_category_change(self.new_comp_category.get())
+            self.controller.log(f"SUBTYPE CREATED: {category}::{subtype}", source="FLEET")
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self)
+            self.controller.log(f"SUBTYPE CREATE FAILED: {e}", source="SYSTEM ERROR")
 
     def action_delete_subtype(self):
         category = self.cfg_type_category.get().strip().upper()
@@ -1555,6 +1563,7 @@ class ShipFrame(ctk.CTkFrame):
         self.on_cfg_slot_category_change(self.cfg_slot_category.get())
         if self._widget_exists("new_comp_category"):
             self.on_category_change(self.new_comp_category.get())
+        self.controller.log(f"SUBTYPE DELETED: {category}::{subtype}", source="FLEET")
 
     def on_cfg_slot_ship_change(self, _ship_name):
         self.refresh_slot_terminal()
@@ -1680,7 +1689,7 @@ class ShipFrame(ctk.CTkFrame):
         if not specs:
             ctk.CTkLabel(
                 self.cfg_slot_list,
-                text="AUCUN SLOT SPEC ENREGISTRE",
+                text="NO SLOT SPEC REGISTERED",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=12, pady=(4, 10))
@@ -1710,6 +1719,7 @@ class ShipFrame(ctk.CTkFrame):
         self.refresh_slot_terminal()
         if self.lo_ship_selector.get().strip().upper() == ship_name:
             self.refresh_loadout_view(ship_name)
+        self.controller.log(f"SLOT SPEC DELETED: {ship_name} {cat}::{st}", source="FLEET")
 
     def on_cfg_slot_pick(self, selection):
         if getattr(self, "_suspend_cfg_slot_pick", False):
@@ -1737,7 +1747,7 @@ class ShipFrame(ctk.CTkFrame):
         category = self.cfg_slot_category.get().strip().upper()
         subtype = self.cfg_slot_subtype.get().strip().upper()
         if not ship_name or not category or not subtype:
-            DrakePopup.warning("SYSTEM", "SHIP / CATEGORY / SUBTYPE requis", parent=self)
+            self.controller.log("SLOT SPEC SAVE ABORTED: ship / category / subtype are required.", source="FLEET")
             return
         try:
             qty = int(self.cfg_slot_qty.get().strip())
@@ -1749,8 +1759,12 @@ class ShipFrame(ctk.CTkFrame):
             self.cfg_slot_subtype.set(subtype)
             if self.lo_ship_selector.get().strip().upper() == ship_name:
                 self.refresh_loadout_view(ship_name)
+            self.controller.log(
+                f"SLOT SPEC SAVED: {ship_name} {category}::{subtype} QTY {qty} SIZE S{max_size}",
+                source="FLEET",
+            )
         except Exception as e:
-            DrakePopup.error("SYSTEM", str(e), parent=self)
+            self.controller.log(f"SLOT SPEC SAVE FAILED: {e}", source="SYSTEM ERROR")
 
     def action_delete_slot_spec(self):
         ship_name = self.cfg_slot_ship.get().strip().upper()
@@ -1764,6 +1778,7 @@ class ShipFrame(ctk.CTkFrame):
         self.refresh_slot_terminal()
         if self.lo_ship_selector.get().strip().upper() == ship_name:
             self.refresh_loadout_view(ship_name)
+        self.controller.log(f"SLOT SPEC DELETED: {ship_name} {cat}::{subtype}", source="FLEET")
 
     def refresh_config_tab(self):
         if hasattr(self, "cfg_type_category"):
@@ -1800,12 +1815,12 @@ class ShipFrame(ctk.CTkFrame):
     def action_create_profile(self):
         ship_name = self.lo_ship_selector.get().strip().upper()
         if not ship_name:
-            DrakePopup.warning("SYSTEM", "SELECT A SHIP FIRST.", parent=self)
+            self.controller.log("PROFILE CREATE ABORTED: select a ship first.", source="FLEET")
             return
 
         new_profile = self.lo_new_profile.get().strip().upper()
         if not new_profile:
-            DrakePopup.warning("SYSTEM", "ENTER A PROFILE NAME.", parent=self)
+            self.controller.log("PROFILE CREATE ABORTED: enter a profile name.", source="FLEET")
             return
 
         source_profile = self._get_active_profile()
@@ -1816,12 +1831,16 @@ class ShipFrame(ctk.CTkFrame):
             overwrite=False,
         )
         if not created:
-            DrakePopup.warning("SYSTEM", f"PROFILE {new_profile} ALREADY EXISTS.", parent=self)
+            self.controller.log(f"PROFILE CREATE ABORTED: {new_profile} already exists.", source="FLEET")
             return
 
         self.lo_new_profile.delete(0, "end")
         self.update_profile_list(ship_name, selected_profile=new_profile)
         self.refresh_loadout_view(ship_name)
+        self.controller.log(
+            f"PROFILE CREATED: {ship_name} [{new_profile}] cloned from [{source_profile}]",
+            source="FLEET",
+        )
 
     def action_load_profile(self, profile_name):
         """Charge la configuration d'un profil spécifique."""
@@ -1829,3 +1848,4 @@ class ShipFrame(ctk.CTkFrame):
         if not ship_name or ship_name == "":
             return
         self.refresh_loadout_view(ship_name)
+        self.controller.log(f"PROFILE LOADED: {ship_name} [{profile_name}]", source="FLEET")
