@@ -283,7 +283,7 @@ class ContractFrame(ctk.CTkFrame):
                     if hasattr(self.controller, "log"):
                         self.controller.log("CONFIG ERROR: INVALID REWARD NUMBER", source="ERROR")
 
-        DrakeButton(f_in, text="+", width=40, command=add).pack(side="left", padx=10)
+        DrakeButton(f_in, text="ADD", width=40, command=add).pack(side="left", padx=10)
 
         # --- Liste Scrollable ---
         scroll = ctk.CTkScrollableFrame(

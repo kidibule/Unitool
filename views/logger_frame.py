@@ -5,7 +5,7 @@ import csv
 from difflib import SequenceMatcher
 from datetime import datetime
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeDualComboBox
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeDualComboBox
 from controllers.ship_controller import ShipController, SHIP_MANUFACTURER_OPTIONS
 
 
@@ -108,15 +108,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.btn_save_org = DrakeButton(self.tab_orgs, text="REGISTER ORGANIZATION", command=self.save_org, height=45)
         self.btn_save_org.pack(pady=10, padx=50, fill="x")
 
-        f_utils = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
-        f_utils.pack(fill="x", padx=50, pady=(0, 20))
-        
-        DrakeButton(f_utils, text="IMPORT CSV", command=self.import_orgs_csv, 
-                fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_utils, text="EXPORT CSV", command=self.export_orgs_csv, 
-                fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_utils, text="CLEAR", command=self.clear_org_fields, 
-                fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeClearButton(self.tab_orgs, text="CLEAR", command=self.clear_org_fields, height=45).pack(pady=(0, 20), padx=50, fill="x")
 
     # --- LOGIQUE DE SAUVEGARDE ET UTILITAIRES POUR LES ORGAS ---
 
@@ -276,12 +268,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.btn_save = DrakeButton(self.tab_targets, text="SYNCHRONIZE DATABASE", command=self.save, height=45)
         self.btn_save.pack(pady=10, padx=50, fill="x")
 
-        f_btns = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
-        f_btns.pack(fill="x", padx=50, pady=(0, 20))
-        
-        DrakeButton(f_btns, text="IMPORT CSV", command=self.import_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_btns, text="EXPORT CSV", command=self.export_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_btns, text="CLEAR", command=self.clear_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeClearButton(self.tab_targets, text="CLEAR", command=self.clear_fields, height=45).pack(pady=(0, 20), padx=50, fill="x")
 
     def save(self):
         h = self.p_in.get().strip().upper()
@@ -606,11 +593,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.btn_save_ship.pack(pady=(8, 15), padx=50, fill="x")
 
         # --- UTILS ---
-        f_utils = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
-        f_utils.pack(fill="x", padx=50, pady=(0, 20))
-        DrakeButton(f_utils, text="IMPORT", command=self.import_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_utils, text="EXPORT", command=self.export_ships_csv, fg_color="#222", corner_radius=0).pack(side="left", expand=True, padx=2)
-        DrakeButton(f_utils, text="CLEAR", command=self.clear_ship_fields, fg_color="#441111", corner_radius=0).pack(side="left", expand=True, padx=2)
+        DrakeClearButton(self.tab_ships, text="CLEAR", command=self.clear_ship_fields, height=45).pack(pady=(0, 20), padx=50, fill="x")
 
     def _add_section_title(self, parent, title):
         """Petit utilitaire pour ajouter des titres de section Drake"""

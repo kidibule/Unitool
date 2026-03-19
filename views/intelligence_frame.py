@@ -86,13 +86,6 @@ class IntelligenceFrame(ctk.CTkFrame):
     def setup_player_tab(self):
         """Construit l'onglet de tracking d'un joueur (handle RSI)."""
 
-        ctk.CTkLabel(
-            self.tab_player,
-            text="TARGET ACQUISITION",
-            font=("Orbitron", 16, "bold"),
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-        ).pack(pady=5)
-
         # Small bot status label (shows CONNECTED / RUNNING / IDLE / ERROR)
         self.bot_status_label = ctk.CTkLabel(
             self.tab_player,
@@ -106,7 +99,7 @@ class IntelligenceFrame(ctk.CTkFrame):
             self.tab_player,
             placeholder_text="HANDLE...",
             width=300,
-            fg_color=DrakeConfig.BG_PANEL,
+            fg_color=DrakeConfig.BG_TERMINAL,
             border_color=DrakeConfig.ACCENT_PRIMARY,
         )
 
@@ -190,18 +183,11 @@ class IntelligenceFrame(ctk.CTkFrame):
     def setup_org_tab(self):
         """Construit l'onglet de tracking d'organisation (SID RSI)."""
 
-        ctk.CTkLabel(
-            self.tab_org,
-            text="ORGANIZATION MAPPING",
-            font=("Orbitron", 16, "bold"),
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-        ).pack(pady=5)
-
         self.ent_o = DrakeEntry(
             self.tab_org,
             placeholder_text="SID...",
             width=200,
-            fg_color=DrakeConfig.BG_PANEL,
+            fg_color=DrakeConfig.BG_TERMINAL,
             border_color=DrakeConfig.ACCENT_PRIMARY,
         )
 
