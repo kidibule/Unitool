@@ -1231,13 +1231,21 @@ class ShipFrame(ctk.CTkFrame):
 
             # Titre de catégorie
             if current_cat != cat:
-                ctk.CTkLabel(self.lo_slots_frame, text=f"--- {cat} ---", 
-                            font=("Orbitron", 11, "bold"), text_color=DrakeConfig.ACCENT_PRIMARY).pack(pady=(10, 5))
+                ctk.CTkLabel(
+                    self.lo_slots_frame,
+                    text=cat,
+                    font=("Orbitron", 12, "bold"),
+                    text_color=DrakeConfig.ACCENT_PRIMARY,
+                ).pack(pady=(10, 4), padx=10, anchor="w")
                 current_cat = cat
 
             subtype_label = subtype if subtype != "GENERIC" else "ALL TYPES"
-            ctk.CTkLabel(self.lo_slots_frame, text=f"{subtype_label} (MAX {max_qty})",
-                         font=("Orbitron", 10), text_color="#AAAAAA").pack(pady=(2, 2), padx=12, anchor="w")
+            ctk.CTkLabel(
+                self.lo_slots_frame,
+                text=f"{subtype_label}  |  MAX {max_qty}",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(pady=(0, 3), padx=12, anchor="w")
 
             for i in range(max_qty):
                 # Récupère les composants compatibles et l'actuel
@@ -1251,21 +1259,40 @@ class ShipFrame(ctk.CTkFrame):
                 )
                 
                 # Carte de ligne (Slot)
-                card = ctk.CTkFrame(self.lo_slots_frame, fg_color="#121212", border_width=1, border_color="#333333")
-                card.pack(fill="x", padx=10, pady=2)
+                card = ctk.CTkFrame(
+                    self.lo_slots_frame,
+                    fg_color=DrakeConfig.BG_PANEL,
+                    corner_radius=0,
+                    border_width=1,
+                    border_color=DrakeConfig.BORDER_COLOR,
+                )
+                card.pack(fill="x", padx=8, pady=3)
 
-                ctk.CTkLabel(card, text=f"S{max_size} Slot {i+1}", width=80, font=("Orbitron", 10)).pack(side="left", padx=10)
+                left = ctk.CTkFrame(card, fg_color="transparent")
+                left.pack(side="left", fill="x", expand=True, padx=10, pady=5)
+
+                ctk.CTkLabel(
+                    left,
+                    text=f"S{max_size} SLOT {i+1}",
+                    font=("Segoe UI", 11, "bold"),
+                    anchor="w",
+                ).pack(anchor="w")
                 
                 # Menu de sélection
-                combo = DrakeComboBox(card, values=["EMPTY"] + available, width=220)
+                combo = DrakeComboBoxLight(card, values=["EMPTY"] + available, width=220)
                 combo.set(current)
-                combo.pack(side="left", padx=10, pady=5)
+                combo.pack(side="left", padx=(0, 10), pady=5)
                 self.lo_slot_widgets.append((cat, subtype, i, combo))
 
                 # Bouton de sauvegarde INDIVIDUEL
-                save_btn = DrakeButton(card, text="SAVE", width=60, 
-                                    command=lambda c=combo, ct=cat, st=subtype, idx=i: self.action_mount(ct, st, idx, c.get()))
-                save_btn.pack(side="right", padx=10)
+                save_btn = DrakeButton(
+                    card,
+                    text="SAVE",
+                    width=60,
+                    height=24,
+                    command=lambda c=combo, ct=cat, st=subtype, idx=i: self.action_mount(ct, st, idx, c.get()),
+                )
+                save_btn.pack(side="right", padx=10, pady=5)
 
         self._refresh_loadout_status_terminal_from_widgets(ship_name)
         self._render_loadout_global_actions()
