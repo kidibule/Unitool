@@ -12,10 +12,12 @@ from controllers.ship_controller import SHIP_CAREER_OPTIONS, SHIP_MANUFACTURER_O
 class ShipFrame(ctk.CTkFrame):
     """Interface de gestion de la flotte (Ships, Components & Loadout)."""
 
-    def __init__(self, parent, controller):
+    def __init__(self, parent, controller, mode: str = "all"):
         """Initialise la vue et prépare le mapping de types UI."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        mode_normalized = (mode or "all").strip().lower()
+        self.mode = mode_normalized if mode_normalized in {"all", "catalog_only", "loadout_only"} else "all"
         self.component_popup = None
         self.component_editing_name = None
         self.lo_slot_widgets = []
@@ -42,12 +44,23 @@ class ShipFrame(ctk.CTkFrame):
         self.role_options = self.controller.ship.list_ship_roles()
         self.career_options = self.controller.ship.list_ship_careers()
 
+        # En mode catalogue embarqué dans DATABASE, on affiche directement
+        # le contenu SHIPS sans titre ni sous-onglets.
+        if self.mode == "catalog_only":
+            self.tab_ships = self
+            self.setup_ships_tab()
+            return
+
         # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
 
+        title_text = "FLEET DATABASE"
+        if self.mode == "loadout_only":
+            title_text = "SHIP LOADOUT"
+
         self.title_label = DrakeTitle1(
-            header, text="FLEET DATABASE"
+            header, text=title_text
         )
         self.title_label.pack(expand=True, padx=(0, 0))
 
@@ -66,13 +79,15 @@ class ShipFrame(ctk.CTkFrame):
         except Exception:
             pass
 
-        self.tab_ships = self.tabview.add("SHIPS")
-        self.tab_loadout = self.tabview.add("LOADOUT")
-        self.tab_config = self.tabview.add("CONFIG")
+        if self.mode in ("all", "catalog_only"):
+            self.tab_ships = self.tabview.add("SHIPS")
+            self.setup_ships_tab()
 
-        self.setup_ships_tab()
-        self.setup_loadout_tab()
-        self.setup_config_tab()
+        if self.mode in ("all", "loadout_only"):
+            self.tab_loadout = self.tabview.add("LOADOUT")
+            self.tab_config = self.tabview.add("CONFIG")
+            self.setup_loadout_tab()
+            self.setup_config_tab()
 
     def refresh(self):
         """Rafraîchissement appelé quand la page SHIPS est affichée."""
@@ -88,15 +103,17 @@ class ShipFrame(ctk.CTkFrame):
 
     def setup_ships_tab(self):
         """Moteur de recherche et fiches techniques."""
+        ships_parent = getattr(self, "tab_ships", self)
+
         self.ship_search_entry = DrakeEntry(
-            self.tab_ships, placeholder_text="SEARCH A SHIP (NAME OR ROLE)...", 
+            ships_parent, placeholder_text="SEARCH A SHIP (NAME OR ROLE)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
         self.ship_search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.ship_search_entry.bind("<KeyRelease>", self.run_ship_scan)
 
         # Toolbar
-        toolbar = ctk.CTkFrame(self.tab_ships, fg_color="transparent")
+        toolbar = ctk.CTkFrame(ships_parent, fg_color="transparent")
         toolbar.pack(fill="x", padx=20, pady=5)
 
         DrakeButton(toolbar, text="IMPORT CSV", width=150,
@@ -105,7 +122,7 @@ class ShipFrame(ctk.CTkFrame):
         DrakeButton(toolbar, text="EXPORT CSV", width=150,
                     command=self.controller.ship.export_ships_to_csv).pack(side="left", padx=5)
 
-        self.ship_results = DrakeTerminal(self.tab_ships)
+        self.ship_results = DrakeTerminal(ships_parent)
         self.ship_results.pack(pady=5, padx=10, fill="both", expand=True)
         self.ship_results.tag_config("ACCENT", foreground=DrakeConfig.ACCENT_PRIMARY)
         self.ship_results.tag_config("ship_name_white", foreground=DrakeConfig.TEXT_MAIN)

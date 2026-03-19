@@ -10,6 +10,7 @@ import csv
 import json
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeTerminal, DrakePopup, DrakeComboBox, DrakeEntry
+from views.ship_frame import ShipFrame
 
 
 def format_int_with_dots(value) -> str:
@@ -47,11 +48,8 @@ class ScannerFrame(ctk.CTkFrame):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
 
-        self.btn_export = DrakeButton(header, text="EXPORT DB", command=self.export, width=100)
-        self.btn_export.pack(side="right", pady=5)
-
         self.title_label = ctk.CTkLabel(header, text="DATABASE", font=("Orbitron", 16, "bold"), text_color="#ff8c00")
-        self.title_label.pack(side="left", expand=True, padx=(100, 0))
+        self.title_label.pack(side="left", expand=True, padx=(0, 0))
 
         self.tabview = ctk.CTkTabview(
             self, 
@@ -65,10 +63,41 @@ class ScannerFrame(ctk.CTkFrame):
 
         self.tab_targets = self.tabview.add("TARGETS")
         self.tab_orgs = self.tabview.add("ORGANIZATIONS")
+        self.tab_ships = self.tabview.add("SHIPS")
 
         self.setup_targets_tab()
         self.setup_orgs_tab()
+        self.setup_ships_tab()
         self.setup_tags()
+
+    def setup_ships_tab(self):
+        """Ajoute le catalogue Ships dans DATABASE (sans LOADOUT/CONFIG)."""
+        self.ship_catalog = ShipFrame(self.tab_ships, self.controller, mode="catalog_only")
+        self.ship_catalog.pack(fill="both", expand=True)
+
+    def refresh(self):
+        """Rafraîchit les sous-vues actives de DATABASE."""
+        try:
+            if hasattr(self, "ship_catalog"):
+                self.ship_catalog.refresh()
+        except Exception:
+            pass
+
+    def _on_page_leave(self):
+        """Propague le cycle de sortie aux sous-vues embarquées."""
+        try:
+            if hasattr(self, "ship_catalog") and hasattr(self.ship_catalog, "_on_page_leave"):
+                self.ship_catalog._on_page_leave()
+        except Exception:
+            pass
+
+    def _close_ship_popup(self):
+        """Expose la fermeture des popups Ship pour la vue principale."""
+        try:
+            if hasattr(self, "ship_catalog") and hasattr(self.ship_catalog, "_close_ship_popup"):
+                self.ship_catalog._close_ship_popup()
+        except Exception:
+            pass
 
     def _log(self, message: str, source: str = "SCANNER") -> None:
         """Forward un message vers le terminal principal si l'API de log existe."""
@@ -84,8 +113,25 @@ class ScannerFrame(ctk.CTkFrame):
             self.tab_targets, placeholder_text="ENTER A HANDLE OR SID...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
-        self.search_entry.pack(pady=10, padx=20, fill="x")
+        self.search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.search_entry.bind("<KeyRelease>", self.run_scan)
+
+        toolbar = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        toolbar.pack(fill="x", padx=20, pady=5)
+
+        DrakeButton(
+            toolbar,
+            text="IMPORT CSV",
+            width=150,
+            command=self.import_targets_csv,
+        ).pack(side="left", padx=5)
+
+        DrakeButton(
+            toolbar,
+            text="EXPORT CSV",
+            width=150,
+            command=self.export_targets_csv,
+        ).pack(side="left", padx=5)
 
         self.results = DrakeTerminal(self.tab_targets)
         self.results.pack(pady=5, padx=10, fill="both", expand=True)
@@ -97,8 +143,25 @@ class ScannerFrame(ctk.CTkFrame):
             self.tab_orgs, placeholder_text="SEARCH AN ORG (NAME OR SID)...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
-        self.org_search_entry.pack(pady=10, padx=20, fill="x")
+        self.org_search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.org_search_entry.bind("<KeyRelease>", self.run_org_scan)
+
+        toolbar = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
+        toolbar.pack(fill="x", padx=20, pady=5)
+
+        DrakeButton(
+            toolbar,
+            text="IMPORT CSV",
+            width=150,
+            command=self.import_orgs_csv,
+        ).pack(side="left", padx=5)
+
+        DrakeButton(
+            toolbar,
+            text="EXPORT CSV",
+            width=150,
+            command=self.export_orgs_csv,
+        ).pack(side="left", padx=5)
 
         self.org_results = DrakeTerminal(self.tab_orgs)
         self.org_results.pack(pady=5, padx=10, fill="both", expand=True)
@@ -881,25 +944,88 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.tag_bind(tag_i, "<Enter>", lambda e: self.results.configure(cursor="hand2"))
                 self.results.tag_bind(tag_i, "<Leave>", lambda e: self.results.configure(cursor="arrow"))
 
-    def export(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
-        if filename:
-            try:
-                rows = self.controller.scanner.export_targets_csv()
-                with open(filename, "w", newline="", encoding="utf-8-sig") as f:
-                    writer = csv.writer(f, delimiter=";")
-                    writer.writerow(["PSEUDO", "ORGA", "SHIP", "ALIGNMENT", "NOTES"])
-                    writer.writerows(rows)
-                    main_win = self.winfo_toplevel()
-                DrakePopup.info("SYSTEMS", "EXPORT COMPLETED", parent=main_win)
-                try:
-                    if hasattr(self.controller, "log"):
-                        self.controller.log(f"Exported DB to {filename}", source="SCANNER")
-                except Exception:
-                    pass
-            except Exception as e:
-                self._log(f"DB export failed: {e}", source="ERROR")
-                DrakePopup.error("ERROR", f"EXPORT FAILED: {e}", parent=main_win)
+    def import_targets_csv(self):
+        """Import CSV strictement vers la table targets."""
+        filename = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if not filename:
+            return
+
+        main_win = self.winfo_toplevel()
+        try:
+            with open(filename, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                rows = list(reader)
+            self.controller.logger.import_targets_csv(rows)
+            self.run_scan(None)
+            DrakePopup.info("SYSTEMS", "TARGETS IMPORT COMPLETED", parent=main_win)
+            self._log(f"Targets imported from {filename}", source="SCANNER")
+        except Exception as e:
+            self._log(f"Targets import failed: {e}", source="ERROR")
+            DrakePopup.error("ERROR", f"IMPORT FAILED: {e}", parent=main_win)
+
+    def export_targets_csv(self):
+        """Export CSV strictement depuis la table targets."""
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv")],
+        )
+        if not filename:
+            return
+
+        main_win = self.winfo_toplevel()
+        try:
+            rows = self.controller.scanner.export_targets_csv()
+            with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerow(["pseudo", "org", "ship", "threat", "notes", "alignment"])
+                for row in rows:
+                    writer.writerow([row[0], row[1], row[2], row[3], row[4], row[8]])
+            DrakePopup.info("SYSTEMS", "TARGETS EXPORT COMPLETED", parent=main_win)
+            self._log(f"Targets exported to {filename}", source="SCANNER")
+        except Exception as e:
+            self._log(f"Targets export failed: {e}", source="ERROR")
+            DrakePopup.error("ERROR", f"EXPORT FAILED: {e}", parent=main_win)
+
+    def import_orgs_csv(self):
+        """Import CSV strictement vers la table organizations."""
+        filename = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if not filename:
+            return
+
+        main_win = self.winfo_toplevel()
+        try:
+            with open(filename, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                rows = list(reader)
+            self.controller.logger.import_organizations_csv(rows)
+            self.run_org_scan(None)
+            DrakePopup.info("SYSTEMS", "ORGANIZATIONS IMPORT COMPLETED", parent=main_win)
+            self._log(f"Organizations imported from {filename}", source="SCANNER")
+        except Exception as e:
+            self._log(f"Organizations import failed: {e}", source="ERROR")
+            DrakePopup.error("ERROR", f"IMPORT FAILED: {e}", parent=main_win)
+
+    def export_orgs_csv(self):
+        """Export CSV strictement depuis la table organizations."""
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv")],
+        )
+        if not filename:
+            return
+
+        main_win = self.winfo_toplevel()
+        try:
+            rows = self.controller.logger.export_organizations_csv()
+            with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerow(["sid", "name", "tag", "alignment"])
+                writer.writerows(rows)
+            DrakePopup.info("SYSTEMS", "ORGANIZATIONS EXPORT COMPLETED", parent=main_win)
+            self._log(f"Organizations exported to {filename}", source="SCANNER")
+        except Exception as e:
+            self._log(f"Organizations export failed: {e}", source="ERROR")
+            DrakePopup.error("ERROR", f"EXPORT FAILED: {e}", parent=main_win)
 
     def edit_org_window(self, sid):
         """Fenêtre d'édition Orga — Structure calquée sur le dossier Target."""

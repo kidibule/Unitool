@@ -73,7 +73,7 @@ class MainView(ctk.CTkFrame):
             ("LoggerFrame", "ARCHIVE"),
             ("IntelligenceFrame", "INTEL"),
             ("InterceptionFrame", "INTERCEPTION"),
-            ("ShipFrame", "SHIPS"),
+            ("ShipFrame", "SHIP LOADOUT"),
         ]
 
         # Remplacement par des boutons typés Drake
@@ -99,7 +99,10 @@ class MainView(ctk.CTkFrame):
 
         self.frames = {}
         for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame, InterceptionFrame, ShipFrame):
-            frame = F(self.container, self.controller)
+            if F is ShipFrame:
+                frame = F(self.container, self.controller, mode="loadout_only")
+            else:
+                frame = F(self.container, self.controller)
             self.frames[F.__name__] = frame
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)
 
