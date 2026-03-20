@@ -4,13 +4,8 @@ Contient la sidebar, le container central et le panneau intel droit.
 """
 
 import customtkinter as ctk
-from views.scanner_frame import ScannerFrame
-from views.logger_frame import LoggerFrame
-from views.contract_frame import ContractFrame
-from views.intelligence_frame import IntelligenceFrame
-from views.ship_frame import ShipFrame 
+from importlib import import_module
 from drake_ui.engine import DrakeConfig, DrakeButton
-from views.interception_frame import InterceptionFrame
 from datetime import datetime
 
 
@@ -100,14 +95,16 @@ class MainView(ctk.CTkFrame):
         self.container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.container.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
+        # Lazy loading: chaque page est créée à la demande lors du premier affichage.
         self.frames = {}
-        for F in (ScannerFrame, LoggerFrame, ContractFrame, IntelligenceFrame, InterceptionFrame, ShipFrame):
-            if F is ShipFrame:
-                frame = F(self.container, self.controller, mode="loadout_only")
-            else:
-                frame = F(self.container, self.controller)
-            self.frames[F.__name__] = frame
-            frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.page_specs = {
+            "ScannerFrame": {"module": "views.scanner_frame", "class": "ScannerFrame", "kwargs": {}},
+            "ContractFrame": {"module": "views.contract_frame", "class": "ContractFrame", "kwargs": {}},
+            "LoggerFrame": {"module": "views.logger_frame", "class": "LoggerFrame", "kwargs": {}},
+            "IntelligenceFrame": {"module": "views.intelligence_frame", "class": "IntelligenceFrame", "kwargs": {}},
+            "InterceptionFrame": {"module": "views.interception_frame", "class": "InterceptionFrame", "kwargs": {}},
+            "ShipFrame": {"module": "views.ship_frame", "class": "ShipFrame", "kwargs": {"mode": "loadout_only"}},
+        }
 
         # --- BATTLE INTEL PANEL (HUD DROITE) ---
         # Intel panel will size dynamically according to grid weights
@@ -257,21 +254,21 @@ class MainView(ctk.CTkFrame):
 
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""
-        frame = self.frames[page_name]
+        frame = self._get_or_create_frame(page_name)
         previous_page = getattr(self, "_current_page_name", None)
 
         # Réinitialisation ciblée de la page quittée (sans manipuler les placeholders internes)
         if previous_page and previous_page in self.frames and previous_page != page_name:
-            previous_frame = self.frames[previous_page]
+            previous_frame = self.frames.get(previous_page)
             try:
-                if hasattr(previous_frame, "_on_page_leave"):
+                if previous_frame is not None and hasattr(previous_frame, "_on_page_leave"):
                     previous_frame._on_page_leave()
             except Exception:
                 pass
 
         # Ferme les popups de suggestion sur toutes les pages,
         # y compris celle que l'on quitte.
-        for candidate in self.frames.values():
+        for candidate in list(self.frames.values()):
             try:
                 if hasattr(candidate, "_close_popup"):
                     candidate._close_popup()
@@ -287,6 +284,24 @@ class MainView(ctk.CTkFrame):
         # Mise à jour globale du panel intel
         self.refresh_intel()
         self._current_page_name = page_name
+
+    def _get_or_create_frame(self, page_name):
+        """Retourne une page existante ou l'instancie à la demande."""
+        frame = self.frames.get(page_name)
+        if frame is not None:
+            return frame
+
+        spec = self.page_specs.get(page_name)
+        if spec is None:
+            raise KeyError(f"Unknown page: {page_name}")
+
+        module = import_module(spec["module"])
+        frame_class = getattr(module, spec["class"])
+        kwargs = spec.get("kwargs", {})
+        frame = frame_class(self.container, self.controller, **kwargs)
+        frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.frames[page_name] = frame
+        return frame
 
     def _iter_children_recursive(self, widget):
         """Parcourt récursivement l'arborescence des widgets enfants."""
