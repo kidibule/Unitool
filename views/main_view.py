@@ -26,6 +26,8 @@ class MainView(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color=DrakeConfig.BG_MAIN)
         self.controller = controller
+        self._layout_mode = None
+        self._compact_breakpoint = 1200
         # Register this view as a log receiver on the controller (uses callback API)
         try:
             if self.controller is not None:
@@ -43,10 +45,11 @@ class MainView(ctk.CTkFrame):
         # Configuration responsive de la grille (Sidebar | Container | Intel Panel)
         # Use weights so columns resize proportionally: sidebar 1, container 4, intel 1
         # This yields center column ~= 2/3 of available width (1:4:1 ratio)
-        self.grid_columnconfigure(0, weight=1, minsize=200)
-        self.grid_columnconfigure(1, weight=4, minsize=600)
-        self.grid_columnconfigure(2, weight=1, minsize=200)
+        self.grid_columnconfigure(0, weight=1, minsize=120)
+        self.grid_columnconfigure(1, weight=4, minsize=280)
+        self.grid_columnconfigure(2, weight=1, minsize=120)
         self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=0)
 
         # --- SIDEBAR (Navigation Drake) ---
         # Sidebar will size dynamically according to grid weights
@@ -156,6 +159,48 @@ class MainView(ctk.CTkFrame):
         ).pack(side="bottom", pady=10)
 
         self.show_page("ScannerFrame")
+
+        # Responsive: réorganise la grille quand la fenêtre devient étroite.
+        self.bind("<Configure>", self._on_resize, add="+")
+        self.after(50, self._apply_responsive_layout)
+
+    def _on_resize(self, _event=None):
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self):
+        width = self.winfo_width()
+        if width <= 1:
+            return
+
+        compact = width < self._compact_breakpoint
+        new_mode = "compact" if compact else "wide"
+        if new_mode == self._layout_mode:
+            return
+
+        self._layout_mode = new_mode
+
+        if new_mode == "compact":
+            # Mode compact: panneau intel en bas pour préserver la zone centrale.
+            self.grid_columnconfigure(0, weight=1, minsize=110)
+            self.grid_columnconfigure(1, weight=5, minsize=260)
+            self.grid_columnconfigure(2, weight=0, minsize=0)
+            self.grid_rowconfigure(0, weight=1)
+            self.grid_rowconfigure(1, weight=1, minsize=180)
+
+            self.sidebar.grid_configure(row=0, column=0, sticky="nsew")
+            self.container.grid_configure(row=0, column=1, columnspan=2, sticky="nsew", padx=8, pady=8)
+            self.intel_panel.grid_configure(row=1, column=0, columnspan=3, sticky="nsew", padx=0, pady=0)
+        else:
+            # Mode large: disposition classique en 3 colonnes.
+            self.grid_columnconfigure(0, weight=1, minsize=120)
+            self.grid_columnconfigure(1, weight=4, minsize=280)
+            self.grid_columnconfigure(2, weight=1, minsize=120)
+            self.grid_rowconfigure(0, weight=1)
+            self.grid_rowconfigure(1, weight=0, minsize=0)
+
+            self.sidebar.grid_configure(row=0, column=0, sticky="nsew")
+            self.container.grid_configure(row=0, column=1, columnspan=1, sticky="nsew", padx=10, pady=10)
+            self.intel_panel.grid_configure(row=0, column=2, columnspan=1, sticky="nsew", padx=0, pady=0)
 
     def create_stat_widget(self, title, value):
         """Crée un bloc de données stylisé Drake"""
