@@ -20,6 +20,7 @@ class ShipFrame(ctk.CTkFrame):
         self.mode = mode_normalized if mode_normalized in {"all", "catalog_only", "loadout_only"} else "all"
         self.component_popup = None
         self.component_editing_name = None
+        self.cfg_slot_editing_key = None
         self.lo_slot_widgets = []
         self.cfg_slot_selected_key = ""
         self._loadout_ship_values = []
@@ -1709,6 +1710,7 @@ class ShipFrame(ctk.CTkFrame):
         ).pack(anchor="w", padx=10, pady=(8, 6))
 
         keys = []
+        edit_key = (self.cfg_slot_editing_key or "").strip().upper()
         for cat, subtype, qty, size in specs:
             key = f"{cat}::{subtype}"
             keys.append(key)
@@ -1722,40 +1724,10 @@ class ShipFrame(ctk.CTkFrame):
             )
             card.pack(fill="x", padx=8, pady=3)
 
-            left = ctk.CTkFrame(card, fg_color="transparent")
-            left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
-
-            ctk.CTkLabel(
-                left,
-                text=f"{cat} :: {subtype}",
-                font=("Segoe UI", 11, "bold"),
-                anchor="w",
-            ).pack(anchor="w")
-            ctk.CTkLabel(
-                left,
-                text=f"QTY {qty}  |  SIZE S{size}",
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_SECONDARY,
-                anchor="w",
-            ).pack(anchor="w")
-
-            right = ctk.CTkFrame(card, fg_color="transparent")
-            right.pack(side="right", padx=10, pady=7)
-
-            DrakeButton(
-                right,
-                text="EDIT",
-                width=52,
-                height=24,
-                command=lambda selection=key: self._pick_slot_spec_from_list(selection),
-            ).pack(side="left", padx=(0, 6))
-            DrakeClearButton(
-                right,
-                text="DELETE",
-                width=68,
-                height=24,
-                command=lambda c=cat, st=subtype: self.action_delete_slot_spec_direct(c, st),
-            ).pack(side="left")
+            if edit_key == key:
+                self._render_slot_edit_row(card, cat, subtype, qty, size, ship_name)
+            else:
+                self._render_slot_display_row(card, cat, subtype, qty, size)
 
         if not specs:
             ctk.CTkLabel(
@@ -1770,8 +1742,175 @@ class ShipFrame(ctk.CTkFrame):
         else:
             self.cfg_slot_selected_key = ""
 
+    def start_slot_edit(self, key: str):
+        """Passe une ligne de slot spec en mode édition inline."""
+        self.cfg_slot_editing_key = (key or "").strip().upper()
+        self.refresh_slot_terminal()
+
+    def cancel_slot_edit(self):
+        """Annule l'édition inline d'une ligne de slot spec."""
+        self.cfg_slot_editing_key = None
+        self.refresh_slot_terminal()
+
+    def save_slot_row_inline(self, original_cat, original_subtype, category_combo, subtype_combo, qty_entry, size_entry):
+        """Sauvegarde les modifications inline d'une ligne de slot spec."""
+        ship_name = self.cfg_slot_ship.get().strip().upper()
+        new_cat = category_combo.get().strip().upper()
+        new_subtype = subtype_combo.get().strip().upper()
+        qty_raw = qty_entry.get().strip()
+        size_raw = size_entry.get().strip()
+
+        if not ship_name or not new_cat or not new_subtype or not qty_raw or not size_raw:
+            self.controller.log("SLOT SPEC SAVE ABORTED: all fields are required.", source="FLEET")
+            return
+
+        try:
+            qty = int(qty_raw)
+            max_size = int(size_raw)
+        except ValueError:
+            self.controller.log("SLOT SPEC SAVE FAILED: qty and size must be integers.", source="FLEET")
+            return
+
+        if qty > 6:
+            self.controller.log("SLOT SPEC SAVE ABORTED: max qty is 6.", source="FLEET")
+            return
+        if max_size > 10:
+            self.controller.log("SLOT SPEC SAVE ABORTED: max size is 10.", source="FLEET")
+            return
+
+        try:
+            if new_cat != original_cat or new_subtype != original_subtype:
+                self.controller.ship.delete_subtype_spec(ship_name, original_cat, original_subtype)
+            self.controller.ship.upsert_subtype_spec(ship_name, new_cat, new_subtype, qty, max_size)
+            self.cfg_slot_editing_key = None
+            self.refresh_slot_terminal()
+            if self.lo_ship_selector.get().strip().upper() == ship_name:
+                self.refresh_loadout_view(ship_name)
+            self.controller.log(
+                f"SLOT SPEC SAVED: {ship_name} {new_cat}::{new_subtype} QTY {qty} SIZE S{max_size}",
+                source="FLEET",
+            )
+        except Exception as e:
+            self.controller.log(f"SLOT SPEC SAVE FAILED: {e}", source="SYSTEM ERROR")
+
+    def _render_slot_display_row(self, parent, cat, subtype, qty, size):
+        """Affiche une ligne de slot spec en mode lecture."""
+        left = ctk.CTkFrame(parent, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
+
+        ctk.CTkLabel(
+            left,
+            text=f"{cat} :: {subtype}",
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            left,
+            text=f"QTY {qty}  |  SIZE S{size}",
+            font=DrakeConfig.FONT_LOGS,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w")
+
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=7)
+
+        DrakeButton(
+            right,
+            text="EDIT",
+            width=52,
+            height=26,
+            command=lambda c=cat, st=subtype: self.start_slot_edit(f"{c}::{st}"),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            right,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda c=cat, st=subtype: self.action_delete_slot_spec_direct(c, st),
+        ).pack(side="left")
+
+    def _render_slot_edit_row(self, parent, cat, subtype, qty, size, ship_name):
+        """Affiche une ligne de slot spec en mode édition inline."""
+        editor = ctk.CTkFrame(parent, fg_color="transparent")
+        editor.pack(fill="x", expand=True, padx=8, pady=8)
+
+        top = ctk.CTkFrame(editor, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 6))
+
+        categories = self._get_all_component_categories()
+        category_combo = DrakeComboBox(top, values=categories)
+        category_combo.set(cat)
+        category_combo.pack(side="left", padx=(0, 8), expand=True, fill="x")
+
+        subtypes = self.controller.ship.list_component_subtypes(cat)
+        if not subtypes:
+            subtypes = self.mapping_types.get(cat, [])
+        subtype_combo = DrakeComboBox(top, values=subtypes if subtypes else ["GENERIC"])
+        subtype_combo.set(subtype)
+        subtype_combo.pack(side="left", expand=True, fill="x")
+
+        def on_inline_category_change(choice):
+            subs = self.controller.ship.list_component_subtypes(choice)
+            if not subs:
+                subs = self.mapping_types.get(choice, [])
+            subtype_combo.configure(values=subs if subs else ["GENERIC"])
+            subtype_combo.set(subs[0] if subs else "GENERIC")
+
+        category_combo.configure(command=on_inline_category_change)
+
+        middle = ctk.CTkFrame(editor, fg_color="transparent")
+        middle.pack(fill="x", pady=(0, 6))
+
+        qty_entry = DrakeEntry(middle, placeholder_text="MAX QTY")
+        qty_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        qty_entry.insert(0, str(qty))
+
+        size_entry = DrakeEntry(middle, placeholder_text="MAX SIZE")
+        size_entry.pack(side="left", expand=True, fill="x")
+        size_entry.insert(0, str(size))
+
+        bottom = ctk.CTkFrame(editor, fg_color="transparent")
+        bottom.pack(fill="x")
+
+        DrakeButton(
+            bottom,
+            text="SAVE",
+            width=52,
+            height=26,
+            command=lambda oc=cat, os=subtype: self.save_slot_row_inline(
+                oc, os, category_combo, subtype_combo, qty_entry, size_entry
+            ),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="CANCEL",
+            width=70,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            command=self.cancel_slot_edit,
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda c=cat, st=subtype: self.action_delete_slot_spec_direct(c, st),
+        ).pack(side="left")
+
     def _pick_slot_spec_from_list(self, selection):
-        """Sélectionne un slot depuis la liste visuelle et remplit le formulaire."""
         if not selection or "::" not in selection:
             return
         self.cfg_slot_selected_key = selection.strip().upper()
@@ -1787,6 +1926,7 @@ class ShipFrame(ctk.CTkFrame):
         if not DrakePopup.yesno("SYSTEM", f"DELETE SLOT SPEC {cat}::{st} ?", parent=self):
             return
         self.controller.ship.delete_subtype_spec(ship_name, cat, st)
+        self.cfg_slot_editing_key = None
         self.refresh_slot_terminal()
         if self.lo_ship_selector.get().strip().upper() == ship_name:
             self.refresh_loadout_view(ship_name)
@@ -1823,6 +1963,14 @@ class ShipFrame(ctk.CTkFrame):
         try:
             qty = int(self.cfg_slot_qty.get().strip())
             max_size = int(self.cfg_slot_size.get().strip())
+
+            if qty > 6:
+                self.controller.log("SLOT SPEC SAVE ABORTED: max qty is 6.", source="FLEET")
+                return
+            if max_size > 10:
+                self.controller.log("SLOT SPEC SAVE ABORTED: max size is 10.", source="FLEET")
+                return
+
             self.controller.ship.upsert_subtype_spec(ship_name, category, subtype, qty, max_size)
             self.refresh_slot_terminal()
             self.cfg_slot_category.set(category)
