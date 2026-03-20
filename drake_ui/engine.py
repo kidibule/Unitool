@@ -947,16 +947,21 @@ class DrakeComboBox(ctk.CTkFrame):
         self.button.place(relx=1, rely=0, anchor="ne", relheight=1)
 
         self.dropdown = None
+        self._ignore_next_toggle = False
 
     # ===============================
     # LOGIQUE (Vérifie bien que ces noms correspondent !)
     # ===============================
 
     def toggle_dropdown(self):
+        if self._ignore_next_toggle:
+            self._ignore_next_toggle = False
+            return
+
         if self.is_open:
-            self.close_dropdown()
+            self.close_dropdown(reason="toggle")
         else:
-            self.close_dropdown() 
+            self.close_dropdown(reason="toggle") 
             self.open_dropdown()
 
     def open_dropdown(self):
@@ -1020,7 +1025,7 @@ class DrakeComboBox(ctk.CTkFrame):
 
         # --- LOGIQUE DE FERMETURE ---
         self.dropdown.after(10, self.dropdown.focus_set)
-        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(), add="+")
+        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(reason="focusout"), add="+")
 
     def _point_in_widget(self, widget, x_root: int, y_root: int) -> bool:
         if widget is None or not widget.winfo_exists():
@@ -1039,7 +1044,7 @@ class DrakeComboBox(ctk.CTkFrame):
         in_combo = self._point_in_widget(self, x, y)
         in_dropdown = self._point_in_widget(self.dropdown, x, y)
         if not in_combo and not in_dropdown:
-            self.close_dropdown()
+            self.close_dropdown(reason="outside_click")
 
     def _reposition_dropdown(self):
         """Calcule et applique la position."""
@@ -1086,7 +1091,7 @@ class DrakeComboBox(ctk.CTkFrame):
         if self.is_open and self.dropdown:
             self._reposition_dropdown()
 
-    def close_dropdown(self):
+    def close_dropdown(self, reason=None):
         if self.dropdown:
             if hasattr(self, "_move_bind_id"):
                 self._parent_window.unbind("<Configure>", self._move_bind_id)
@@ -1098,10 +1103,11 @@ class DrakeComboBox(ctk.CTkFrame):
             self.dropdown.destroy()
             self.dropdown = None
         self.is_open = False
+        self._ignore_next_toggle = reason == "focusout"
 
     def select(self, value):
         self.selected_value.set(value)
-        self.close_dropdown()
+        self.close_dropdown(reason="select")
         if self.command:
             self.command(value)
 
@@ -1205,12 +1211,17 @@ class DrakeComboBoxLight(ctk.CTkFrame):
         self.button.place(relx=1, rely=0, anchor="ne", relheight=1)
 
         self.dropdown = None
+        self._ignore_next_toggle = False
 
     def toggle_dropdown(self):
+        if self._ignore_next_toggle:
+            self._ignore_next_toggle = False
+            return
+
         if self.is_open:
-            self.close_dropdown()
+            self.close_dropdown(reason="toggle")
         else:
-            self.close_dropdown()
+            self.close_dropdown(reason="toggle")
             self.open_dropdown()
 
     def open_dropdown(self):
@@ -1267,7 +1278,7 @@ class DrakeComboBoxLight(ctk.CTkFrame):
             item.pack(fill="x", pady=1)
 
         self.dropdown.after(10, self.dropdown.focus_set)
-        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(), add="+")
+        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(reason="focusout"), add="+")
 
     def _point_in_widget(self, widget, x_root: int, y_root: int) -> bool:
         if widget is None or not widget.winfo_exists():
@@ -1285,7 +1296,7 @@ class DrakeComboBoxLight(ctk.CTkFrame):
         in_combo = self._point_in_widget(self, x, y)
         in_dropdown = self._point_in_widget(self.dropdown, x, y)
         if not in_combo and not in_dropdown:
-            self.close_dropdown()
+            self.close_dropdown(reason="outside_click")
 
     def _reposition_dropdown(self):
         if self.dropdown:
@@ -1325,7 +1336,7 @@ class DrakeComboBoxLight(ctk.CTkFrame):
         if self.is_open and self.dropdown:
             self._reposition_dropdown()
 
-    def close_dropdown(self):
+    def close_dropdown(self, reason=None):
         if self.dropdown:
             if hasattr(self, "_move_bind_id"):
                 self._parent_window.unbind("<Configure>", self._move_bind_id)
@@ -1336,10 +1347,11 @@ class DrakeComboBoxLight(ctk.CTkFrame):
             self.dropdown.destroy()
             self.dropdown = None
         self.is_open = False
+        self._ignore_next_toggle = reason == "focusout"
 
     def select(self, value):
         self.selected_value.set(value)
-        self.close_dropdown()
+        self.close_dropdown(reason="select")
         if self.command:
             self.command(value)
 
