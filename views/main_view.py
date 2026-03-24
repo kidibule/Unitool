@@ -266,8 +266,12 @@ class MainView(ctk.CTkFrame):
 
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""
-        frame = self._get_or_create_frame(page_name)
         previous_page = getattr(self, "_current_page_name", None)
+        # Evite les refresh inutiles si l'utilisateur reclique sur le menu deja actif.
+        if previous_page == page_name:
+            return
+
+        frame = self._get_or_create_frame(page_name)
 
         # Réinitialisation ciblée de la page quittée (sans manipuler les placeholders internes)
         if previous_page and previous_page in self.frames and previous_page != page_name:
