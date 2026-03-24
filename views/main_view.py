@@ -293,6 +293,8 @@ class MainView(ctk.CTkFrame):
         # Appel du refresh interne de la page si disponible
         if hasattr(frame, "refresh"):
             frame.refresh()
+        # Réinitialise les placeholders des combobox à chaque affichage de page.
+        self._reset_combobox_placeholders_in_frame(frame)
         # Mise à jour globale du panel intel
         self.refresh_intel()
         self._current_page_name = page_name
@@ -347,6 +349,36 @@ class MainView(ctk.CTkFrame):
                         widget._activate_placeholder()
             except Exception:
                 # Certains champs peuvent être temporaires/disabled: on ignore.
+                pass
+
+    def _is_resettable_combobox(self, widget) -> bool:
+        """Détermine si un widget expose une API combobox resettable (get/set)."""
+        if isinstance(widget, ctk.CTkComboBox):
+            return True
+        if "ComboBox" in widget.__class__.__name__ and hasattr(widget, "get") and hasattr(widget, "set"):
+            return True
+        return False
+
+    def _reset_combobox_placeholders_in_frame(self, frame):
+        """Réinitialise toutes les combobox de la page à leur valeur initiale (placeholder logique)."""
+        for widget in self._iter_children_recursive(frame):
+            if not self._is_resettable_combobox(widget):
+                continue
+
+            try:
+                if hasattr(widget, "close_dropdown"):
+                    widget.close_dropdown(reason="page_change")
+            except Exception:
+                pass
+
+            try:
+                if not hasattr(widget, "_drake_placeholder_value"):
+                    widget._drake_placeholder_value = widget.get()
+
+                placeholder_value = getattr(widget, "_drake_placeholder_value", None)
+                if placeholder_value is not None:
+                    widget.set(placeholder_value)
+            except Exception:
                 pass
 
     def log_message(self, message, source="SYS"):

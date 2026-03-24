@@ -145,6 +145,9 @@ class ContractFrame(ctk.CTkFrame):
 
     def refresh(self):
         """Rafraîchit l'UI via le sub-controller 'contract'."""
+        # Re-synchronise la combobox des types à chaque affichage de la page.
+        self.update_type_menu()
+
         for scroll in [self.active_scroll, self.history_scroll]:
             for w in scroll.winfo_children(): w.destroy()
 
@@ -212,6 +215,15 @@ class ContractFrame(ctk.CTkFrame):
         # On s'assure que c'est une liste plate : ["BOUNTY", "MINING", ...]
         clean_values = [str(t[0]) for t in types]
         self.type_menu.configure(values=clean_values)
+
+        # Réinitialise le placeholder si la sélection n'existe plus ou si la liste est vide.
+        current_value = (self.type_var.get() or "").strip()
+        if not clean_values or current_value not in clean_values:
+            self.type_var.set("TYPE")
+            try:
+                self.type_menu.set("TYPE")
+            except Exception:
+                pass
         
     def apply_type(self, choice):
         if choice == "TYPE": return
