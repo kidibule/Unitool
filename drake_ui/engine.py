@@ -594,6 +594,43 @@ class DrakeTerminal(ctk.CTkTextbox):
         }
         defaults.update(kwargs)
         super().__init__(master, **defaults)
+        self._drake_state = "normal"
+        self.configure(state="disabled")
+
+    def configure(self, require_redraw=False, **kwargs):
+        state = kwargs.get("state")
+        if state is not None:
+            self._drake_state = state
+        return super().configure(require_redraw=require_redraw, **kwargs)
+
+    config = configure
+
+    def cget(self, attribute_name):
+        if attribute_name == "state":
+            return self._drake_state
+        return super().cget(attribute_name)
+
+    def _with_writable_state(self, action: Callable[[], Any]) -> Any:
+        previous_state = self._drake_state
+        if previous_state != "normal":
+            super().configure(state="normal")
+        try:
+            return action()
+        finally:
+            if previous_state != "normal":
+                super().configure(state=previous_state)
+
+    def insert(self, index, text, tags=None):
+        """Autorise les insertions programmatiques tout en gardant le widget verrouillé."""
+        return self._with_writable_state(lambda: ctk.CTkTextbox.insert(self, index, text, tags))
+
+    def delete(self, index1, index2=None):
+        """Autorise les suppressions programmatiques tout en gardant le widget verrouillé."""
+        return self._with_writable_state(lambda: ctk.CTkTextbox.delete(self, index1, index2))
+
+    def replace(self, index1, index2, text):
+        """Autorise les remplacements programmatiques tout en gardant le widget verrouillé."""
+        return self._with_writable_state(lambda: ctk.CTkTextbox.replace(self, index1, index2, text))
 
     def log(self, message: str) -> None:
         """Insère une ligne de log formatée et scroll automatique."""
