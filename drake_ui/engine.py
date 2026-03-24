@@ -620,22 +620,35 @@ class DrakeTerminal(ctk.CTkTextbox):
             if previous_state != "normal":
                 super().configure(state=previous_state)
 
+    # --- METHODE TERMINAL : INSERTION PROGRAMMATIQUE ---
     def insert(self, index, text, tags=None):
         """Autorise les insertions programmatiques tout en gardant le widget verrouillé."""
         return self._with_writable_state(lambda: ctk.CTkTextbox.insert(self, index, text, tags))
 
+    # --- METHODE TERMINAL : SUPPRESSION PROGRAMMATIQUE ---
     def delete(self, index1, index2=None):
         """Autorise les suppressions programmatiques tout en gardant le widget verrouillé."""
         return self._with_writable_state(lambda: ctk.CTkTextbox.delete(self, index1, index2))
 
+    # --- METHODE TERMINAL : REMPLACEMENT PROGRAMMATIQUE ---
     def replace(self, index1, index2, text):
         """Autorise les remplacements programmatiques tout en gardant le widget verrouillé."""
         return self._with_writable_state(lambda: ctk.CTkTextbox.replace(self, index1, index2, text))
 
+    # --- METHODE ACTIVE : LOG STANDARD SANS ESPACE ---
     def log(self, message: str) -> None:
         """Insère une ligne de log formatée et scroll automatique."""
         self.insert("end", f"> {str(message).upper()}...\n")
         self.see("end")
+
+    # --- METHODE ALTERNATIVE : LOG AVEC ESPACE ENTRE CHAQUE ENTREE ---
+    # Pour l'activer :
+    # 1. Commente la methode log active ci-dessus.
+    # 2. Decommente cette methode.
+    # def log(self, message: str) -> None:
+    #     """Insere une ligne de log formatee avec une ligne vide entre chaque entree."""
+    #     self.insert("end", f"> {str(message).upper()}...\n\n")
+    #     self.see("end")
 
 
 # ==========================================

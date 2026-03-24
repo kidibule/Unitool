@@ -57,6 +57,11 @@ class OrgController:
 
             sql = f"UPDATE organizations SET {', '.join(updates)} WHERE sid=?"
             self.app.commit(sql, tuple(params))
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
             
             if hasattr(self.app, "log"):
                 self.app.log(f"Org {sid} mise à jour (Champs: {list(cleaned_kwargs.keys())})", source="ORG_CTRL")
@@ -87,6 +92,11 @@ class OrgController:
             
             sql = f"INSERT INTO organizations ({', '.join(cols)}) VALUES ({placeholders})"
             self.app.commit(sql, tuple(vals))
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
 
     def add_org_note(self, sid: str, note_text: str) -> None:
         """Ajoute une note au journal d'une organisation."""
@@ -101,6 +111,11 @@ class OrgController:
                 "INSERT INTO organizations (sid, name, updated_at) VALUES (?, ?, strftime('%d/%m/%Y','now'))",
                 (org_sid, org_sid),
             )
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
 
         # Migration douce de l'ancienne description en premiere entree du journal.
         org = self.get_org_model(org_sid)

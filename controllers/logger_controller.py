@@ -107,6 +107,11 @@ class LoggerController:
                 self.app.log(f"Saved dossier: {pseudo}", source="LOGGER")
         except Exception:
             pass
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
 
     def get_target_comparison_row(self, pseudo: str):
         """Retourne les champs nécessaires pour vérifier les changements avant sauvegarde."""
@@ -169,6 +174,11 @@ class LoggerController:
                 self.app.log(f"Imported {count} targets from CSV", source="LOGGER")
         except Exception:
             pass
+        try:
+            if count and hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
 
     def save_organization(
         self,
@@ -210,6 +220,11 @@ class LoggerController:
             updated_at or datetime.now().strftime("%d/%m/%Y"),
         )
         self.app.commit(sql, params)
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
 
     def import_organizations_csv(self, rows: list[dict]) -> int:
         count = 0
@@ -228,6 +243,11 @@ class LoggerController:
                 ),
             )
             count += 1
+        try:
+            if count and hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
         return count
 
     def export_organizations_csv(self) -> list:

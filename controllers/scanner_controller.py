@@ -86,6 +86,11 @@ class ScannerController:
             params.append(pseudo.upper())
             sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
             self.app.commit(sql, tuple(params))
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
 
     def add_target_note(self, pseudo: str, note_text: str) -> None:
         """Ajoute une note au journal de la cible, cree la cible si absente."""
@@ -100,6 +105,11 @@ class ScannerController:
                 "INSERT INTO targets (pseudo, date, alignment) VALUES (?, strftime('%d/%m/%Y','now'), 'NEUTRE')",
                 (handle,),
             )
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
 
         # Migration douce: si une ancienne note existe dans targets.notes, on l'importe une seule fois.
         legacy = self.app.query(

@@ -34,6 +34,8 @@ class MainView(ctk.CTkFrame):
                 # Preferred: register the log callback
                 if hasattr(self.controller, "register_log_callback"):
                     self.controller.register_log_callback(self.log_message)
+                if hasattr(self.controller, "register_stats_callback"):
+                    self.controller.register_stats_callback(self.request_intel_refresh)
         except Exception:
             pass
 
@@ -249,6 +251,16 @@ class MainView(ctk.CTkFrame):
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Intel refresh error: {e}", source="UI")
+            except Exception:
+                pass
+
+    def request_intel_refresh(self):
+        """Planifie un refresh UI sûr des widgets de stats du panneau droit."""
+        try:
+            self.after(0, self.refresh_intel)
+        except Exception:
+            try:
+                self.refresh_intel()
             except Exception:
                 pass
 

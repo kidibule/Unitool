@@ -28,6 +28,11 @@ class ContractController:
             contract_type,
         )
         self.app.commit(sql, params)
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
         if hasattr(self.app, "log"):
             self.app.log(f"CONTRACT REGISTERED: {target.upper()} PRIO: {priority}", source="DECK")
 
@@ -51,12 +56,23 @@ class ContractController:
                 (target.upper(), 1, datetime.now().strftime("%d/%m/%y"))
             )
 
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
+
         if hasattr(self.app, "log"):
             self.app.log(f"MISSION COMPLETE >> {target} | +{reward_value} aUEC", source="DECK")
 
     def delete_contract(self, contract_id: int) -> None:
         """Supprime définitivement un contrat de la base."""
         self.app.commit("DELETE FROM contracts WHERE id=?", (contract_id,))
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
         if hasattr(self.app, "log"):
             self.app.log(f"TRANSACTION PURGED FROM LOGS (ID: {contract_id})", source="SYS")
 

@@ -25,6 +25,11 @@ class IntelligenceController:
         """Enregistre les infos récupérées par le bot Selenium."""
         self.app.upsert_target_intel(data)
         try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
+        try:
             if hasattr(self.app, "log"):
                 handle = data.get("Handle") or data.get("handle") or data.get("Handle")
                 self.app.log(f"Player intel upserted: {handle}", source="INTEL")
@@ -67,6 +72,11 @@ class IntelligenceController:
             params.append(pseudo.upper())
             sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
             self.app.commit(sql, tuple(params))
+            try:
+                if hasattr(self.app, "notify_stats_changed"):
+                    self.app.notify_stats_changed()
+            except Exception:
+                pass
 
     def get_all_targets(self) -> list:
         """Récupère tous les targets pour analyse."""
@@ -96,6 +106,11 @@ class IntelligenceController:
         sql = f"INSERT INTO organizations ({', '.join(columns)}) VALUES ({placeholders})"
         params = [sid.upper(), name] + list(data_payload.values())
         self.app.commit(sql, tuple(params))
+        try:
+            if hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
         return "ARCHIVED"
 
     def save_organization_roster(self, org_sid: str, members: list) -> None:
@@ -122,6 +137,11 @@ class IntelligenceController:
                 params = (handle, org_sid, rank)
                 self.app.commit(sql, params)
                 count += 1
+        try:
+            if count and hasattr(self.app, "notify_stats_changed"):
+                self.app.notify_stats_changed()
+        except Exception:
+            pass
         try:
             if hasattr(self.app, "log"):
                 self.app.log(f"Saved {count} members for org {org_sid}", source="INTEL")

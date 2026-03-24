@@ -53,6 +53,8 @@ class AppController:
             self._logger.addHandler(fh)
         # Callback list for UI forwarding (register via register_log_callback)
         self._log_callbacks = []
+        # Callback list for dashboard stats refresh in the main right panel
+        self._stats_callbacks = []
 
     def register_log_callback(self, fn):
         """Register a callable to receive (message, source) for UI forwarding."""
@@ -67,6 +69,33 @@ class AppController:
         try:
             if fn in self._log_callbacks:
                 self._log_callbacks.remove(fn)
+        except Exception:
+            pass
+
+    def register_stats_callback(self, fn):
+        """Register a callable used to refresh the right-side dashboard stats."""
+        try:
+            if callable(fn) and fn not in self._stats_callbacks:
+                self._stats_callbacks.append(fn)
+        except Exception:
+            pass
+
+    def unregister_stats_callback(self, fn):
+        """Unregister a previously registered stats callback."""
+        try:
+            if fn in self._stats_callbacks:
+                self._stats_callbacks.remove(fn)
+        except Exception:
+            pass
+
+    def notify_stats_changed(self) -> None:
+        """Notify UI listeners that dashboard counters must be refreshed."""
+        try:
+            for cb in list(self._stats_callbacks):
+                try:
+                    cb()
+                except Exception:
+                    pass
         except Exception:
             pass
 

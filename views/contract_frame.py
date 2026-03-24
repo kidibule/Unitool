@@ -202,8 +202,6 @@ class ContractFrame(ctk.CTkFrame):
     def complete_contract(self, cid, target):
         self.controller.contract.complete_contract(cid, target)
         self.refresh()
-        if hasattr(self.controller, "view") and hasattr(self.controller.view, "refresh_intel"):
-            self.controller.view.refresh_intel()
 
     def delete_history(self, cid):
         self.controller.contract.delete_contract(cid)
