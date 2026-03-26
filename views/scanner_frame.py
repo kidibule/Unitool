@@ -689,28 +689,28 @@ class ScannerFrame(ctk.CTkFrame):
         threat_f.pack(fill="x", pady=4)
         ctk.CTkLabel(threat_f, text="THREAT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         e_threat = DrakeComboBox(threat_f, values=["LOW", "MEDIUM", "HIGH", "CRITICAL"])
-        e_threat.set(str(d[3]).upper() if len(d) > 3 and d[3] else "LOW")
+        e_threat.set(str(d[3]).upper() if len(d) > 3 and d[3] else "THREAT LEVEL")
         e_threat.pack(side="right", fill="x", expand=True, padx=8)
 
         align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         align_f.pack(fill="x", pady=4)
         ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
-        e_align.set(d[8] if len(d) > 8 and d[8] else "NEUTRE")
+        e_align.set(d[8] if len(d) > 8 and d[8] else "ALIGNMENT")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 
         pvp_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         pvp_f.pack(fill="x", pady=4)
         ctk.CTkLabel(pvp_f, text="PVP LEVEL", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         e_pvp = DrakeComboBox(pvp_f, values=["NOOB", "APPRENTICE", "NORMAL", "VETERAN", "AS"])
-        e_pvp.set(str(d[9]).upper() if len(d) > 9 and d[9] else "NORMAL")
+        e_pvp.set(str(d[9]).upper() if len(d) > 9 and d[9] else "PVP LEVEL")
         e_pvp.pack(side="right", fill="x", expand=True, padx=8)
 
         activity_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         activity_f.pack(fill="x", pady=4)
         ctk.CTkLabel(activity_f, text="ACTIVITY", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         e_activity = DrakeComboBox(activity_f, values=["MINEUR", "PIRATE", "COMMERÇANT", "CHASSEUR", "MERCENAIRE", "EXPLORATEUR", "INDUSTRIEL", "MIXTE"])
-        e_activity.set(str(d[10]).upper() if len(d) > 10 and d[10] else "MIXTE")
+        e_activity.set(str(d[10]).upper() if len(d) > 10 and d[10] else "ACTIVITY")
         e_activity.pack(side="right", fill="x", expand=True, padx=8)
         e_lang = field(frame, "Language", d[14] if len(d) > 14 else "")
 
@@ -1080,7 +1080,7 @@ class ScannerFrame(ctk.CTkFrame):
         ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         
         e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
-        e_align.set(org.alignment if hasattr(org, 'alignment') else "NEUTRE")
+        e_align.set(org.alignment if hasattr(org, 'alignment') and org.alignment else "ALIGNMENT")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 
         e_allies = field(frame, "Allies", org.allies)

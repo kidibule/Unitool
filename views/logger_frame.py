@@ -39,8 +39,10 @@ class LoggerFrame(ctk.CTkFrame):
 
 
     def setup_orgs_tab(self):
-
         """Formulaire Orga avec marges augmentées et titre de section pour les notes"""
+        self.org_type_placeholder = "TYPE"
+        self.org_align_placeholder = "ALIGNEMENT"
+
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
             "fg_color": DrakeConfig.BG_TERMINAL,
@@ -69,11 +71,11 @@ class LoggerFrame(ctk.CTkFrame):
 
         self.org_type = DrakeComboBox(f_type_align, values=["ORGANIZATION", "SYNDICATE", "FACTION", "PMC"])
         self.org_type.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.org_type.set("ORGANIZATION")
+        self.org_type.set(self.org_type_placeholder)
 
         self.org_align = DrakeComboBox(f_type_align, values=["NEUTRE", "AMI", "ENNEMI"])
         self.org_align.pack(side="right", fill="x", expand=True, padx=(5, 0))
-        self.org_align.set("NEUTRE")
+        self.org_align.set(self.org_align_placeholder)
 
         # --- SECTION 3 : SPÉCIALISATION & DIPLOMATIE ---
         self.org_spec = DrakeEntry(self.tab_orgs, placeholder_text="SPECIALIZATION", **entry_kwargs)
@@ -114,16 +116,22 @@ class LoggerFrame(ctk.CTkFrame):
             return
 
         try:
+            org_type_val = self.org_type.get()
+            if org_type_val == self.org_type_placeholder:
+                org_type_val = "ORGANIZATION"
+            org_align_val = self.org_align.get()
+            if org_align_val == self.org_align_placeholder:
+                org_align_val = "NEUTRE"
             self.controller.logger.save_organization(
                 sid=sid,
                 name=name,
                 tag=self.org_tag.get(),
                 description=self.org_desc.get("0.0", "end").strip(),
-                org_type=self.org_type.get(),
+                org_type=org_type_val,
                 specialization=self.org_spec.get(),
                 allies=self.org_allies.get(),
                 enemies=self.org_enemies.get(),
-                alignment=self.org_align.get(),
+                alignment=org_align_val,
                 updated_at=datetime.now().strftime("%d/%m/%Y"),
             )
             self.controller.log(f"Corporate file {sid} synchronized.", source="SYSTEM")
@@ -165,11 +173,15 @@ class LoggerFrame(ctk.CTkFrame):
         self.org_allies.delete(0, "end")
         self.org_enemies.delete(0, "end")
         self.org_desc.delete("0.0", "end")
-        self.org_type.set("ORGANIZATION")
-        self.org_align.set("NEUTRE")
+        self.org_type.set(self.org_type_placeholder)
+        self.org_align.set(self.org_align_placeholder)
         self.focus_set()
 
     def setup_targets_tab(self):
+        self.target_threat_placeholder = "THREAT LEVEL"
+        self.target_alignment_placeholder = "ALIGNMENT"
+        self.target_pvp_placeholder = "PVP LEVEL"
+        self.target_activity_placeholder = "ACTIVITY"
         
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
@@ -189,9 +201,9 @@ class LoggerFrame(ctk.CTkFrame):
         self.p_in.bind("<Return>", self.load_target)
 
         self.threat_in = DrakeComboBox(f_top, values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],)
+        self.threat_in.set(self.target_threat_placeholder)
 
         self.threat_in.pack(side="right")
-        self.threat_in.set("LOW")
 
         # --- 2. DONNÉES RSI (ORG, SID, RANK) ---
         f_rsi = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
@@ -226,7 +238,7 @@ class LoggerFrame(ctk.CTkFrame):
         )
 
         self.a_btn.pack(pady=(5, 10), padx=50, fill="x")
-        self.a_btn.set("NEUTRE")
+        self.a_btn.set(self.target_alignment_placeholder)
 
         f_combat = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
         f_combat.pack(pady=5, padx=50, fill="x")
@@ -235,11 +247,13 @@ class LoggerFrame(ctk.CTkFrame):
             values=["NOOB", "ROOKIE", "VETERAN", "ACE"],
 )
         self.pvp_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.pvp_in.set(self.target_pvp_placeholder)
         self.act_in = DrakeComboBox(
             f_combat,
             values=["PIRATE", "BOUNTY HUNTER", "MINER", "TRADER"]
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        self.act_in.set(self.target_activity_placeholder)
 
         self.s_in = DrakeEntry(self.tab_targets, placeholder_text="CURRENT SHIP", **entry_kwargs)
         self.s_in.pack(pady=5, padx=50, fill="x")
@@ -272,14 +286,20 @@ class LoggerFrame(ctk.CTkFrame):
         lang_val = (self.lang_in.get() or "").upper()
         aff_val = (self.aff_in.get() or "").upper()
         align_val = self.a_btn.get() or "NEUTRE"
+        if align_val == self.target_alignment_placeholder:
+            align_val = "NEUTRE"
         ship_val = (self.s_in.get() or "").upper()
         pvp_val = (self.pvp_in.get() or "").upper()
-        if pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
+        if pvp_val == self.target_pvp_placeholder or pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
             pvp_val = "Inconnu"
         act_val = (self.act_in.get() or "").upper()
+        if act_val == self.target_activity_placeholder:
+            act_val = ""
         notes_val = self.n_in.get("0.0", "end").strip()
         date_val = datetime.now().strftime("%d/%m/%Y")
         threat_val = self.threat_in.get()
+        if threat_val == self.target_threat_placeholder:
+            threat_val = "LOW"
         wins_val = self.wins_in.get() or 0
         losses_val = self.loss_in.get() or 0
 
@@ -364,14 +384,14 @@ class LoggerFrame(ctk.CTkFrame):
             self.o_in.insert(0, r[1] or "")
             self.s_in.delete(0, "end")
             self.s_in.insert(0, r[2] or "")
-            self.threat_in.set(r[3] or "LOW")
+            self.threat_in.set(r[3] or self.target_threat_placeholder)
             self.n_in.delete("0.0", "end")
             self.n_in.insert("0.0", r[4] or "")
             self.wins_in.delete(0, "end")
             self.wins_in.insert(0, str(r[6] or 0))
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, str(r[7] or 0))
-            self.a_btn.set(r[8] or "NEUTRE")
+            self.a_btn.set(r[8] or self.target_alignment_placeholder)
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Loaded file: {pseudo}", source="SYSTEM")
@@ -435,11 +455,10 @@ class LoggerFrame(ctk.CTkFrame):
             self.wins_in,
             self.loss_in,
         ]:
-
-
-            self.threat_in.set("LOW")
-            self.pvp_in.set("NOOB")
-            self.a_btn.set("NEUTRE")
+            self.threat_in.set(self.target_threat_placeholder)
+            self.pvp_in.set(self.target_pvp_placeholder)
+            self.a_btn.set(self.target_alignment_placeholder)
+            self.act_in.set(self.target_activity_placeholder)
 
             e.delete(0, "end")
             self.n_in.delete("0.0", "end")
