@@ -456,14 +456,10 @@ class ShipFrame(ctk.CTkFrame):
         left_content = ctk.CTkFrame(left, fg_color="transparent")
         left_content.pack(fill="both", expand=True, padx=0, pady=0)
 
-        right = ctk.CTkScrollableFrame(
-            root,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            label_text="SLOT CONFIGURATION",
-            label_font=("Orbitron", 12),
-            label_text_color=DrakeConfig.ACCENT_PRIMARY,
-        )
-        right.pack(side="right", fill="both", expand=True)
+        right = ctk.CTkFrame(root, fg_color=DrakeConfig.BG_TERMINAL)
+        right.pack(side="right", fill="both", expand=True, padx=0, pady=0)
+        right.grid_rowconfigure(1, weight=1)
+        right.grid_columnconfigure(0, weight=1)
 
         DrakeTitle2(left_content, text="CONFIGURATION").pack(pady=(12, 0))
         
@@ -503,10 +499,14 @@ class ShipFrame(ctk.CTkFrame):
         DrakeClearButton(bottom_type_block, text="DELETE TYPE", command=self.action_delete_subtype,
             fg_color="#550000", hover_color="#770000").pack(pady=(0, 0), fill="x")
 
-        DrakeTitle2(right, text="SLOT CREATION").pack(pady=(12, 8))
+        # Slot creation form - fixed height container
+        creation_panel = ctk.CTkFrame(right, fg_color="transparent")
+        creation_panel.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+
+        DrakeTitle2(creation_panel, text="SLOT CREATION").pack(pady=(12, 8), padx=12)
 
         ship_values = self.controller.ship.list_ship_names()
-        row1 = ctk.CTkFrame(right, fg_color="transparent")
+        row1 = ctk.CTkFrame(creation_panel, fg_color="transparent")
         row1.pack(fill="x", padx=12)
 
         DrakeTitle4(row1, text="SHIP").pack(pady=(0, 4))
@@ -529,12 +529,13 @@ class ShipFrame(ctk.CTkFrame):
         self.cfg_slot_size = DrakeEntryLight(row1, placeholder_text="ex: 1")
         self.cfg_slot_size.pack(pady=4, fill="x")
 
-        slot_actions = ctk.CTkFrame(right, fg_color="transparent")
+        slot_actions = ctk.CTkFrame(creation_panel, fg_color="transparent")
         slot_actions.pack(pady=10, padx=12, fill="x")
         slot_actions_inner = ctk.CTkFrame(slot_actions, fg_color="transparent")
         slot_actions_inner.pack(anchor="center")
         DrakeButton(slot_actions_inner, text="SAVE SLOT", command=self.action_save_slot_spec).pack(side="left", padx=4)
 
+        # Registered specs - scrollable, expands to fill remaining space
         self.cfg_slot_list = ctk.CTkScrollableFrame(
             right,
             label_text="REGISTERED SLOT SPECS",
@@ -544,7 +545,7 @@ class ShipFrame(ctk.CTkFrame):
             border_width=1,
             border_color=DrakeConfig.BORDER_COLOR,
         )
-        self.cfg_slot_list.pack(padx=12, pady=8, fill="both", expand=True)
+        self.cfg_slot_list.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
 
         if categories:
             self.cfg_type_category.set(categories[0])
