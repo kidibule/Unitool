@@ -85,6 +85,21 @@ class InterceptionFrame(ctk.CTkFrame):
         self.dest_selector = DrakeComboBox(self.snare_controls, values=location_list)
         self.dest_selector.pack(pady=5, padx=12, fill="x")
 
+        DrakeTitle4(self.snare_controls, text="RADIUS (UNITS)").pack(pady=(8, 2), padx=12)
+        self.radius_entry = DrakeEntry(self.snare_controls, placeholder_text="20000")
+        self.radius_entry.insert(0, "20000")
+        self.radius_entry.pack(pady=4, padx=12, fill="x")
+
+        DrakeTitle4(self.snare_controls, text="STEP (UNITS)").pack(pady=(4, 2), padx=12)
+        self.step_entry = DrakeEntry(self.snare_controls, placeholder_text="500")
+        self.step_entry.insert(0, "500")
+        self.step_entry.pack(pady=4, padx=12, fill="x")
+
+        DrakeTitle4(self.snare_controls, text="MAX DIST (UNITS)").pack(pady=(4, 2), padx=12)
+        self.max_dist_entry = DrakeEntry(self.snare_controls, placeholder_text="250000")
+        self.max_dist_entry.insert(0, "250000")
+        self.max_dist_entry.pack(pady=4, padx=12, fill="x")
+
         ctk.CTkFrame(self.snare_controls, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(fill="x", padx=12, pady=(6, 8))
 
         DrakeTitle4(self.snare_controls, text="SELECTED SOURCES").pack(pady=(12, 2), padx=12)
@@ -108,7 +123,7 @@ class InterceptionFrame(ctk.CTkFrame):
 
         self.btn_calc = DrakeButton(
             left,
-            text="GENERATE SNARE COORDINATES",
+            text="GENERATE SNARE SOLUTION",
             command=self.run_calculation,
             height=45,
         )
@@ -419,22 +434,49 @@ class InterceptionFrame(ctk.CTkFrame):
         
         dest = self.dest_selector.get()
         start_points_label = ", ".join(active_sources)
+
+        try:
+            radius = float(self.radius_entry.get().strip())
+            step = float(self.step_entry.get().strip())
+            max_dist = float(self.max_dist_entry.get().strip())
+            if radius <= 0 or step <= 0 or max_dist <= 0:
+                raise ValueError
+        except Exception:
+            self.output.insert("end", "[ERROR] radius, step and max_dist must be positive numbers.\n")
+            return
+
         self.output.insert("end", "\n" + "-" * 58 + "\n")
-        
-        # On récupère la distance au lieu des coordonnées
-        distance_km = self.controller.interception.calculate_snare_distance(active_sources, dest)
-        
-        if distance_km is not None:
-            self.output.insert("end", "SNARE DEPLOYMENT DATA\n")
-            self.output.insert("end", f"- START POINT(S): {start_points_label}\n")
-            self.output.insert("end", f"- DESTINATION: {dest}\n")
-            self.output.insert("end", f"- OPTIMAL DISTANCE: {distance_km:,.0f} KM\n")
-            self.output.insert("end", f"- STATUS: READY\n")
+
+        result = self.controller.interception.calculate_snare_solution(
+            active_sources,
+            dest,
+            radius=radius,
+            step=step,
+            max_dist=max_dist,
+        )
+
+        if result.get("ok"):
+            point = result.get("point") or [0.0, 0.0, 0.0]
+            point_txt = f"({point[0]:,.2f}, {point[1]:,.2f}, {point[2]:,.2f})"
+            limiting = result.get("limiting_source") or "N/A"
+
+            self.output.insert("end", "SNARE SOLUTION REPORT\n")
+            self.output.insert("end", f"START POINT(S): {start_points_label}\n")
+            self.output.insert("end", f"DESTINATION: {dest}\n")
+            self.output.insert("end", f"SNARE POINT (X,Y,Z): {point_txt}\n")
+            self.output.insert("end", f"OPTIMAL DISTANCE (KM): {result['distance_km']:,.3f}\n")
             self.output.insert(
                 "end",
-                f"[INSTRUCTIONS] Start: {start_points_label} -> go to {dest} until {distance_km:,.0f} KM from the destination.\n",
+                "PARAMETERS: "
+                f"radius={result['radius_units']:,.0f}u ({result['radius_km']:,.3f} km), "
+                f"step={result['step_units']:,.0f}u, "
+                f"max_dist={result['max_dist_units']:,.0f}u, "
+                f"unit={self.controller.interception.COORD_UNIT}\n",
             )
+            self.output.insert("end", f"LIMITING SOURCE: {limiting}\n")
+            self.output.insert("end", "STATUS: READY\n")
             self.output.see("end")
         else:
-            self.output.insert("end", "[ERROR] Calculation failed.\n")
-            self.controller.log("Interception calculation failed.", source="INTERCEPTION")
+            message = result.get("message") or "Calculation failed."
+            self.output.insert("end", f"[ERROR] {message}\n")
+            self.controller.log(f"Interception calculation failed: {message}", source="INTERCEPTION")

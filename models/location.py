@@ -1,4 +1,4 @@
-"""Modèle Location — stockage local de positions (x, y, z)."""
+"""Utilitaires de seed Location depuis JSON vers SQLite."""
 
 from .base_model import BaseModel
 
@@ -6,7 +6,7 @@ import json
 import os
 
 class Location(BaseModel):
-    """Gère un catalogue local de coordonnées avec persistance JSON."""
+    """Legacy model conservé pour compatibilité historique."""
 
     def __init__(self, storage_file="data/locations.json"):
         """Initialise les positions par défaut puis charge le stockage disque."""
@@ -43,3 +43,47 @@ class Location(BaseModel):
         if os.path.exists(self.storage_file):
             with open(self.storage_file, 'r') as f:
                 self.locations.update(json.load(f))
+
+
+class LocationSeedImporter:
+    """Charge des coordonnées seed depuis un JSON (fallback intégré)."""
+
+    DEFAULT_SEED = {
+        "ARC-L1": [150000, 25000, 0],
+        "CELLIN": [45000, 12000, 500],
+        "DAYMAR": [48000, -15000, -200],
+        "YELA": [52000, 5000, 1200],
+    }
+
+    @classmethod
+    def load_seed_map(cls, seed_file="data/locations.json"):
+        """Retourne un mapping name -> [x,y,z] valide, depuis JSON ou fallback."""
+        seed = dict(cls.DEFAULT_SEED)
+        if not os.path.exists(seed_file):
+            return seed
+
+        try:
+            with open(seed_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+        except Exception:
+            return seed
+
+        if not isinstance(loaded, dict):
+            return seed
+
+        normalized = {}
+        for name, coords in loaded.items():
+            if not isinstance(name, str):
+                continue
+            if not isinstance(coords, (list, tuple)) or len(coords) < 3:
+                continue
+            try:
+                normalized[name.strip().upper()] = [
+                    float(coords[0]),
+                    float(coords[1]),
+                    float(coords[2]),
+                ]
+            except (TypeError, ValueError):
+                continue
+
+        return normalized if normalized else seed
