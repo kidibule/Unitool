@@ -1,7 +1,7 @@
-"""Frame d'interception quantique.
+"""Quantum interception frame.
 
-Permet de gérer les positions, sélectionner des points source/destination
-et lancer le calcul de distance de déploiement snare.
+Manages locations, source/destination selection,
+and snare distance computation.
 """
 
 import customtkinter as ctk
@@ -9,7 +9,7 @@ from datetime import datetime
 from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearButton, DrakeEntry, DrakePopup, DrakeTerminal, DrakeTitle2, DrakeTitle4
 
 class InterceptionFrame(ctk.CTkFrame):
-    """Vue UI pour le calcul et la gestion des positions d'interception."""
+    """UI view for interception calculations and location management."""
 
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
@@ -20,28 +20,87 @@ class InterceptionFrame(ctk.CTkFrame):
         self.source_checkboxes = []
         self.moon_checkboxes = []
         self.moon_vars = {}
+        self.road_selected_name = ""
+        self.road_editing_name = ""
         self.setup_ui()
 
     def setup_ui(self):
-        """Construit l'interface complète (contrôles + terminal de sortie)."""
+        """Builds a single-window interception layout (no tabs)."""
         DrakeConfig.create_title(self, "QUANTUM INTERCEPTION SYSTEM")
 
-        self.int_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.int_container.pack(fill="both", expand=True, padx=20, pady=10)
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=20, pady=10)
 
         location_list = self.get_location_names()
 
-        self.int_tabview = DrakeConfig.create_tabview(
-            self.int_container,
-            segmented_button_selected_hover_color=DrakeConfig.ACCENT_HOVER,
-            pack_padx=0,
-            pack_pady=0,
+        f_add = ctk.CTkFrame(
+            container,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
         )
+        f_add.pack(fill="x", pady=(0, 6))
+        top_row = ctk.CTkFrame(f_add, fg_color="transparent")
+        top_row.pack(fill="x", padx=6, pady=(8, 4))
 
-        tab_snare = self.int_tabview.add("SNARE")
+        self.road_name_entry = DrakeEntry(
+            top_row,
+            placeholder_text="Road name",
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.road_name_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        DrakeButton(top_row, text="SAVE", width=100, command=self.save_road_preset).pack(side="left", padx=(0, 6))
+        DrakeButton(top_row, text="GENERATE", width=110, command=self.generate_road_preview).pack(side="left")
+
+        bottom_row = ctk.CTkFrame(f_add, fg_color="transparent")
+        bottom_row.pack(fill="x", padx=6, pady=(2, 10))
+
+        self.start_selector = DrakeComboBox(bottom_row, values=location_list, width=160)
+        self.start_selector.pack(side="left", padx=(0, 6))
+        self.start_selector.set("START")
+
+        DrakeButton(bottom_row, text="ADD START", width=95, command=self.add_start_source).pack(side="left", padx=(0, 6))
+        DrakeClearButton(bottom_row, text="CLEAR", width=70, command=self.clear_start_sources).pack(side="left", padx=(0, 8))
+
+        self.dest_selector = DrakeComboBox(bottom_row, values=location_list, width=160)
+        self.dest_selector.pack(side="left", padx=(0, 6))
+        self.dest_selector.set("DESTINATION")
+
+        self.radius_entry = DrakeEntry(
+            bottom_row,
+            placeholder_text="Radius",
+            width=95,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.radius_entry.insert(0, "20000")
+        self.radius_entry.pack(side="left", padx=(0, 6))
+
+        self.step_entry = DrakeEntry(
+            bottom_row,
+            placeholder_text="Step",
+            width=80,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.step_entry.insert(0, "500")
+        self.step_entry.pack(side="left", padx=(0, 6))
+
+        self.max_dist_entry = DrakeEntry(
+            bottom_row,
+            placeholder_text="Max",
+            width=110,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.max_dist_entry.insert(0, "250000")
+        self.max_dist_entry.pack(side="left")
 
         DrakeButton(
-            tab_snare,
+            container,
             text="EDIT POSITIONS",
             command=self.open_position_manager,
             fg_color="transparent",
@@ -49,97 +108,114 @@ class InterceptionFrame(ctk.CTkFrame):
             border_color=DrakeConfig.BORDER_COLOR,
             text_color=DrakeConfig.TEXT_SECONDARY,
             hover_color=DrakeConfig.BG_PANEL,
-            width=90,
-            height=20,
+            width=110,
+            height=22,
             font=("Segoe UI", 9, "bold"),
             corner_radius=0,
-        ).pack(anchor="ne", padx=10, pady=(8, 2))
+        ).pack(anchor="ne", pady=(0, 6))
 
-        snare_container = ctk.CTkFrame(tab_snare, fg_color="transparent")
-        snare_container.pack(fill="both", expand=True, padx=20, pady=(4, 20))
+        lower_sections = ctk.CTkFrame(container, fg_color="transparent")
+        lower_sections.pack(fill="both", expand=True)
+        lower_sections.grid_columnconfigure(0, weight=1)
+        lower_sections.grid_rowconfigure(0, weight=8, minsize=260)
+        lower_sections.grid_rowconfigure(1, weight=1, minsize=130)
+        lower_sections.grid_rowconfigure(2, weight=1, minsize=150)
 
-        left = ctk.CTkFrame(snare_container, width=250, fg_color=DrakeConfig.BG_MAIN)
-        left.pack(side="left", fill="y", padx=(0, 10))
-        left.pack_propagate(False)
+        self.road_output = DrakeTerminal(lower_sections)
+        self.road_output.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
 
-        self.snare_controls = ctk.CTkScrollableFrame(left, fg_color="transparent")
-        self.snare_controls.pack(fill="both", expand=True, padx=0, pady=(0, 6))
+        sources_section = ctk.CTkFrame(
+            lower_sections,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        sources_section.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
 
-        right = DrakeTerminal(snare_container)
-        right.pack(side="right", fill="both", expand=True)
+        sources_header = ctk.CTkFrame(sources_section, fg_color="transparent")
+        sources_header.pack(fill="x", padx=8, pady=(6, 2))
 
-        DrakeTitle2(self.snare_controls, text="SNARE SETUP").pack(pady=(10, 8))
+        DrakeTitle4(sources_header, text="START SOURCES").pack(side="left", pady=0, padx=0)
 
-        DrakeTitle4(self.snare_controls, text="START POINT").pack(pady=(0, 2), padx=12)
-        self.source_selector = DrakeComboBox(self.snare_controls, values=location_list, command=self.on_source_changed)
-        self.source_selector.pack(pady=5, padx=12, fill="x")
-
-        self.source_moons_frame = ctk.CTkFrame(self.snare_controls, fg_color="transparent")
-
-        self.source_actions = ctk.CTkFrame(self.snare_controls, fg_color="transparent")
-        self.source_actions.pack(pady=(4, 6), padx=12, fill="x")
-        DrakeButton(self.source_actions, text="ADD", width=80, command=self.add_source_to_list).pack(side="left", padx=(0, 4))
-        self.btn_clear = DrakeClearButton(self.source_actions, command=self.clear_sources)
-        self.btn_clear.pack(side="left", padx=(4, 0))
-
-        DrakeTitle4(self.snare_controls, text="DESTINATION").pack(pady=(8, 2), padx=12)
-        self.dest_selector = DrakeComboBox(self.snare_controls, values=location_list)
-        self.dest_selector.pack(pady=5, padx=12, fill="x")
-
-        DrakeTitle4(self.snare_controls, text="RADIUS (UNITS)").pack(pady=(8, 2), padx=12)
-        self.radius_entry = DrakeEntry(self.snare_controls, placeholder_text="20000")
-        self.radius_entry.insert(0, "20000")
-        self.radius_entry.pack(pady=4, padx=12, fill="x")
-
-        DrakeTitle4(self.snare_controls, text="STEP (UNITS)").pack(pady=(4, 2), padx=12)
-        self.step_entry = DrakeEntry(self.snare_controls, placeholder_text="500")
-        self.step_entry.insert(0, "500")
-        self.step_entry.pack(pady=4, padx=12, fill="x")
-
-        DrakeTitle4(self.snare_controls, text="MAX DIST (UNITS)").pack(pady=(4, 2), padx=12)
-        self.max_dist_entry = DrakeEntry(self.snare_controls, placeholder_text="250000")
-        self.max_dist_entry.insert(0, "250000")
-        self.max_dist_entry.pack(pady=4, padx=12, fill="x")
-
-        ctk.CTkFrame(self.snare_controls, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(fill="x", padx=12, pady=(6, 8))
-
-        DrakeTitle4(self.snare_controls, text="SELECTED SOURCES").pack(pady=(12, 2), padx=12)
-        self.sources_count_label = ctk.CTkLabel(
-            self.snare_controls,
-            text="SOURCES ADDED: 0",
+        self.start_sources_label = ctk.CTkLabel(
+            sources_section,
+            text="START SOURCES: NONE",
             font=DrakeConfig.FONT_LOGS,
             text_color=DrakeConfig.TEXT_SECONDARY,
-            fg_color=DrakeConfig.BG_TERMINAL,
+            anchor="w",
             justify="left",
-            wraplength=220,
         )
-        self.sources_count_label.pack(pady=(0, 8), padx=12, fill="x")
+        self.start_sources_label.pack(fill="x", padx=8, pady=(0, 4))
 
-        self.sources_check_frame = ctk.CTkScrollableFrame(
-            self.snare_controls,
+        self.start_sources_frame = ctk.CTkScrollableFrame(
+            sources_section,
             fg_color=DrakeConfig.BG_TERMINAL,
-            height=120,
+            height=54,
         )
-        self.sources_check_frame.pack(pady=(0, 8), padx=12, fill="x")
+        self.start_sources_frame.pack(fill="x", padx=8, pady=(0, 8))
 
-        self.btn_calc = DrakeButton(
-            left,
-            text="GENERATE SNARE SOLUTION",
-            command=self.run_calculation,
-            height=45,
+        self.road_list = ctk.CTkScrollableFrame(
+            lower_sections,
+            label_text="REGISTERED ROAD PRESETS",
+            label_text_color=DrakeConfig.TEXT_SECONDARY,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            height=150,
         )
-        self.btn_calc.pack(side="bottom", pady=(6, 10), padx=12, fill="x")
+        self.road_list.grid(row=2, column=0, sticky="nsew")
 
-        self.on_source_changed(self.source_selector.get())
+        self.output = self.road_output
+        self.refresh_start_sources_display()
+        self.refresh_roads()
 
-        self.output = right
+    def setup_road_tab(self, parent_tab):
+        road_container = ctk.CTkFrame(parent_tab, fg_color="transparent")
+        road_container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        DrakeTitle2(road_container, text="ROAD MANAGEMENT").pack(pady=(4, 8), anchor="w")
+
+        # Top creation/update row, inspired by Contract add-form layout.
+        f_add = ctk.CTkFrame(
+            road_container,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        f_add.pack(pady=(0, 8), fill="x")
+        f_add.grid_columnconfigure(0, weight=1)
+        f_add.grid_columnconfigure((1, 2, 3), weight=0)
+
+        self.road_name_entry = DrakeEntry(f_add, placeholder_text="Road name")
+        self.road_name_entry.grid(row=0, column=0, padx=8, pady=10, sticky="ew")
+
+        DrakeButton(f_add, text="SAVE / UPDATE", width=130, command=self.save_road_preset).grid(row=0, column=1, padx=4, pady=10)
+        DrakeButton(f_add, text="LOAD SELECTED", width=120, command=self.load_road_preset).grid(row=0, column=2, padx=4, pady=10)
+        DrakeClearButton(f_add, text="DELETE SELECTED", width=130, command=self.delete_road_preset).grid(row=0, column=3, padx=(4, 8), pady=10)
+
+        self.road_list = ctk.CTkScrollableFrame(
+            road_container,
+            label_text="REGISTERED ROAD PRESETS",
+            label_text_color=DrakeConfig.TEXT_SECONDARY,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.road_list.pack(pady=(0, 8), fill="both", expand=True)
+
+        self.road_output = DrakeTerminal(road_container, height=160)
+        self.road_output.pack(fill="x")
 
     # ==========================================
-    # LOGIQUE DE DONNÉES
+    # DATA LOGIC
     # ==========================================
 
     def get_location_names(self):
-        """Récupère proprement les noms pour les menus."""
+        """Safely fetches location names for selectors."""
         try:
             names = self.controller.interception.get_location_names()
             return names if names else ["NO DATA"]
@@ -147,17 +223,576 @@ class InterceptionFrame(ctk.CTkFrame):
             return ["NO DATA"]
 
     def refresh_locations(self):
-        """Force la mise à jour des ComboBox."""
+        """Refreshes all location selectors."""
         new_list = self.get_location_names()
-        self.source_selector.configure(values=new_list)
-        self.dest_selector.configure(values=new_list)
+        if self._widget_exists("start_selector"):
+            current_start = self.start_selector.get().strip().upper()
+            self.start_selector.configure(values=new_list)
+            if current_start in new_list:
+                self.start_selector.set(current_start)
+            else:
+                self.start_selector.set("START")
+        if self._widget_exists("dest_selector"):
+            current_dest = self.dest_selector.get().strip().upper()
+            self.dest_selector.configure(values=new_list)
+            if current_dest in new_list:
+                self.dest_selector.set(current_dest)
+            else:
+                self.dest_selector.set("DESTINATION")
         if self._widget_exists("del_pos_selector"):
             self.del_pos_selector.configure(values=new_list)
-        if hasattr(self, "source_selector"):
-            self.on_source_changed(self.source_selector.get())
         if self._widget_exists("new_pos_type"):
             self.on_location_type_change(self.new_pos_type.get())
+        self.refresh_roads()
         self.output.insert("end", ">>> Database refreshed: Selectors updated.\n")
+
+    def get_road_names(self):
+        try:
+            names = self.controller.interception.get_road_names()
+            return names if names else []
+        except Exception:
+            return []
+
+    def refresh_roads(self):
+        if not self._widget_exists("road_list"):
+            return
+
+        for widget in self.road_list.winfo_children():
+            widget.destroy()
+
+        road_names = self.get_road_names()
+        if not road_names:
+            ctk.CTkLabel(
+                self.road_list,
+                text="NO ROAD PRESET SAVED",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=(8, 10))
+            self.road_selected_name = ""
+            return
+
+        if self.road_selected_name not in road_names:
+            self.road_selected_name = road_names[0]
+
+        for road_name in road_names:
+            road = self.controller.interception.get_road(road_name)
+            if not road:
+                continue
+
+            selected = road_name == self.road_selected_name
+            card = ctk.CTkFrame(
+                self.road_list,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.ACCENT_PRIMARY if selected else DrakeConfig.BORDER_COLOR,
+            )
+            card.pack(fill="x", padx=8, pady=3)
+
+            if road_name == (self.road_editing_name or ""):
+                self._render_road_edit_row(card, road)
+            else:
+                self._render_road_display_row(card, road_name, road)
+
+    def _render_road_display_row(self, parent, road_name, road):
+        left = ctk.CTkFrame(parent, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
+
+        ctk.CTkLabel(
+            left,
+            text=road_name,
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            left,
+            text=(
+                f"DEST {road['destination_name']} | SRC {len(road['source_names'])}"
+                f" | R {road['radius']:.0f} | STEP {road['step']:.0f} | MAX {road['max_dist']:.0f}"
+            ),
+            font=DrakeConfig.FONT_LOGS,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w")
+
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=7)
+
+        DrakeButton(
+            right,
+            text="EDIT",
+            width=50,
+            height=26,
+            command=lambda n=road_name: self.start_road_edit(n),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            right,
+            text="LOAD",
+            width=50,
+            height=26,
+            command=lambda n=road_name: self.load_road_preset(n),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            right,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda n=road_name: self.delete_road_preset(n),
+        ).pack(side="left")
+
+    def _render_road_edit_row(self, parent, road):
+        editor = ctk.CTkFrame(parent, fg_color="transparent")
+        editor.pack(fill="x", expand=True, padx=8, pady=8)
+
+        top = ctk.CTkFrame(editor, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 6))
+
+        name_entry = DrakeEntry(top, placeholder_text="Road name")
+        name_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        name_entry.insert(0, road["name"])
+
+        destinations = self.get_location_names()
+        dest_combo = DrakeComboBox(top, values=destinations)
+        dest_combo.pack(side="left", expand=True, fill="x")
+        if road["destination_name"] in destinations:
+            dest_combo.set(road["destination_name"])
+        elif destinations:
+            dest_combo.set(destinations[0])
+
+        middle = ctk.CTkFrame(editor, fg_color="transparent")
+        middle.pack(fill="x", pady=(0, 6))
+
+        radius_entry = DrakeEntry(middle, placeholder_text="Radius")
+        radius_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        radius_entry.insert(0, f"{road['radius']:.0f}")
+
+        step_entry = DrakeEntry(middle, placeholder_text="Step")
+        step_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        step_entry.insert(0, f"{road['step']:.0f}")
+
+        max_entry = DrakeEntry(middle, placeholder_text="Max dist")
+        max_entry.pack(side="left", expand=True, fill="x")
+        max_entry.insert(0, f"{road['max_dist']:.0f}")
+
+        source_line = DrakeEntry(editor, placeholder_text="Sources (comma-separated)")
+        source_line.pack(fill="x", pady=(0, 8))
+        source_line.insert(0, ", ".join(road.get("source_names", [])))
+
+        bottom = ctk.CTkFrame(editor, fg_color="transparent")
+        bottom.pack(fill="x")
+
+        DrakeButton(
+            bottom,
+            text="SAVE",
+            width=52,
+            height=26,
+            command=lambda old=road["name"]: self.save_road_row_inline(
+                old,
+                name_entry,
+                dest_combo,
+                source_line,
+                radius_entry,
+                step_entry,
+                max_entry,
+            ),
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="CANCEL",
+            width=70,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            command=self.cancel_road_edit,
+        ).pack(side="left", padx=(0, 6))
+        DrakeButton(
+            bottom,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda n=road["name"]: self.delete_road_preset(n),
+        ).pack(side="left")
+
+    def start_road_edit(self, road_name):
+        self.road_selected_name = (road_name or "").strip()
+        self.road_editing_name = self.road_selected_name
+        self.refresh_roads()
+
+    def cancel_road_edit(self):
+        self.road_editing_name = ""
+        self.refresh_roads()
+
+    def save_road_row_inline(self, old_name, name_entry, dest_combo, source_line, radius_entry, step_entry, max_entry):
+        old_name = (old_name or "").strip()
+        new_name = name_entry.get().strip()
+        dest = dest_combo.get().strip().upper()
+        raw_sources = source_line.get().strip()
+        sources = [part.strip().upper() for part in raw_sources.split(",") if part.strip()]
+
+        if not new_name:
+            DrakePopup.warning("INTERCEPTION", "Road name is required.", parent=self)
+            return
+
+        try:
+            radius = float(radius_entry.get().strip())
+            step = float(step_entry.get().strip())
+            max_dist = float(max_entry.get().strip())
+        except Exception:
+            DrakePopup.error("INTERCEPTION", "radius, step and max_dist must be numeric.", parent=self)
+            return
+
+        if not sources:
+            DrakePopup.warning("INTERCEPTION", "At least one source point is required.", parent=self)
+            return
+
+        try:
+            self.controller.interception.save_road(new_name, sources, dest, radius, step, max_dist)
+            if new_name != old_name:
+                self.controller.interception.delete_road(old_name)
+            self.road_selected_name = new_name
+            self.road_editing_name = ""
+            self.refresh_roads()
+            self.output.insert("end", f"[+] Road updated: {new_name}\n")
+            self.output.see("end")
+            if hasattr(self, "road_output"):
+                self.road_output.insert("end", f"[+] Road updated: {new_name}\n")
+                self.road_output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Interception road updated: {new_name}", source="INTERCEPTION")
+        except Exception as e:
+            DrakePopup.error("INTERCEPTION", str(e), parent=self)
+
+    def _select_road_for_edit(self, road_name):
+        self.road_selected_name = (road_name or "").strip()
+        if self._widget_exists("road_name_entry"):
+            self.road_name_entry.delete(0, "end")
+            self.road_name_entry.insert(0, self.road_selected_name)
+        if self._widget_exists("snare_road_name_entry"):
+            self.snare_road_name_entry.delete(0, "end")
+            self.snare_road_name_entry.insert(0, self.road_selected_name)
+        self.load_road_preset(road_name=self.road_selected_name)
+        self.road_editing_name = ""
+        self.refresh_roads()
+
+    def _active_sources_for_save(self):
+        if self.selected_sources:
+            return [str(s).strip().upper() for s in self.selected_sources if str(s).strip()]
+
+        if self._widget_exists("start_selector"):
+            start = self.start_selector.get().strip().upper()
+            if start and start not in {"NO DATA", "START"}:
+                return [start]
+
+        return list(self.selected_sources)
+
+    def add_start_source(self):
+        if not self._widget_exists("start_selector"):
+            return
+        start = self.start_selector.get().strip().upper()
+        if not start or start in {"NO DATA", "START"}:
+            DrakePopup.warning("INTERCEPTION", "Select a valid start location first.", parent=self)
+            return
+        if start not in self.selected_sources:
+            self.selected_sources.append(start)
+            self.output.insert("end", f"[+] Start source added: {start}\n")
+            self.output.see("end")
+        self.refresh_start_sources_display()
+
+    def clear_start_sources(self):
+        self.selected_sources = []
+        self.refresh_start_sources_display()
+        self.output.insert("end", "[~] Start sources cleared.\n")
+        self.output.see("end")
+
+    def remove_start_source(self, source_name):
+        self.selected_sources = [s for s in self.selected_sources if s != source_name]
+        self.refresh_start_sources_display()
+
+    def refresh_start_sources_display(self):
+        if self._widget_exists("start_sources_label"):
+            if self.selected_sources:
+                self.start_sources_label.configure(text=f"START SOURCES: {len(self.selected_sources)} selected")
+            else:
+                self.start_sources_label.configure(text="START SOURCES: NONE")
+
+        if not self._widget_exists("start_sources_frame"):
+            return
+
+        for child in self.start_sources_frame.winfo_children():
+            child.destroy()
+
+        if not self.selected_sources:
+            ctk.CTkLabel(
+                self.start_sources_frame,
+                text="No start source selected.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=8, pady=(6, 4))
+            return
+
+        for source_name in self.selected_sources:
+            row = ctk.CTkFrame(self.start_sources_frame, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
+            row.pack(fill="x", padx=4, pady=2)
+            ctk.CTkLabel(row, text=source_name, font=DrakeConfig.FONT_LOGS, anchor="w").pack(side="left", padx=8, pady=4)
+            DrakeClearButton(
+                row,
+                text="REMOVE",
+                width=74,
+                command=lambda n=source_name: self.remove_start_source(n),
+            ).pack(side="right", padx=6, pady=3)
+
+    def generate_road_preview(self):
+        sources = self._active_sources_for_save()
+        if not sources:
+            DrakePopup.warning("INTERCEPTION", "Select a start location first.", parent=self)
+            return
+
+        dest = self.dest_selector.get().strip().upper() if self._widget_exists("dest_selector") else ""
+        if not dest or dest in {"NO DATA", "DESTINATION"}:
+            DrakePopup.warning("INTERCEPTION", "Select a destination first.", parent=self)
+            return
+
+        try:
+            radius = float(self.radius_entry.get().strip())
+            step = float(self.step_entry.get().strip())
+            max_dist = float(self.max_dist_entry.get().strip())
+        except Exception:
+            DrakePopup.error("INTERCEPTION", "radius, step and max_dist must be numeric.", parent=self)
+            return
+
+        self._run_road_calculation(sources, dest, radius, step, max_dist)
+
+    def _run_road_calculation(self, sources, dest, radius, step, max_dist):
+        """Runs interception calculation and renders output report."""
+        src = [str(s).strip().upper() for s in (sources or []) if str(s).strip()]
+        destination = (dest or "").strip().upper()
+
+        if not src:
+            DrakePopup.warning("INTERCEPTION", "No valid start source found for calculation.", parent=self)
+            return
+        if not destination:
+            DrakePopup.warning("INTERCEPTION", "No valid destination found for calculation.", parent=self)
+            return
+
+        self.output.insert("end", "\n" + "=" * 72 + "\n")
+        result = self.controller.interception.calculate_snare_solution(
+            src,
+            destination,
+            radius=radius,
+            step=step,
+            max_dist=max_dist,
+        )
+
+        if result.get("ok"):
+            self._render_snare_success(result, src, destination)
+            self.output.see("end")
+            return
+
+        message = result.get("message") or "Calculation failed."
+        self._render_snare_failure(message, src, destination, radius, step, max_dist)
+        self.output.see("end")
+
+    def _save_road_common(self, road_name):
+        road_name = (road_name or "").strip()
+        if not road_name:
+            DrakePopup.warning("INTERCEPTION", "Road name is required.", parent=self)
+            return False
+
+        sources = self._active_sources_for_save()
+        dest = self.dest_selector.get().strip().upper() if hasattr(self, "dest_selector") else ""
+        if not dest or dest in {"NO DATA", "DESTINATION"}:
+            DrakePopup.warning("INTERCEPTION", "Select a destination first.", parent=self)
+            return False
+
+        try:
+            radius = float(self.radius_entry.get().strip())
+            step = float(self.step_entry.get().strip())
+            max_dist = float(self.max_dist_entry.get().strip())
+        except Exception:
+            DrakePopup.error("INTERCEPTION", "radius, step and max_dist must be numeric.", parent=self)
+            return False
+
+        try:
+            saved_name = self.controller.interception.save_road(
+                road_name,
+                sources,
+                dest,
+                radius,
+                step,
+                max_dist,
+            )
+            self.road_selected_name = saved_name
+            self.road_editing_name = ""
+            self.refresh_roads()
+
+            if self._widget_exists("road_name_entry"):
+                self.road_name_entry.delete(0, "end")
+                self.road_name_entry.insert(0, saved_name)
+            if self._widget_exists("snare_road_name_entry"):
+                self.snare_road_name_entry.delete(0, "end")
+                self.snare_road_name_entry.insert(0, saved_name)
+
+            self.output.insert("end", f"[+] Road saved: {saved_name}\n")
+            if hasattr(self, "road_output"):
+                self.road_output.insert("end", f"[+] Road saved: {saved_name}\n")
+                self.road_output.see("end")
+            self.output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Interception road saved: {saved_name}", source="INTERCEPTION")
+            return True
+        except Exception as e:
+            DrakePopup.error("INTERCEPTION", str(e), parent=self)
+            return False
+
+    def save_road_from_snare(self):
+        road_name = self.snare_road_name_entry.get().strip() if self._widget_exists("snare_road_name_entry") else ""
+        self._save_road_common(road_name)
+
+    def save_road_preset(self):
+        road_name = self.road_name_entry.get().strip() if self._widget_exists("road_name_entry") else ""
+        self._save_road_common(road_name)
+
+    def load_road_preset(self, road_name=None):
+        selected = (road_name or self.road_selected_name or "").strip()
+        if not selected and self._widget_exists("road_name_entry"):
+            selected = self.road_name_entry.get().strip()
+
+        if not selected:
+            DrakePopup.warning("INTERCEPTION", "Select a road to load.", parent=self)
+            return
+
+        road = self.controller.interception.get_road(selected)
+        if not road:
+            DrakePopup.error("INTERCEPTION", "Selected road was not found.", parent=self)
+            self.refresh_roads()
+            return
+
+        self.road_selected_name = road["name"]
+        self.road_editing_name = ""
+
+        location_set = set(self.get_location_names())
+        loaded_sources = [name for name in road["source_names"] if name in location_set]
+        destination = road["destination_name"]
+
+        if destination not in location_set:
+            DrakePopup.warning(
+                "INTERCEPTION",
+                f"Destination '{destination}' is missing from locations.",
+                parent=self,
+            )
+
+        self.selected_sources = loaded_sources
+        self.refresh_start_sources_display()
+
+        if destination in location_set:
+            self.dest_selector.set(destination)
+        else:
+            self.dest_selector.set("DESTINATION")
+
+        self.radius_entry.delete(0, "end")
+        self.radius_entry.insert(0, f"{road['radius']:.0f}")
+
+        self.step_entry.delete(0, "end")
+        self.step_entry.insert(0, f"{road['step']:.0f}")
+
+        self.max_dist_entry.delete(0, "end")
+        self.max_dist_entry.insert(0, f"{road['max_dist']:.0f}")
+
+        if hasattr(self, "road_name_entry"):
+            self.road_name_entry.delete(0, "end")
+            self.road_name_entry.insert(0, road["name"])
+        if hasattr(self, "snare_road_name_entry"):
+            self.snare_road_name_entry.delete(0, "end")
+            self.snare_road_name_entry.insert(0, road["name"])
+        first_source = road.get("source_names", [None])[0]
+        if first_source and self._widget_exists("start_selector"):
+            self.start_selector.set(first_source)
+        elif self._widget_exists("start_selector"):
+            self.start_selector.set("START")
+
+        self.output.insert("end", f"[+] Road loaded: {road['name']}\n")
+        if hasattr(self, "road_output"):
+            self.road_output.insert("end", f"[+] Road loaded: {road['name']}\n")
+            self.road_output.see("end")
+        self.output.see("end")
+        if hasattr(self.controller, "log"):
+            self.controller.log(f"Interception road loaded: {road['name']}", source="INTERCEPTION")
+        # Loading a saved road must immediately run interception with loaded values.
+        try:
+            self._run_road_calculation(
+                loaded_sources,
+                destination,
+                float(road["radius"]),
+                float(road["step"]),
+                float(road["max_dist"]),
+            )
+        except Exception as e:
+            self.output.insert("end", f"[ERROR] Auto-generate failed after load: {e}\n")
+            self.output.see("end")
+        self.refresh_roads()
+
+    def delete_road_preset(self, road_name=None):
+        selected = (road_name or self.road_selected_name or "").strip()
+        if not selected and self._widget_exists("road_name_entry"):
+            selected = self.road_name_entry.get().strip()
+
+        if not selected:
+            DrakePopup.warning("INTERCEPTION", "Select a road to delete.", parent=self)
+            return
+
+        if not DrakePopup.yesno("INTERCEPTION", f"Delete road {selected}?", parent=self):
+            return
+
+        try:
+            deleted_name = self.controller.interception.delete_road(selected)
+            self.refresh_roads()
+            self.output.insert("end", f"[-] Road deleted: {deleted_name}\n")
+            if hasattr(self, "road_output"):
+                self.road_output.insert("end", f"[-] Road deleted: {deleted_name}\n")
+                self.road_output.see("end")
+            if self.road_selected_name == deleted_name:
+                self.road_selected_name = ""
+            if self.road_editing_name == deleted_name:
+                self.road_editing_name = ""
+            self.output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Interception road deleted: {deleted_name}", source="INTERCEPTION")
+        except Exception as e:
+            DrakePopup.error("INTERCEPTION", str(e), parent=self)
+
+    # Backward-compatible wrappers (legacy route naming)
+    def get_route_names(self):
+        return self.get_road_names()
+
+    def refresh_routes(self):
+        return self.refresh_roads()
+
+    def save_route_from_snare(self):
+        return self.save_road_from_snare()
+
+    def save_route_preset(self):
+        return self.save_road_preset()
+
+    def load_route_preset(self, route_name=None):
+        return self.load_road_preset(route_name)
+
+    def delete_route_preset(self, route_name=None):
+        return self.delete_road_preset(route_name)
+
+    def _select_route_for_edit(self, route_name):
+        return self._select_road_for_edit(route_name)
 
     def _widget_exists(self, attr_name):
         widget = getattr(self, attr_name, None)
@@ -169,7 +804,7 @@ class InterceptionFrame(ctk.CTkFrame):
             return False
 
     def on_source_changed(self, selected_source):
-        """Affiche des checkboxes de lunes si la source choisie est une planète."""
+        """Shows moon checkboxes when the selected source is a planet."""
         if not hasattr(self, "source_moons_frame"):
             return
 
@@ -214,7 +849,7 @@ class InterceptionFrame(ctk.CTkFrame):
             return
 
     def on_location_type_change(self, selected_type):
-        """Met à jour les choix de parent en fonction du type sélectionné."""
+        """Updates parent candidates based on selected location type."""
         if not self._widget_exists("new_pos_parent"):
             return
 
@@ -243,7 +878,7 @@ class InterceptionFrame(ctk.CTkFrame):
             self.position_popup = None
 
     def open_position_manager(self):
-        """Ouvre la fenêtre d'édition des positions (create/delete)."""
+        """Opens the location editor window (create/delete)."""
         if self.position_popup is not None:
             try:
                 if self.position_popup.winfo_exists():

@@ -1,24 +1,41 @@
-"""Contrôleur d'interception quantique.
+"""Quantum interception controller.
 
-Gère la persistance des points de navigation et les calculs
-de distance optimale pour le déploiement de snare.
+Handles location persistence and optimal snare distance calculations.
 """
 
 import numpy as np
+import json
 from models.location import LocationSeedImporter
 
 class InterceptionController:
-    """Expose les opérations métier du module d'interception."""
+    """Exposes business operations for the interception module."""
 
     COORD_UNIT = "m"
 
     def __init__(self, master):
-        # Référence vers le contrôleur principal (accès DB/query/commit)
+        # Reference to main app controller (DB query/commit access)
         self.master = master
+        self._ensure_interception_routes_table()
         try:
             self.seed_locations_if_empty()
         except Exception as e:
             self._log(f"Interception seed skipped: {e}")
+
+    def _ensure_interception_routes_table(self):
+        self.master.commit(
+            """
+            CREATE TABLE IF NOT EXISTS interception_routes (
+                name TEXT PRIMARY KEY,
+                destination_name TEXT NOT NULL,
+                sources_json TEXT NOT NULL,
+                radius REAL NOT NULL DEFAULT 20000,
+                step REAL NOT NULL DEFAULT 500,
+                max_dist REAL NOT NULL DEFAULT 250000,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
     def _log(self, message):
         if hasattr(self.master, "log"):
@@ -26,7 +43,7 @@ class InterceptionController:
 
     @classmethod
     def units_to_km(cls, value):
-        """Convertit une distance des unités DB vers kilomètres."""
+        """Converts a DB-unit distance to kilometers."""
         v = float(value)
         if cls.COORD_UNIT == "m":
             return v / 1000.0
@@ -35,7 +52,7 @@ class InterceptionController:
         return v
 
     def seed_locations_if_empty(self, seed_file="data/locations.json"):
-        """Initialise la table locations à partir d'un JSON si la DB est vide."""
+        """Seeds locations from JSON when the table is empty."""
         count_rows = self.master.query("SELECT COUNT(*) FROM locations")
         count = int(count_rows[0][0]) if count_rows else 0
         if count > 0:
@@ -51,12 +68,126 @@ class InterceptionController:
         return True
 
     def get_location_names(self):
-        """Retourne la liste triée des positions enregistrées."""
+        """Returns sorted saved location names."""
         rows = self.master.query("SELECT name FROM locations ORDER BY name ASC")
         return [row[0] for row in rows]
 
+    def get_road_names(self):
+        """Returns sorted saved interception road names."""
+        rows = self.master.query(
+            "SELECT name FROM interception_routes ORDER BY UPPER(name) ASC"
+        )
+        return [row[0] for row in rows]
+
+    def save_road(self, road_name, source_names, dest_name, radius, step, max_dist):
+        """Creates or updates a reusable interception road."""
+        name = (road_name or "").strip()
+        if not name:
+            raise ValueError("Road name is required.")
+
+        normalized_sources = [str(n).strip().upper() for n in (source_names or []) if str(n).strip()]
+        if not normalized_sources:
+            raise ValueError("At least one source point is required.")
+
+        destination = (dest_name or "").strip().upper()
+        if not destination:
+            raise ValueError("Destination is required.")
+
+        try:
+            radius = float(radius)
+            step = float(step)
+            max_dist = float(max_dist)
+        except (TypeError, ValueError):
+            raise ValueError("radius, step and max_dist must be numeric.")
+
+        if radius <= 0 or step <= 0 or max_dist <= 0:
+            raise ValueError("radius, step and max_dist must be positive.")
+
+        self.master.commit(
+            """
+            INSERT INTO interception_routes (name, destination_name, sources_json, radius, step, max_dist, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(name) DO UPDATE SET
+                destination_name = excluded.destination_name,
+                sources_json = excluded.sources_json,
+                radius = excluded.radius,
+                step = excluded.step,
+                max_dist = excluded.max_dist,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                name,
+                destination,
+                json.dumps(normalized_sources),
+                radius,
+                step,
+                max_dist,
+            ),
+        )
+        return name
+
+    def get_road(self, road_name):
+        """Returns a full road payload or None if missing."""
+        name = (road_name or "").strip()
+        if not name:
+            return None
+
+        rows = self.master.query(
+            """
+            SELECT name, destination_name, sources_json, radius, step, max_dist
+            FROM interception_routes
+            WHERE name = ?
+            """,
+            (name,),
+        )
+        if not rows:
+            return None
+
+        row = rows[0]
+        try:
+            sources = json.loads(row[2]) if row[2] else []
+        except json.JSONDecodeError:
+            sources = []
+
+        if not isinstance(sources, list):
+            sources = []
+
+        return {
+            "name": row[0],
+            "destination_name": row[1],
+            "source_names": [str(x).strip().upper() for x in sources if str(x).strip()],
+            "radius": float(row[3]),
+            "step": float(row[4]),
+            "max_dist": float(row[5]),
+        }
+
+    def delete_road(self, road_name):
+        """Deletes a saved interception road."""
+        name = (road_name or "").strip()
+        if not name:
+            raise ValueError("Road name is required.")
+
+        self.master.commit(
+            "DELETE FROM interception_routes WHERE name = ?",
+            (name,),
+        )
+        return name
+
+    # Backward-compatible wrappers (legacy route naming)
+    def get_route_names(self):
+        return self.get_road_names()
+
+    def save_route(self, route_name, source_names, dest_name, radius, step, max_dist):
+        return self.save_road(route_name, source_names, dest_name, radius, step, max_dist)
+
+    def get_route(self, route_name):
+        return self.get_road(route_name)
+
+    def delete_route(self, route_name):
+        return self.delete_road(route_name)
+
     def get_location_names_by_type(self, type_names):
-        """Retourne les noms triés des positions filtrées par type."""
+        """Returns sorted location names filtered by type."""
         normalized_types = [str(t).strip().upper() for t in (type_names or []) if str(t).strip()]
         if not normalized_types:
             return self.get_location_names()
@@ -69,7 +200,7 @@ class InterceptionController:
         return [row[0] for row in rows]
 
     def get_location_type(self, name):
-        """Retourne le type normalisé d'un lieu, ou None s'il n'existe pas."""
+        """Returns normalized location type, or None if missing."""
         location_name = (name or "").strip().upper()
         if not location_name:
             return None
@@ -81,7 +212,7 @@ class InterceptionController:
         return row[0][0] if row else None
 
     def get_child_moons(self, planet_name):
-        """Retourne les lunes enfants d'une planète."""
+        """Returns child moons for a planet."""
         parent = (planet_name or "").strip().upper()
         if not parent:
             return []
@@ -99,14 +230,14 @@ class InterceptionController:
         return [row[0] for row in rows]
 
     def get_coords_from_db(self, name):
-        """Retourne les coordonnées d'une position sous forme de vecteur numpy."""
+        """Returns location coordinates as a numpy vector."""
         res = self.master.query("SELECT x, y, z FROM locations WHERE name = ?", (name,))
         if res:
             return np.array(res[0])
         return None
 
     def upsert_location(self, name, x, y, z, loc_type="POI", parent_name=None):
-        """Crée ou met à jour une position dans la base de données."""
+        """Creates or updates a location in SQLite."""
         location_name = (name or "").strip().upper()
         if not location_name:
             raise ValueError("Location name is required.")
@@ -158,7 +289,7 @@ class InterceptionController:
         return location_name
 
     def delete_location(self, name):
-        """Supprime une position existante par son nom."""
+        """Deletes an existing location by name."""
         location_name = (name or "").strip().upper()
         if not location_name or location_name == "NO DATA":
             raise ValueError("Location name is required.")
@@ -179,7 +310,7 @@ class InterceptionController:
         return location_name
 
     def calculate_snare_solution(self, source_names, dest_name, radius=20000, max_dist=250000, step=500):
-        """Calcule une solution complète de snare (distance + point + méta)."""
+        """Calculates a full snare solution (distance + point + metadata)."""
         result = {
             "ok": False,
             "distance_units": 0.0,
@@ -297,7 +428,7 @@ class InterceptionController:
         return result
 
     def calculate_snare_distance(self, source_names, dest_name, radius=20000, max_dist=250000, step=500):
-        """Wrapper de compatibilité: retourne seulement la distance en km."""
+        """Compatibility wrapper: returns only distance in km."""
         result = self.calculate_snare_solution(
             source_names,
             dest_name,
