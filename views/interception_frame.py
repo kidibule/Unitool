@@ -5,6 +5,7 @@ et lancer le calcul de distance de déploiement snare.
 """
 
 import customtkinter as ctk
+from datetime import datetime
 from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearButton, DrakeEntry, DrakePopup, DrakeTerminal, DrakeTitle2, DrakeTitle4
 
 class InterceptionFrame(ctk.CTkFrame):
@@ -445,7 +446,7 @@ class InterceptionFrame(ctk.CTkFrame):
             self.output.insert("end", "[ERROR] radius, step and max_dist must be positive numbers.\n")
             return
 
-        self.output.insert("end", "\n" + "-" * 58 + "\n")
+        self.output.insert("end", "\n" + "=" * 72 + "\n")
 
         result = self.controller.interception.calculate_snare_solution(
             active_sources,
@@ -456,27 +457,86 @@ class InterceptionFrame(ctk.CTkFrame):
         )
 
         if result.get("ok"):
-            point = result.get("point") or [0.0, 0.0, 0.0]
-            point_txt = f"({point[0]:,.2f}, {point[1]:,.2f}, {point[2]:,.2f})"
-            limiting = result.get("limiting_source") or "N/A"
-
-            self.output.insert("end", "SNARE SOLUTION REPORT\n")
-            self.output.insert("end", f"START POINT(S): {start_points_label}\n")
-            self.output.insert("end", f"DESTINATION: {dest}\n")
-            self.output.insert("end", f"SNARE POINT (X,Y,Z): {point_txt}\n")
-            self.output.insert("end", f"OPTIMAL DISTANCE (KM): {result['distance_km']:,.3f}\n")
-            self.output.insert(
-                "end",
-                "PARAMETERS: "
-                f"radius={result['radius_units']:,.0f}u ({result['radius_km']:,.3f} km), "
-                f"step={result['step_units']:,.0f}u, "
-                f"max_dist={result['max_dist_units']:,.0f}u, "
-                f"unit={self.controller.interception.COORD_UNIT}\n",
-            )
-            self.output.insert("end", f"LIMITING SOURCE: {limiting}\n")
-            self.output.insert("end", "STATUS: READY\n")
+            self._render_snare_success(result, active_sources, dest)
             self.output.see("end")
         else:
             message = result.get("message") or "Calculation failed."
-            self.output.insert("end", f"[ERROR] {message}\n")
+            self._render_snare_failure(message, active_sources, dest, radius, step, max_dist)
+            self.output.see("end")
             self.controller.log(f"Interception calculation failed: {message}", source="INTERCEPTION")
+
+    def _format_vector(self, point):
+        values = point or [0.0, 0.0, 0.0]
+        return f"X={values[0]:,.2f} | Y={values[1]:,.2f} | Z={values[2]:,.2f}"
+
+    def _render_snare_success(self, result, sources, dest):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        distance_m = float(result.get("distance_units", 0.0))
+        distance_mm = distance_m / 1_000_000.0
+        radius_m = float(result.get("radius_units", 0.0))
+        step_m = float(result.get("step_units", 0.0))
+        max_dist_m = float(result.get("max_dist_units", distance_m))
+
+        # Compute a practical positioning window around the optimal distance.
+        window_m = max(step_m * 10.0, radius_m * 0.25)
+        zone_min_m = max(0.0, distance_m - window_m)
+        zone_max_m = min(max_dist_m, distance_m + window_m)
+
+        zone_min_mm = zone_min_m / 1_000_000.0
+        zone_max_mm = zone_max_m / 1_000_000.0
+        point = result.get("point")
+        avg_dir = result.get("avg_dir")
+        limiting = result.get("limiting_source") or "NONE"
+
+        self.output.insert("end", "SNARE INTERCEPTION REPORT\n")
+        self.output.insert("end", f"Generated at   : {timestamp}\n")
+        self.output.insert("end", "\n[INPUT]\n")
+        self.output.insert("end", f"Start points   : {', '.join(sources)}\n")
+        self.output.insert("end", f"Destination    : {dest}\n")
+
+        self.output.insert("end", "\n[PARAMETERS]\n")
+        self.output.insert("end", f"Radius         : {radius_m:,.0f} m\n")
+        self.output.insert("end", f"Step           : {step_m:,.0f} m\n")
+        self.output.insert("end", f"Max distance   : {max_dist_m:,.0f} m\n")
+        self.output.insert("end", f"Limiting source: {limiting}\n")
+
+        self.output.insert("end", "\n[SOLUTION]\n")
+        self.output.insert("end", f"Snare point    : {self._format_vector(point)}\n")
+        self.output.insert("end", f"Optimal range  : {distance_m:,.0f} m ({distance_mm:.3f} Mm)\n")
+        if avg_dir is not None:
+            self.output.insert("end", f"Average dir    : {self._format_vector(avg_dir)}\n")
+
+        self.output.insert("end", "\n[INTERCEPTION WINDOW]\n")
+        self.output.insert("end", "+" + "-" * 66 + "+\n")
+        self.output.insert(
+            "end",
+            f"| WORKING ZONE : {zone_min_m:>12,.0f} m -> {zone_max_m:>12,.0f} m ({zone_min_mm:.3f} -> {zone_max_mm:.3f} Mm) |\n",
+        )
+        self.output.insert(
+            "end",
+            f"| OPTIMAL POS. : {distance_m:>12,.0f} m ({distance_mm:.3f} Mm)" + " " * 27 + "|\n",
+        )
+        self.output.insert(
+            "end",
+            f"| GUIDANCE     : Stay between {zone_min_mm:.3f} Mm and {zone_max_mm:.3f} Mm" + " " * 12 + "|\n",
+        )
+        self.output.insert("end", "+" + "-" * 66 + "+\n")
+
+        self.output.insert("end", "\n[STATUS]\n")
+        self.output.insert("end", "READY FOR DEPLOYMENT\n")
+        self.output.insert("end", "=" * 72 + "\n")
+
+    def _render_snare_failure(self, message, sources, dest, radius, step, max_dist):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.output.insert("end", "SNARE INTERCEPTION REPORT\n")
+        self.output.insert("end", f"Generated at   : {timestamp}\n")
+        self.output.insert("end", "\n[INPUT]\n")
+        self.output.insert("end", f"Start points   : {', '.join(sources)}\n")
+        self.output.insert("end", f"Destination    : {dest}\n")
+        self.output.insert("end", "\n[PARAMETERS]\n")
+        self.output.insert("end", f"Radius         : {radius:,.0f} m\n")
+        self.output.insert("end", f"Step           : {step:,.0f} m\n")
+        self.output.insert("end", f"Max distance   : {max_dist:,.0f} m\n")
+        self.output.insert("end", "\n[STATUS]\n")
+        self.output.insert("end", f"ERROR: {message}\n")
+        self.output.insert("end", "=" * 72 + "\n")
