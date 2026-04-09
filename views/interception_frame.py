@@ -65,7 +65,12 @@ class InterceptionFrame(ctk.CTkFrame):
         DrakeButton(bottom_row, text="ADD START", width=95, command=self.add_start_source).pack(side="left", padx=(0, 6))
         DrakeClearButton(bottom_row, text="CLEAR", width=70, command=self.clear_start_sources).pack(side="left", padx=(0, 8))
 
-        self.dest_selector = DrakeComboBox(bottom_row, values=location_list, width=160)
+        self.dest_selector = DrakeComboBox(
+            bottom_row,
+            values=location_list,
+            width=160,
+            command=self.on_destination_changed,
+        )
         self.dest_selector.pack(side="left", padx=(0, 6))
         self.dest_selector.set("DESTINATION")
 
@@ -457,6 +462,11 @@ class InterceptionFrame(ctk.CTkFrame):
             DrakePopup.warning("INTERCEPTION", "At least one source point is required.", parent=self)
             return
 
+        validation = self.controller.interception.validate_sources_for_destination(sources, dest)
+        if not validation.get("ok"):
+            DrakePopup.warning("INTERCEPTION", validation.get("message") or "Invalid source selection for this destination.", parent=self)
+            return
+
         try:
             self.controller.interception.save_road(new_name, sources, dest, radius, step, max_dist)
             if new_name != old_name:
@@ -504,6 +514,21 @@ class InterceptionFrame(ctk.CTkFrame):
         if not start or start in {"NO DATA", "START"}:
             DrakePopup.warning("INTERCEPTION", "Select a valid start location first.", parent=self)
             return
+
+        dest = self.dest_selector.get().strip().upper() if self._widget_exists("dest_selector") else ""
+        if not dest or dest in {"NO DATA", "DESTINATION"}:
+            DrakePopup.warning("INTERCEPTION", "Select a destination first (cone validation).", parent=self)
+            return
+
+        preview_sources = list(self.selected_sources)
+        if start not in preview_sources:
+            preview_sources.append(start)
+
+        validation = self.controller.interception.validate_sources_for_destination(preview_sources, dest)
+        if not validation.get("ok"):
+            DrakePopup.warning("INTERCEPTION", validation.get("message") or "This source cannot be used for interception.", parent=self)
+            return
+
         if start not in self.selected_sources:
             self.selected_sources.append(start)
             self.output.insert("end", f"[+] Start source added: {start}\n")
@@ -519,6 +544,29 @@ class InterceptionFrame(ctk.CTkFrame):
     def remove_start_source(self, source_name):
         self.selected_sources = [s for s in self.selected_sources if s != source_name]
         self.refresh_start_sources_display()
+
+    def on_destination_changed(self, selected_destination=None):
+        """Silently prunes sources that are incompatible with the selected destination."""
+        destination = (selected_destination or "").strip().upper()
+        if not destination or destination in {"NO DATA", "DESTINATION"}:
+            return
+
+        if not self.selected_sources:
+            return
+
+        kept_sources = []
+        changed = False
+        for source in self.selected_sources:
+            trial_sources = kept_sources + [source]
+            validation = self.controller.interception.validate_sources_for_destination(trial_sources, destination)
+            if validation.get("ok"):
+                kept_sources.append(source)
+            else:
+                changed = True
+
+        if changed:
+            self.selected_sources = kept_sources
+            self.refresh_start_sources_display()
 
     def refresh_start_sources_display(self):
         if self._widget_exists("start_sources_label"):
@@ -586,6 +634,11 @@ class InterceptionFrame(ctk.CTkFrame):
             DrakePopup.warning("INTERCEPTION", "No valid destination found for calculation.", parent=self)
             return
 
+        validation = self.controller.interception.validate_sources_for_destination(src, destination)
+        if not validation.get("ok"):
+            DrakePopup.warning("INTERCEPTION", validation.get("message") or "Invalid source selection for interception.", parent=self)
+            return
+
         self.output.insert("end", "\n" + "=" * 72 + "\n")
         result = self.controller.interception.calculate_snare_solution(
             src,
@@ -622,6 +675,11 @@ class InterceptionFrame(ctk.CTkFrame):
             max_dist = float(self.max_dist_entry.get().strip())
         except Exception:
             DrakePopup.error("INTERCEPTION", "radius, step and max_dist must be numeric.", parent=self)
+            return False
+
+        validation = self.controller.interception.validate_sources_for_destination(sources, dest)
+        if not validation.get("ok"):
+            DrakePopup.warning("INTERCEPTION", validation.get("message") or "Invalid source selection for this destination.", parent=self)
             return False
 
         try:

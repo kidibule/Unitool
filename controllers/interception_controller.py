@@ -309,6 +309,79 @@ class InterceptionController:
 
         return location_name
 
+    def validate_sources_for_destination(self, source_names, dest_name):
+        """Validates if source selection can produce a snare cone for a destination."""
+        normalized_sources = [str(n).strip().upper() for n in (source_names or []) if str(n).strip()]
+        destination = (dest_name or "").strip().upper()
+
+        if not normalized_sources:
+            return {
+                "ok": False,
+                "message": "No source points provided.",
+                "invalid_sources": [],
+            }
+
+        if not destination:
+            return {
+                "ok": False,
+                "message": "Destination is required.",
+                "invalid_sources": [],
+            }
+
+        end_coords = self.get_coords_from_db(destination)
+        if end_coords is None:
+            return {
+                "ok": False,
+                "message": f"Destination not found: {destination}.",
+                "invalid_sources": [],
+            }
+
+        invalid_sources = []
+        directions = []
+        for source_name in normalized_sources:
+            source_coords = self.get_coords_from_db(source_name)
+            if source_coords is None:
+                invalid_sources.append(source_name)
+                continue
+
+            dir_vec = end_coords - source_coords
+            norm = float(np.linalg.norm(dir_vec))
+            if norm == 0.0:
+                # A source exactly on destination cannot define a usable interception cone.
+                invalid_sources.append(source_name)
+                continue
+
+            directions.append(dir_vec / norm)
+
+        if invalid_sources:
+            return {
+                "ok": False,
+                "message": f"Invalid source(s) for destination {destination}: {', '.join(invalid_sources)}.",
+                "invalid_sources": invalid_sources,
+            }
+
+        if not directions:
+            return {
+                "ok": False,
+                "message": "No valid source direction available.",
+                "invalid_sources": normalized_sources,
+            }
+
+        avg_dir = np.mean(directions, axis=0)
+        avg_norm = float(np.linalg.norm(avg_dir))
+        if avg_norm <= 1e-9:
+            return {
+                "ok": False,
+                "message": "No interception cone possible with these sources (average direction is null).",
+                "invalid_sources": [],
+            }
+
+        return {
+            "ok": True,
+            "message": "",
+            "invalid_sources": [],
+        }
+
     def calculate_snare_solution(self, source_names, dest_name, radius=20000, max_dist=250000, step=500):
         """Calculates a full snare solution (distance + point + metadata)."""
         result = {
@@ -345,6 +418,11 @@ class InterceptionController:
         dest = (dest_name or "").strip().upper()
         if not dest:
             result["message"] = "Destination is required."
+            return result
+
+        precheck = self.validate_sources_for_destination(normalized_sources, dest)
+        if not precheck.get("ok"):
+            result["message"] = precheck.get("message") or "Invalid source/destination selection."
             return result
 
         names_to_fetch = set(normalized_sources + [dest])
