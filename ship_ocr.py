@@ -99,7 +99,33 @@ def _triplet(value: str) -> tuple[int, int, int] | None:
     return int(parts[0]), int(parts[1]), int(parts[2])
 
 
+def _clean_time_ocr(value: str) -> str:
+    """Corrige les erreurs OCR fréquentes sur les timestamps (O→0, .→:)."""
+    value = value.replace('O', '0').replace('o', '0')
+    value = value.replace('.', ':')
+    return value.strip()
+
+
+def _clean_number_ocr(value: str) -> str:
+    """Supprime les espaces de séparation et les unités courantes (kg, auec, scu, m)."""
+    if not value:
+        return value
+    # Retirer les unités connues en fin de valeur
+    cleaned = re.sub(r'\s*(kg|auec|aec|scu|scus|m)\s*$', '', value.strip(), flags=re.IGNORECASE)
+    # Supprimer les espaces entre chiffres (séparateurs de milliers OCR)
+    cleaned = re.sub(r'(?<=\d)\s+(?=\d)', '', cleaned)
+    return cleaned.strip()
+
+
+def _parse_dimensions_ocr(value: str) -> str:
+    """Normalise '17.5 x 21 x 5.5 m' -> '17.5 x 21 x 5.5'."""
+    value = re.sub(r'\s*m$', '', value.strip(), flags=re.IGNORECASE)
+    value = re.sub(r'\s*x\s*', ' x ', value)
+    return value.strip()
+
+
 def _time_to_minutes(value: str) -> float | None:
+    value = _clean_time_ocr(value)
     m = re.search(r"(\d{1,2}):(\d{2}):(\d{2})", value)
     if not m:
         return None
@@ -147,12 +173,40 @@ def _preprocess(img):
     return thr
 
 
+def _preprocess_sc_color(img):
+    """Prétraitement optimisé pour le UI Star Citizen (texte orange/cyan/blanc sur fond sombre).
+
+    Isole les pixels de texte par plage HSV et renvoie un masque binaire agrandi.
+    """
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    # Orange/amber labels (ROLE, CAREER, SIZE, …)
+    orange_mask = cv2.inRange(hsv, np.array([8, 80, 140]), np.array([30, 255, 255]))
+
+    # Cyan/teal ship name header
+    cyan_mask = cv2.inRange(hsv, np.array([80, 80, 140]), np.array([110, 255, 255]))
+
+    # White/light text (values, manufacturer)
+    white_mask = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 80, 255]))
+
+    combined = cv2.bitwise_or(orange_mask, cyan_mask)
+    combined = cv2.bitwise_or(combined, white_mask)
+
+    # Légère dilatation pour reconnecter les caractères fragmentés
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    combined = cv2.dilate(combined, kernel, iterations=1)
+
+    enlarged = cv2.resize(combined, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+    return enlarged
+
+
 def _preprocess_variants(img):
     base = _preprocess(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     enlarged_gray = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
     inv = cv2.bitwise_not(base)
-    return [base, inv, enlarged_gray]
+    sc_color = _preprocess_sc_color(img)
+    return [sc_color, base, inv, enlarged_gray]
 
 def _crop_by_ratio(img, x1: float, y1: float, x2: float, y2: float):
     height, width = img.shape[:2]
@@ -179,6 +233,15 @@ def _ocr_text_candidates(crop, psm: int, whitelist: str | None = None) -> list[s
         8,
     )
     variants = [enlarged, thr, cv2.bitwise_not(thr)]
+
+    # Ajouter le variant couleur SC si le crop est en couleur
+    if len(crop.shape) == 3:
+        try:
+            sc = _preprocess_sc_color(crop)
+            sc_resized = cv2.resize(sc, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+            variants.append(sc_resized)
+        except Exception:
+            pass
 
     extra = ""
     if whitelist:
@@ -265,39 +328,90 @@ def _extract_layout_fixed_stats(image_path: str, reference_data: dict | None = N
     if title_brand:
         fixed["brand"] = title_brand
 
-    # Role/career/size/crew sit on the same top row in the game card.
-    role_crop = _crop_by_ratio(img, 0.60, 0.085, 0.98, 0.145)
-    career_crop = _crop_by_ratio(img, 0.60, 0.125, 0.98, 0.185)
-    size_crop = _crop_by_ratio(img, 0.74, 0.085, 0.88, 0.145)
-    crew_crop = _crop_by_ratio(img, 0.88, 0.085, 0.99, 0.145)
+    # Role/career/size/crew — crops adaptés au layout de la fiche vaisseau SC.
+    # Plusieurs zones pour capter les variations de position selon la taille du screenshot.
+    role_crop = _crop_by_ratio(img, 0.45, 0.075, 0.98, 0.12)
+    role_crop2 = _crop_by_ratio(img, 0.45, 0.085, 0.98, 0.145)
+    career_crop = _crop_by_ratio(img, 0.45, 0.11, 0.98, 0.16)
+    career_crop2 = _crop_by_ratio(img, 0.45, 0.125, 0.98, 0.185)
+    size_crop = _crop_by_ratio(img, 0.70, 0.14, 0.88, 0.20)
+    size_crop2 = _crop_by_ratio(img, 0.74, 0.085, 0.88, 0.145)
+    crew_crop = _crop_by_ratio(img, 0.85, 0.14, 0.99, 0.20)
+    crew_crop2 = _crop_by_ratio(img, 0.85, 0.16, 0.99, 0.24)
 
-    role_candidates = _collect_ocr_candidates(
-        role_crop,
+    # Mots-labels à exclure des candidats role/career (le label lui-même lu par OCR)
+    _field_label_words = {
+        "ROLE", "CAREER", "SIZE", "CREW", "SCM", "SPEED", "BOOST",
+        "FORWARD", "BACKWARD", "NAV", "MAX", "PITCH", "YAW", "ROLL",
+        "CARGO", "HP", "MASS", "DIMENSIONS", "POWER", "CONSUMPTION",
+        "HYDROGEN", "QT", "FUEL", "EXPEDITION", "CLAIM", "EXPEDITE",
+        "TIME", "CM", "DECOY", "NOISE", "BOOSTED",
+    }
+
+    def _filter_label_noise(candidates: list[str]) -> list[str]:
+        filtered = []
+        for c in candidates:
+            norm = _normalize_label(c)
+            tokens = set(norm.split())
+            # Rejeter si tous les tokens sont des labels de champ connus
+            if tokens and tokens.issubset(_field_label_words):
+                continue
+            filtered.append(c)
+        return filtered
+
+    def _collect_multi_crop(crops, psms, whitelist):
+        merged = []
+        seen = set()
+        for crop in crops:
+            for c in _collect_ocr_candidates(crop, psms=psms, whitelist=whitelist):
+                norm = _normalize_label(c)
+                if norm and norm not in seen:
+                    seen.add(norm)
+                    merged.append(c)
+        return merged
+
+    role_candidates = _filter_label_noise(_collect_multi_crop(
+        [role_crop, role_crop2],
         psms=[7, 6, 8],
         whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ",
-    )
-    role_text = _pick_reference_candidate(role_candidates, refs.get("roles", []), min_ratio=0.34)
+    ))
+    role_text = _pick_reference_candidate(role_candidates, refs.get("roles", []), min_ratio=0.55)
 
-    career_candidates = _collect_ocr_candidates(
-        career_crop,
+    career_candidates = _filter_label_noise(_collect_multi_crop(
+        [career_crop, career_crop2],
         psms=[7, 6, 8],
         whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ",
-    )
-    career_text = _pick_reference_candidate(career_candidates, refs.get("careers", []), min_ratio=0.34)
+    ))
+    career_text = _pick_reference_candidate(career_candidates, refs.get("careers", []), min_ratio=0.55)
 
-    size_candidates = _collect_ocr_candidates(
-        size_crop,
+    size_candidates = _collect_multi_crop(
+        [size_crop, size_crop2],
         psms=[7, 8],
         whitelist="Ss0123456789",
     )
     size_text = _pick_first_valid(size_candidates, lambda text: bool(re.search(r"\bS\s*\d\b", text.upper().replace(" ", ""))))
 
-    crew_candidates = _collect_ocr_candidates(
-        crew_crop,
-        psms=[7, 8],
+    # Crew : plusieurs crops couvrant les positions possibles
+    crew_all = _collect_multi_crop(
+        [crew_crop, crew_crop2],
+        psms=[7, 8, 10],
         whitelist="0123456789",
     )
-    crew_text = _pick_first_valid(crew_candidates, lambda text: (_first_int(text) or 0) in range(1, 65))
+    # Filtrer les candidats qui correspondent au size (ex: "6" de "S6")
+    size_digit = ""
+    if size_text:
+        m_sz = re.search(r"S\s*(\d)", size_text.upper())
+        if m_sz:
+            size_digit = m_sz.group(1)
+    crew_text = ""
+    for cand in crew_all:
+        val = _first_int(cand)
+        if val is not None and 1 <= val <= 64:
+            # Éviter de prendre le chiffre du size (ex: '6' de 'S6')
+            if size_digit and str(val) == size_digit and val < 10:
+                continue
+            crew_text = cand
+            break
 
     if role_text:
         fixed["role"] = _normalize_label(role_text)
@@ -320,66 +434,79 @@ def _extract_title_fields(image_path: str, reference_data: dict | None = None) -
     height, width = img.shape[:2]
     refs = reference_data or {}
 
-    top_crop = img[0 : max(40, int(height * 0.14)), int(width * 0.05) : int(width * 0.95)]
+    # --- Crop dédié pour le nom du vaisseau (ligne 1, texte cyan) ---
+    name_crop = img[0 : max(30, int(height * 0.06)), int(width * 0.05) : int(width * 0.95)]
+    # --- Crop pour le brand/fabricant (ligne 2, texte blanc/gris) ---
+    brand_crop = img[max(20, int(height * 0.04)) : max(60, int(height * 0.12)), int(width * 0.05) : int(width * 0.95)]
+    # --- Crop large (les deux lignes) ---
+    top_crop = img[0 : max(60, int(height * 0.14)), int(width * 0.05) : int(width * 0.95)]
+
     if top_crop.size == 0:
         return "", ""
 
-    gray = cv2.cvtColor(top_crop, cv2.COLOR_BGR2GRAY)
-    enlarged = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-    thr = cv2.adaptiveThreshold(
-        enlarged,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        31,
-        8,
-    )
+    def _ocr_lines_from_crop(crop, use_cyan_only: bool = False) -> list[str]:
+        """Extrait les lignes OCR d'un crop avec plusieurs variantes de traitement."""
+        if crop is None or crop.size == 0:
+            return []
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop
+        enlarged = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        thr = cv2.adaptiveThreshold(
+            enlarged, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 8,
+        )
+        proc_list = [enlarged, thr, cv2.bitwise_not(thr)]
 
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for proc in (enlarged, thr, cv2.bitwise_not(thr)):
-        data = pytesseract.image_to_data(proc, config="--oem 3 --psm 6", output_type=pytesseract.Output.DICT)
-        rows: dict[tuple[int, int, int], list[tuple[int, str]]] = {}
-        total = len(data.get("text", []))
-        for i in range(total):
-            txt = str(data["text"][i] or "").strip()
-            if not txt:
-                continue
+        if len(crop.shape) == 3:
             try:
-                conf = float(str(data.get("conf", ["-1"] * total)[i]).strip())
+                if use_cyan_only:
+                    # Filtre cyan uniquement pour isoler le nom
+                    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                    cyan_mask = cv2.inRange(hsv, np.array([75, 50, 120]), np.array([115, 255, 255]))
+                    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+                    cyan_mask = cv2.dilate(cyan_mask, kernel, iterations=1)
+                    cyan_enlarged = cv2.resize(cyan_mask, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+                    proc_list.insert(0, cyan_enlarged)
+                else:
+                    sc = _preprocess_sc_color(crop)
+                    sc_up = cv2.resize(sc, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+                    proc_list.append(sc_up)
             except Exception:
-                conf = -1.0
-            if conf < 20:
-                continue
-            key = (int(data["block_num"][i]), int(data["par_num"][i]), int(data["line_num"][i]))
-            rows.setdefault(key, []).append((int(data["left"][i]), txt))
+                pass
 
-        ordered_lines = []
-        for words in rows.values():
-            words.sort(key=lambda item: item[0])
-            line = " ".join(word for _, word in words).strip()
-            norm = _normalize_label(line)
-            if not norm or norm in seen:
-                continue
-            if len(norm.split()) > 6:
-                continue
-            seen.add(norm)
-            ordered_lines.append(norm)
+        result_lines: list[str] = []
+        seen: set[str] = set()
+        for proc in proc_list:
+            for psm in (7, 6, 13):
+                text = pytesseract.image_to_string(proc, config=f"--oem 3 --psm {psm}")
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if len(line) < 2:
+                        continue
+                    norm = _normalize_label(line)
+                    if not norm or norm in seen:
+                        continue
+                    if len(norm.split()) > 6:
+                        continue
+                    seen.add(norm)
+                    result_lines.append(norm)
+        return result_lines
 
-        candidates.extend(ordered_lines)
+    # Extraire les candidats nom (cyan) et brand (blanc) séparément
+    name_candidates = _ocr_lines_from_crop(name_crop, use_cyan_only=True)
+    brand_candidates = _ocr_lines_from_crop(brand_crop, use_cyan_only=False)
+    # Fallback : crop large complet
+    all_candidates = _ocr_lines_from_crop(top_crop, use_cyan_only=False)
 
-    deduped = []
-    seen2 = set()
-    for item in candidates:
-        if item in seen2:
+    # Dédupliquer tout en gardant l'ordre : name_candidates d'abord
+    deduped: list[str] = []
+    seen_final: set[str] = set()
+    for item in name_candidates + brand_candidates + all_candidates:
+        if item in seen_final:
             continue
-        seen2.add(item)
+        seen_final.add(item)
         deduped.append(item)
 
     brand = _pick_reference_candidate(deduped, refs.get("brands", []), min_ratio=0.55)
 
-    # Name is safer as raw OCR header text than force-snapping to known ship names,
-    # which can incorrectly map noisy text to short names like "ARROW".
     skip_tokens = {
         "PLAYERS", "ORGANIZATIONS", "SHIPS", "INTEL", "ARCHIVE", "SYSTEM",
         "ROLE", "CAREER", "SIZE", "CREW", "SCM", "SPEED", "BOOST", "NAV",
@@ -387,28 +514,54 @@ def _extract_title_fields(image_path: str, reference_data: dict | None = None) -
         "HP", "CARGO", "DIMENSIONS", "MASS", "HYDROGEN", "QT", "FUEL",
         "EXPEDITION", "CLAIM", "EXPEDITE", "TIME",
     }
-    name = ""
-    best_score = -1
-    for candidate in deduped:
-        cand_norm = _normalize_label(candidate)
-        if not cand_norm:
-            continue
-        if brand and _normalize_key(cand_norm) == _normalize_key(brand):
-            continue
-        tokens = [t for t in cand_norm.split() if t]
-        if not tokens:
-            continue
-        # Ignore header/menu and any line that contains stat labels.
-        if any(token in skip_tokens for token in tokens):
-            continue
-        if all(token in skip_tokens for token in tokens):
-            continue
-        score = len(_normalize_key(cand_norm)) + (4 if len(tokens) >= 2 else 0)
-        if any(ch.isdigit() for ch in cand_norm):
-            score += 1
-        if score > best_score:
-            best_score = score
-            name = cand_norm
+
+    # 1) Snap name vers les noms connus en DB — d'abord depuis le crop cyan, puis global
+    name_ref = _pick_reference_candidate(name_candidates, refs.get("names", []), min_ratio=0.55)
+    if not name_ref:
+        name_ref = _pick_reference_candidate(deduped, refs.get("names", []), min_ratio=0.65)
+    if name_ref and brand and _normalize_key(name_ref) == _normalize_key(brand):
+        name_ref = ""
+
+    name = name_ref or ""
+    if not name:
+        # 2) Fallback : meilleure ligne non-brand du crop cyan
+        best_score = -1
+        for candidate in name_candidates:
+            cand_norm = _normalize_label(candidate)
+            if not cand_norm:
+                continue
+            if brand and _normalize_key(cand_norm) == _normalize_key(brand):
+                continue
+            tokens = [t for t in cand_norm.split() if t]
+            if not tokens:
+                continue
+            if any(token in skip_tokens for token in tokens):
+                continue
+            score = len(_normalize_key(cand_norm)) + (4 if len(tokens) >= 2 else 0)
+            if score > best_score:
+                best_score = score
+                name = cand_norm
+
+    if not name:
+        # 3) Fallback global : toutes les lignes
+        best_score = -1
+        for candidate in deduped:
+            cand_norm = _normalize_label(candidate)
+            if not cand_norm:
+                continue
+            if brand and _normalize_key(cand_norm) == _normalize_key(brand):
+                continue
+            tokens = [t for t in cand_norm.split() if t]
+            if not tokens:
+                continue
+            if any(token in skip_tokens for token in tokens):
+                continue
+            score = len(_normalize_key(cand_norm)) + (4 if len(tokens) >= 2 else 0)
+            if any(ch.isdigit() for ch in cand_norm):
+                score += 1
+            if score > best_score:
+                best_score = score
+                name = cand_norm
 
     if not brand and len(deduped) > 1:
         for candidate in deduped:
@@ -658,10 +811,12 @@ def _infer_name_from_reference_context(stats: dict, reference_data: dict | None 
     brand = _normalize_label(str(stats.get("brand", "")))
     role = _normalize_label(str(stats.get("role", "")))
     career = _normalize_label(str(stats.get("career", "")))
+    size = _normalize_label(str(stats.get("size", "")))
 
     if not brand and not role and not career:
         return ""
 
+    # Essai 1 : brand + role + career
     filtered = records
     if brand:
         filtered = [r for r in filtered if _normalize_label(str(r.get("brand", ""))) == brand]
@@ -679,6 +834,21 @@ def _infer_name_from_reference_context(stats: dict, reference_data: dict | None 
     )
     if len(candidate_names) == 1:
         return candidate_names[0]
+
+    # Essai 2 : brand uniquement (si pas assez de filtres)
+    if brand and (not role or not career):
+        filtered2 = [r for r in records if _normalize_label(str(r.get("brand", ""))) == brand]
+        if size:
+            # On ne peut pas filtrer directement par size dans ship_records (pas dans la query),
+            # mais si un seul vaisseau de ce brand est en DB, c'est lui.
+            names2 = sorted({
+                _normalize_label(str(r.get("name", "")))
+                for r in filtered2
+                if _normalize_label(str(r.get("name", "")))
+            })
+            if len(names2) == 1:
+                return names2[0]
+
     return ""
 
 
@@ -715,11 +885,30 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         if len(brand_val) >= 5 or " " in brand_val:
             stats["brand"] = brand_val
 
-    raw_role = _extract_from_pairs_or_lines(lines, pairs, ["ROLE"], min_score=0.8, validator=_is_plain_text_like)
+    # Labels de stats connus à exclure des valeurs role/career
+    _stat_labels = {
+        "ROLE", "CAREER", "SIZE", "CREW", "SCM", "SPEED", "BOOST",
+        "FORWARD", "BACKWARD", "NAV", "MAX", "PITCH", "YAW", "ROLL",
+        "POWER", "CONSUMPTION", "HP", "CARGO", "DIMENSIONS", "MASS",
+        "HYDROGEN", "QT", "FUEL", "EXPEDITION", "CLAIM", "EXPEDITE",
+        "TIME", "CM", "DECOY", "NOISE", "BOOSTED",
+    }
+
+    def _valid_role_career(v: str) -> bool:
+        if not _is_plain_text_like(v):
+            return False
+        norm = _normalize_label(v)
+        tokens = set(norm.split())
+        # Rejeter si c'est un label de stat connu (ex: "ROLE", "CARGO")
+        if tokens and tokens.issubset(_stat_labels):
+            return False
+        return True
+
+    raw_role = _extract_from_pairs_or_lines(lines, pairs, ["ROLE"], min_score=0.8, validator=_valid_role_career)
     if raw_role:
         stats["role"] = raw_role.upper()
 
-    raw_career = _extract_from_pairs_or_lines(lines, pairs, ["CAREER"], min_score=0.8, validator=_is_plain_text_like)
+    raw_career = _extract_from_pairs_or_lines(lines, pairs, ["CAREER"], min_score=0.8, validator=_valid_role_career)
     if raw_career:
         stats["career"] = raw_career.upper()
 
@@ -740,13 +929,19 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         pairs,
         ["CREW SIZE", "CREWSIZE", "CREW"],
         min_score=0.78,
-        validator=lambda v: _first_int(v) is not None,
+        validator=lambda v: _first_int(v) is not None and 1 <= (_first_int(v) or 0) <= 64,
     )
     crew = _first_int(raw_crew)
     if crew is not None:
         stats["crew_size"] = crew
 
-    raw_scm = _extract_from_pairs_or_lines(lines, pairs, ["SCM SPEED", "SCMSPEED"])
+    raw_scm = _extract_from_pairs_or_lines(
+        lines,
+        pairs,
+        ["SCM SPEED", "SCMSPEED"],
+        min_score=0.78,
+        validator=lambda v: _first_int(v) is not None and 50 <= (_first_int(v) or 0) <= 700,
+    )
     scm = _first_int(raw_scm)
     if scm is not None:
         stats["scm_speed"] = scm
@@ -761,7 +956,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
             "BOOST FORWARD",
         ],
         min_score=0.78,
-        validator=lambda v: _first_int(v) is not None,
+        validator=lambda v: _first_int(v) is not None and 50 <= (_first_int(v) or 0) <= 1500,
     )
     boost_fw = _first_int(raw_boost_fw)
     if boost_fw is not None:
@@ -777,7 +972,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
             "BOOST BACKWARD",
         ],
         min_score=0.78,
-        validator=lambda v: _first_int(v) is not None,
+        validator=lambda v: _first_int(v) is not None and 50 <= (_first_int(v) or 0) <= 1500,
     )
     boost_bw = _first_int(raw_boost_bw)
     if boost_bw is not None:
@@ -788,7 +983,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         pairs,
         ["NAV MAX SPEED", "NAV SPEED", "NAVMAXSPEED"],
         min_score=0.78,
-        validator=lambda v: _first_int(v) is not None,
+        validator=lambda v: _first_int(v) is not None and 100 <= (_first_int(v) or 0) <= 2500,
     )
     nav = _first_int(raw_nav)
     if nav is not None:
@@ -830,12 +1025,13 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
     raw_cm = _extract_from_pairs_or_lines(
         lines,
         pairs,
-        ["CM DECOY/NOISE", "CM DECOY NOISE", "CMDECOYNOISE"],
+        ["CM DECOY/NOISE", "CM DECOY NOISE", "CMDECOYNOISE", "CM DECOY"],
         min_score=0.76,
-        validator=lambda v: len(re.findall(r"\d+", v)) >= 2,
+        validator=lambda v: len(re.findall(r"\d+", _clean_number_ocr(v))) >= 2,
     )
     if raw_cm:
-        cm_vals = re.findall(r"\d+", raw_cm)
+        cleaned_cm = _clean_number_ocr(raw_cm)
+        cm_vals = re.findall(r"\d+", cleaned_cm)
         if len(cm_vals) >= 2:
             stats["cm_decoy_noise"] = f"{cm_vals[0]}/{cm_vals[1]}"
 
@@ -844,7 +1040,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         pairs,
         ["HP"],
         min_score=0.8,
-        validator=lambda v: _first_int(v) is not None,
+        validator=lambda v: _first_int(v) is not None and (_first_int(v) or 0) >= 100,
     )
     hp = _first_int(raw_hp)
     if hp is not None:
@@ -869,7 +1065,24 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         validator=lambda v: bool(re.search(r"\d", v)),
     )
     if raw_dimensions:
-        stats["dimensions"] = raw_dimensions.upper()
+        dims_text = _parse_dimensions_ocr(raw_dimensions)
+        # Corriger les erreurs OCR fréquentes dans les nombres de dimensions :
+        # B→8, b→8, l→1, I→1, O→0 quand entouré de chiffres ou du séparateur x
+        dims_text = re.sub(r'(?<=[\d.])[Bb](?=[\d.])', '8', dims_text)
+        dims_text = re.sub(r'(?<=[\d.])[lI](?=[\d.])', '1', dims_text)
+        dims_text = re.sub(r'(?<=[\d.])[Oo](?=[\d.])', '0', dims_text)
+        # Corriger aussi en contexte "x" : "x1B1x" → "x181x"
+        dims_text = re.sub(r'(?<=[xX\s])[Bb](?=\d)', '8', dims_text)
+        dims_text = re.sub(r'(?<=\d)[Bb](?=[xX\s])', '8', dims_text)
+        dims_text = re.sub(r'(?<=[xX\s])[lI](?=\d)', '1', dims_text)
+        dims_text = re.sub(r'(?<=\d)[lI](?=[xX\s])', '1', dims_text)
+        # Normaliser les séparateurs
+        dims_text = re.sub(r'\s*[xX]\s*', ' x ', dims_text)
+        # Vérifier que le résultat contient au moins 2 "x" (3 dimensions)
+        if dims_text.upper().count('X') >= 2:
+            stats["dimensions"] = dims_text.upper().strip()
+        elif raw_dimensions.upper().count('X') >= 2:
+            stats["dimensions"] = raw_dimensions.upper().strip()
 
     raw_mass = _extract_from_pairs_or_lines(
         lines,
@@ -879,14 +1092,18 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         validator=lambda v: _first_int(v) is not None,
     )
     if raw_mass:
-        stats["mass"] = raw_mass.upper()
+        cleaned_mass = _clean_number_ocr(raw_mass)
+        mass_val = _first_int(cleaned_mass)
+        stats["mass"] = str(mass_val) if mass_val is not None else cleaned_mass.upper()
 
     raw_h2 = _extract_from_pairs_or_lines(
         lines,
         pairs,
         ["HYDROGEN CAPACITY", "HYDROGENCAPACITY", "HYDROGEN"],
         min_score=0.76,
-        validator=lambda v: _first_number(v) is not None,
+        validator=lambda v: _first_number(v) is not None
+        and not _is_time_like(v)
+        and ":" not in v,
     )
     h2 = _first_number(raw_h2)
     if h2 is not None:
@@ -897,7 +1114,10 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         pairs,
         ["QT FUEL CAPACITY", "QTFUELCAPACITY", "QTFUEL", "QT FUEL"],
         min_score=0.76,
-        validator=lambda v: _first_number(v) is not None,
+        validator=lambda v: _first_number(v) is not None
+        and not _is_time_like(v)
+        and ":" not in v
+        and (_first_number(v) or 0) <= 50.0,
     )
     qt = _first_number(raw_qt)
     if qt is not None:
@@ -914,14 +1134,16 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         and (_first_int(v) or 0) >= 500,
     )
     if raw_fee:
-        stats["expedition_fee"] = raw_fee.upper()
+        cleaned_fee = _clean_number_ocr(raw_fee)
+        fee_val = _first_int(cleaned_fee)
+        stats["expedition_fee"] = str(fee_val) if fee_val is not None else cleaned_fee.upper()
 
     raw_claim = _extract_from_pairs_or_lines(
         lines,
         pairs,
         ["CLAIM TIME", "CLAIMTIME"],
         min_score=0.76,
-        validator=_is_time_like,
+        validator=lambda v: _is_time_like(_clean_time_ocr(v)),
     )
     claim_minutes = _time_to_minutes(raw_claim)
     if claim_minutes is not None:
@@ -932,7 +1154,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         pairs,
         ["EXPEDITE TIME", "EXPEDITETIME"],
         min_score=0.76,
-        validator=_is_time_like,
+        validator=lambda v: _is_time_like(_clean_time_ocr(v)),
     )
     expedite_minutes = _time_to_minutes(raw_expedite)
     if expedite_minutes is not None:
@@ -946,6 +1168,35 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         stats.pop("nav_max_speed", None)
     if isinstance(scm, int) and isinstance(hp, int) and abs(hp - scm) <= 1:
         stats.pop("hp", None)
+
+    # Nav max speed est typiquement entre 4x et 8x le SCM speed.
+    # Si le ratio est > 12x, c'est probablement une contamination (ex: expedition fee).
+    if isinstance(scm, int) and scm > 0 and isinstance(nav, int):
+        if nav > scm * 12:
+            stats.pop("nav_max_speed", None)
+
+    # Expedition fee ne peut pas être identique au nav max speed
+    fee_val = _first_int(str(stats.get("expedition_fee", "")))
+    nav_val_check = stats.get("nav_max_speed")
+    if isinstance(fee_val, int) and isinstance(nav_val_check, int) and fee_val == nav_val_check:
+        stats.pop("nav_max_speed", None)
+
+    # Boost speeds should be proportional to SCM speed (typically 1.3x - 4x).
+    scm_val = stats.get("scm_speed")
+    nav_val = stats.get("nav_max_speed")
+    boost_fw_val = stats.get("scm_boost_forward")
+    boost_bw_val = stats.get("scm_boost_backward")
+    if isinstance(scm_val, int) and scm_val > 0:
+        if isinstance(boost_fw_val, int) and boost_fw_val > scm_val * 5:
+            stats.pop("scm_boost_forward", None)
+        if isinstance(boost_bw_val, int) and boost_bw_val > scm_val * 5:
+            stats.pop("scm_boost_backward", None)
+    # If boost == nav, it's almost certainly a cross-read.
+    if isinstance(nav_val, int) and nav_val > 0:
+        if isinstance(boost_fw_val, int) and boost_fw_val == nav_val:
+            stats.pop("scm_boost_forward", None)
+        if isinstance(boost_bw_val, int) and boost_bw_val == nav_val:
+            stats.pop("scm_boost_backward", None)
 
     # Layout-fixed extraction has priority when available for the standardized SC ship stat screen.
     stats.update(fixed_stats)
@@ -970,23 +1221,26 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         stats["role"] = _snap_to_reference(
             stats["role"],
             refs.get("roles", []),
-            min_ratio=0.52,
+            min_ratio=0.62,
             strict=True,
         )
     if isinstance(stats.get("career"), str):
         stats["career"] = _snap_to_reference(
             stats["career"],
             refs.get("careers", []),
-            min_ratio=0.52,
+            min_ratio=0.62,
             strict=True,
         )
 
-    # If OCR name is noisy, infer from unique brand+role+career match in DB.
+    # If OCR name is noisy or missing, infer from unique brand+role+career match in DB.
     inferred_name = _infer_name_from_reference_context(stats, reference_data=reference_data)
     if inferred_name:
         current_name = _normalize_label(str(stats.get("name", "")))
-        strong_name = _snap_to_reference(current_name, refs.get("names", []), min_ratio=0.90, strict=True)
-        if not strong_name:
+        # Si le nom courant est vide, identique au brand, ou pas un match fort en DB → remplacer
+        current_brand = _normalize_label(str(stats.get("brand", "")))
+        name_is_brand = current_name and current_brand and _normalize_key(current_name) == _normalize_key(current_brand)
+        strong_name = _snap_to_reference(current_name, refs.get("names", []), min_ratio=0.85, strict=True)
+        if not strong_name or name_is_brand or not current_name:
             stats["name"] = inferred_name
 
     # Reject obvious cross-field contamination values.
@@ -998,8 +1252,16 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
     if isinstance(scm_speed, int) and not (50 <= scm_speed <= 700):
         stats.pop("scm_speed", None)
 
+    boost_fw = stats.get("scm_boost_forward")
+    if isinstance(boost_fw, int) and not (50 <= boost_fw <= 1500):
+        stats.pop("scm_boost_forward", None)
+
+    boost_bw = stats.get("scm_boost_backward")
+    if isinstance(boost_bw, int) and not (50 <= boost_bw <= 1500):
+        stats.pop("scm_boost_backward", None)
+
     nav_speed = stats.get("nav_max_speed")
-    if isinstance(nav_speed, int) and not (300 <= nav_speed <= 2500):
+    if isinstance(nav_speed, int) and not (100 <= nav_speed <= 2500):
         stats.pop("nav_max_speed", None)
 
     power_text = str(stats.get("power_consumption", "")).strip()
@@ -1008,7 +1270,7 @@ def extract_ship_stats(image_path: str, reference_data: dict | None = None) -> d
         stats.pop("power_consumption", None)
 
     h2_cap = stats.get("hydrogen_capacity")
-    if isinstance(h2_cap, (float, int)) and not (0.1 <= float(h2_cap) <= 300.0):
+    if isinstance(h2_cap, (float, int)) and not (0.1 <= float(h2_cap) <= 5000.0):
         stats.pop("hydrogen_capacity", None)
 
     qt_cap = stats.get("qt_fuel_capacity")
