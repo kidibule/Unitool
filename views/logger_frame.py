@@ -597,8 +597,8 @@ class LoggerFrame(ctk.CTkFrame):
         self.ship_expedite.pack(side="right", fill="x", expand=True, padx=(5,0))
 
         # --- ACTIONS ---
-        #self.btn_ocr_ship = DrakeButton(self.tab_ships, text="OCR SCREENSHOT IMPORT", command=self.import_ship_ocr, height=45)
-        #self.btn_ocr_ship.pack(pady=(15, 8), padx=50, fill="x")
+        self.btn_ocr_ship = DrakeButton(self.tab_ships, text="OCR SCREENSHOT IMPORT", command=self.import_ship_ocr, height=45)
+        self.btn_ocr_ship.pack(pady=(15, 8), padx=50, fill="x")
 
         self.btn_save_ship = DrakeButton(self.tab_ships, text="SYNC SHIP TO DATABASE", command=self.save_ship, height=45)
         self.btn_save_ship.pack(pady=(8, 15), padx=50, fill="x")
