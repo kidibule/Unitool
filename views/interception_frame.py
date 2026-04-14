@@ -230,13 +230,6 @@ class InterceptionFrame(ctk.CTkFrame):
     def refresh_locations(self):
         """Refreshes all location selectors."""
         new_list = self.get_location_names()
-        if self._widget_exists("start_selector"):
-            current_start = self.start_selector.get().strip().upper()
-            self.start_selector.configure(values=new_list)
-            if current_start in new_list:
-                self.start_selector.set(current_start)
-            else:
-                self.start_selector.set("START")
         if self._widget_exists("dest_selector"):
             current_dest = self.dest_selector.get().strip().upper()
             self.dest_selector.configure(values=new_list)
@@ -248,8 +241,49 @@ class InterceptionFrame(ctk.CTkFrame):
             self.del_pos_selector.configure(values=new_list)
         if self._widget_exists("new_pos_type"):
             self.on_location_type_change(self.new_pos_type.get())
+        self.refresh_start_selector_options()
         self.refresh_roads()
         self.output.insert("end", ">>> Database refreshed: Selectors updated.\n")
+
+    def refresh_start_selector_options(self):
+        """Shows only valid remaining start positions for the selected destination."""
+        if not self._widget_exists("start_selector"):
+            return
+
+        current_start = self.start_selector.get().strip().upper()
+        destination = self.dest_selector.get().strip().upper() if self._widget_exists("dest_selector") else ""
+        all_locations = [
+            str(name).strip().upper()
+            for name in self.get_location_names()
+            if str(name).strip() and str(name).strip().upper() != "NO DATA"
+        ]
+
+        valid_values = []
+        for candidate in all_locations:
+            if candidate in self.selected_sources:
+                continue
+            if destination and destination not in {"NO DATA", "DESTINATION"}:
+                if candidate == destination:
+                    continue
+                validation = self.controller.interception.validate_sources_for_destination(
+                    self.selected_sources + [candidate],
+                    destination,
+                )
+                if not validation.get("ok"):
+                    continue
+            valid_values.append(candidate)
+
+        if not valid_values:
+            if destination and destination not in {"NO DATA", "DESTINATION"}:
+                valid_values = ["NO VALID START"]
+            else:
+                valid_values = all_locations or ["NO DATA"]
+
+        self.start_selector.configure(values=valid_values)
+        if current_start in valid_values:
+            self.start_selector.set(current_start)
+        else:
+            self.start_selector.set("START")
 
     def get_road_names(self):
         try:
@@ -502,7 +536,7 @@ class InterceptionFrame(ctk.CTkFrame):
 
         if self._widget_exists("start_selector"):
             start = self.start_selector.get().strip().upper()
-            if start and start not in {"NO DATA", "START"}:
+            if start and start not in {"NO DATA", "START", "NO VALID START"}:
                 return [start]
 
         return list(self.selected_sources)
@@ -511,7 +545,7 @@ class InterceptionFrame(ctk.CTkFrame):
         if not self._widget_exists("start_selector"):
             return
         start = self.start_selector.get().strip().upper()
-        if not start or start in {"NO DATA", "START"}:
+        if not start or start in {"NO DATA", "START", "NO VALID START"}:
             DrakePopup.warning("INTERCEPTION", "Select a valid start location first.", parent=self)
             return
 
@@ -548,25 +582,23 @@ class InterceptionFrame(ctk.CTkFrame):
     def on_destination_changed(self, selected_destination=None):
         """Silently prunes sources that are incompatible with the selected destination."""
         destination = (selected_destination or "").strip().upper()
-        if not destination or destination in {"NO DATA", "DESTINATION"}:
-            return
+        if destination and destination not in {"NO DATA", "DESTINATION"} and self.selected_sources:
+            kept_sources = []
+            changed = False
+            for source in self.selected_sources:
+                trial_sources = kept_sources + [source]
+                validation = self.controller.interception.validate_sources_for_destination(trial_sources, destination)
+                if validation.get("ok"):
+                    kept_sources.append(source)
+                else:
+                    changed = True
 
-        if not self.selected_sources:
-            return
+            if changed:
+                self.selected_sources = kept_sources
+                self.refresh_start_sources_display()
+                return
 
-        kept_sources = []
-        changed = False
-        for source in self.selected_sources:
-            trial_sources = kept_sources + [source]
-            validation = self.controller.interception.validate_sources_for_destination(trial_sources, destination)
-            if validation.get("ok"):
-                kept_sources.append(source)
-            else:
-                changed = True
-
-        if changed:
-            self.selected_sources = kept_sources
-            self.refresh_start_sources_display()
+        self.refresh_start_selector_options()
 
     def refresh_start_sources_display(self):
         if self._widget_exists("start_sources_label"):
@@ -576,6 +608,7 @@ class InterceptionFrame(ctk.CTkFrame):
                 self.start_sources_label.configure(text="START SOURCES: NONE")
 
         if not self._widget_exists("start_sources_frame"):
+            self.refresh_start_selector_options()
             return
 
         for child in self.start_sources_frame.winfo_children():
@@ -600,6 +633,8 @@ class InterceptionFrame(ctk.CTkFrame):
                 width=74,
                 command=lambda n=source_name: self.remove_start_source(n),
             ).pack(side="right", padx=6, pady=3)
+
+        self.refresh_start_selector_options()
 
     def generate_road_preview(self):
         sources = self._active_sources_for_save()
@@ -779,6 +814,8 @@ class InterceptionFrame(ctk.CTkFrame):
             self.start_selector.set(first_source)
         elif self._widget_exists("start_selector"):
             self.start_selector.set("START")
+
+        self.refresh_start_selector_options()
 
         self.output.insert("end", f"[+] Road loaded: {road['name']}\n")
         if hasattr(self, "road_output"):
