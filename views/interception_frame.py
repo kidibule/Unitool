@@ -11,6 +11,11 @@ from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearB
 class InterceptionFrame(ctk.CTkFrame):
     """UI view for interception calculations and location management."""
 
+    # Valeurs fixes pour radius, step et max_dist (Star Citizen)
+    FIXED_RADIUS = 20000
+    FIXED_STEP = 500
+    FIXED_MAX_DIST = 250000
+
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
@@ -40,9 +45,13 @@ class InterceptionFrame(ctk.CTkFrame):
             border_width=1,
             border_color=DrakeConfig.BORDER_COLOR,
         )
-        f_add.pack(fill="x", pady=(0, 6))
+        f_add.pack(fill="x", pady=(0, 2))
         top_row = ctk.CTkFrame(f_add, fg_color="transparent")
-        top_row.pack(fill="x", padx=6, pady=(8, 4))
+        top_row.pack(fill="x", padx=6, pady=(6, 2))
+        top_row.grid_columnconfigure(0, weight=1)
+        top_row.grid_columnconfigure(1, weight=0)
+        top_row.grid_columnconfigure(2, weight=0)
+
 
         self.road_name_entry = DrakeEntry(
             top_row,
@@ -50,59 +59,44 @@ class InterceptionFrame(ctk.CTkFrame):
             fg_color=DrakeConfig.BG_TERMINAL,
             border_color=DrakeConfig.BORDER_COLOR,
         )
-        self.road_name_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.road_name_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
-        DrakeButton(top_row, text="SAVE", width=100, command=self.save_road_preset).pack(side="left", padx=(0, 6))
-        DrakeButton(top_row, text="GENERATE", width=110, command=self.generate_road_preview).pack(side="left")
+        # Combobox des presets (affichage des valeurs fixes)
+        preset_values = [
+            "Mantis"
+        ]
+        self.preset_selector = DrakeComboBox(
+            top_row,
+            values=preset_values,
+            width=160
+        )
+        self.preset_selector.set(preset_values[0])
+        self.preset_selector.grid(row=0, column=1, padx=(6, 6), sticky="e")
+
+        DrakeButton(top_row, text="SAVE", width=100, command=self.save_road_preset).grid(row=0, column=2, padx=(6, 6), sticky="e")
 
         bottom_row = ctk.CTkFrame(f_add, fg_color="transparent")
-        bottom_row.pack(fill="x", padx=6, pady=(2, 10))
+        bottom_row.pack(fill="x", padx=6, pady=(0, 4))
+        bottom_row.grid_columnconfigure(0, weight=1)
+        bottom_row.grid_columnconfigure(1, weight=0)
+        bottom_row.grid_columnconfigure(2, weight=0)
+        bottom_row.grid_columnconfigure(3, weight=0)
+        bottom_row.grid_columnconfigure(4, weight=0)
 
         self.start_selector = DrakeComboBox(bottom_row, values=location_list, width=160)
-        self.start_selector.pack(side="left", padx=(0, 6))
+        self.start_selector.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self.start_selector.set("START")
 
-        DrakeButton(bottom_row, text="ADD START", width=95, command=self.add_start_source).pack(side="left", padx=(0, 6))
-        DrakeClearButton(bottom_row, text="CLEAR", width=70, command=self.clear_start_sources).pack(side="left", padx=(0, 8))
+        DrakeButton(bottom_row, text="ADD START", width=95, command=self.add_start_source).grid(row=0, column=1, padx=(0, 6))
+        DrakeClearButton(bottom_row, text="CLEAR", width=70, command=self.clear_start_sources).grid(row=0, column=2, padx=(0, 8))
 
-        self.dest_selector = DrakeComboBox(
-            bottom_row,
-            values=location_list,
-            width=160,
-            command=self.on_destination_changed,
-        )
-        self.dest_selector.pack(side="left", padx=(0, 6))
+        self.dest_selector = DrakeComboBox(bottom_row, values=location_list, width=160, command=self.on_destination_changed)
+        self.dest_selector.grid(row=0, column=3, padx=(0, 6), sticky="e")
         self.dest_selector.set("DESTINATION")
 
-        self.radius_entry = DrakeEntry(
-            bottom_row,
-            placeholder_text="Radius",
-            width=95,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self.radius_entry.insert(0, "20000")
-        self.radius_entry.pack(side="left", padx=(0, 6))
+        DrakeButton(bottom_row, text="GENERATE", width=100, command=self.generate_road_preview).grid(row=0, column=4, padx=(6, 6), sticky="e")
 
-        self.step_entry = DrakeEntry(
-            bottom_row,
-            placeholder_text="Step",
-            width=80,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self.step_entry.insert(0, "500")
-        self.step_entry.pack(side="left", padx=(0, 6))
-
-        self.max_dist_entry = DrakeEntry(
-            bottom_row,
-            placeholder_text="Max",
-            width=110,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self.max_dist_entry.insert(0, "250000")
-        self.max_dist_entry.pack(side="left")
+        # (Les valeurs fixes sont maintenant des attributs de classe)
 
         DrakeButton(
             container,
@@ -647,15 +641,14 @@ class InterceptionFrame(ctk.CTkFrame):
             DrakePopup.warning("INTERCEPTION", "Select a destination first.", parent=self)
             return
 
-        try:
-            radius = float(self.radius_entry.get().strip())
-            step = float(self.step_entry.get().strip())
-            max_dist = float(self.max_dist_entry.get().strip())
-        except Exception:
-            DrakePopup.error("INTERCEPTION", "radius, step and max_dist must be numeric.", parent=self)
-            return
-
-        self._run_road_calculation(sources, dest, radius, step, max_dist)
+        # Utilisation des valeurs fixes
+        self._run_road_calculation(
+            sources,
+            dest,
+            self.FIXED_RADIUS,
+            self.FIXED_STEP,
+            self.FIXED_MAX_DIST,
+        )
 
     def _run_road_calculation(self, sources, dest, radius, step, max_dist):
         """Runs interception calculation and renders output report."""
@@ -755,7 +748,43 @@ class InterceptionFrame(ctk.CTkFrame):
 
     def save_road_preset(self):
         road_name = self.road_name_entry.get().strip() if self._widget_exists("road_name_entry") else ""
-        self._save_road_common(road_name)
+        # Appel direct avec valeurs fixes
+        sources = self._active_sources_for_save()
+        dest = self.dest_selector.get().strip().upper() if self._widget_exists("dest_selector") else ""
+        if not road_name:
+            DrakePopup.warning("INTERCEPTION", "Road name is required.", parent=self)
+            return
+        if not dest or dest in {"NO DATA", "DESTINATION"}:
+            DrakePopup.warning("INTERCEPTION", "Select a destination first.", parent=self)
+            return
+        if not sources:
+            DrakePopup.warning("INTERCEPTION", "At least one source point is required.", parent=self)
+            return
+        validation = self.controller.interception.validate_sources_for_destination(sources, dest)
+        if not validation.get("ok"):
+            DrakePopup.warning("INTERCEPTION", validation.get("message") or "Invalid source selection for this destination.", parent=self)
+            return
+        try:
+            self.controller.interception.save_road(
+                road_name,
+                sources,
+                dest,
+                self.FIXED_RADIUS,
+                self.FIXED_STEP,
+                self.FIXED_MAX_DIST,
+            )
+            self.road_selected_name = road_name
+            self.road_editing_name = ""
+            self.refresh_roads()
+            self.output.insert("end", f"[+] Road saved: {road_name}\n")
+            if hasattr(self, "road_output"):
+                self.road_output.insert("end", f"[+] Road saved: {road_name}\n")
+                self.road_output.see("end")
+            self.output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Interception road saved: {road_name}", source="INTERCEPTION")
+        except Exception as e:
+            DrakePopup.error("INTERCEPTION", str(e), parent=self)
 
     def load_road_preset(self, road_name=None):
         selected = (road_name or self.road_selected_name or "").strip()
