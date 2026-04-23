@@ -413,9 +413,77 @@ class InterceptionFrame(ctk.CTkFrame):
         max_entry.pack(side="left", expand=True, fill="x")
         max_entry.insert(0, f"{road['max_dist']:.0f}")
 
-        source_line = DrakeEntry(editor, placeholder_text="Sources (comma-separated)")
-        source_line.pack(fill="x", pady=(0, 8))
-        source_line.insert(0, ", ".join(road.get("source_names", [])))
+        # Sources dynamiques : 3 combobox par ligne, boutons + et -
+        sources = self.get_location_names()
+        source_values = list(road.get("source_names", []) or [])
+        if not source_values:
+            source_values = [sources[0] if sources else ""]
+
+        sources_container = ctk.CTkFrame(editor, fg_color="transparent")
+        sources_container.pack(fill="x", pady=(0, 4))
+
+        source_combos = []
+
+        def rebuild_sources():
+            for w in sources_container.winfo_children():
+                w.destroy()
+            source_combos.clear()
+            # Destination actuelle pour exclusion
+            current_dest = dest_combo.get().strip().upper()
+            row_frame = None
+            for idx, val in enumerate(source_values):
+                if idx % 3 == 0:
+                    row_frame = ctk.CTkFrame(sources_container, fg_color="transparent")
+                    row_frame.pack(fill="x", pady=(0, 4))
+                # Valeurs disponibles : exclure la destination et les valeurs déjà choisies dans les autres combos
+                other_selected = {v.strip().upper() for j, v in enumerate(source_values) if j != idx and v.strip()}
+                filtered = [
+                    s for s in sources
+                    if s.strip().upper() != current_dest
+                    and s.strip().upper() not in other_selected
+                ]
+                if not filtered:
+                    filtered = sources
+                combo = DrakeComboBox(row_frame, values=filtered, width=140)
+                # Garder la valeur actuelle si elle est valide, sinon prendre la première dispo
+                if val in filtered:
+                    combo.set(val)
+                elif filtered:
+                    combo.set(filtered[0])
+                    source_values[idx] = filtered[0]
+                combo.pack(side="left", padx=(0, 2))
+                source_combos.append(combo)
+
+                def make_remove(i):
+                    def remove():
+                        # Sauvegarde les sélections actuelles
+                        for j, c in enumerate(source_combos):
+                            if j < len(source_values):
+                                source_values[j] = c.get().strip().upper()
+                        if len(source_values) > 1:
+                            source_values.pop(i)
+                            rebuild_sources()
+                    return remove
+
+                if len(source_values) > 1:
+                    DrakeButton(row_frame, text="-", width=26, height=26,
+                                command=make_remove(idx)).pack(side="left", padx=(0, 8))
+
+            # Bouton + pour ajouter une source
+            add_row = ctk.CTkFrame(sources_container, fg_color="transparent")
+            add_row.pack(fill="x", pady=(2, 0))
+
+            def add_source():
+                for j, c in enumerate(source_combos):
+                    if j < len(source_values):
+                        source_values[j] = c.get().strip().upper()
+                source_values.append(sources[0] if sources else "")
+                rebuild_sources()
+
+            DrakeButton(add_row, text="+ ADD SOURCE", width=120, height=26,
+                        command=add_source).pack(side="left")
+
+        rebuild_sources()
 
         bottom = ctk.CTkFrame(editor, fg_color="transparent")
         bottom.pack(fill="x")
@@ -429,7 +497,7 @@ class InterceptionFrame(ctk.CTkFrame):
                 old,
                 name_entry,
                 dest_combo,
-                source_line,
+                source_combos,
                 radius_entry,
                 step_entry,
                 max_entry,
@@ -467,12 +535,12 @@ class InterceptionFrame(ctk.CTkFrame):
         self.road_editing_name = ""
         self.refresh_roads()
 
-    def save_road_row_inline(self, old_name, name_entry, dest_combo, source_line, radius_entry, step_entry, max_entry):
+    def save_road_row_inline(self, old_name, name_entry, dest_combo, source_combos, radius_entry, step_entry, max_entry):
         old_name = (old_name or "").strip()
         new_name = name_entry.get().strip()
         dest = dest_combo.get().strip().upper()
-        raw_sources = source_line.get().strip()
-        sources = [part.strip().upper() for part in raw_sources.split(",") if part.strip()]
+        # source_combos est une liste de DrakeComboBox
+        sources = [c.get().strip().upper() for c in source_combos if c.get().strip()]
 
         if not new_name:
             DrakePopup.warning("INTERCEPTION", "Road name is required.", parent=self)
@@ -650,7 +718,7 @@ class InterceptionFrame(ctk.CTkFrame):
             self.FIXED_MAX_DIST,
         )
 
-    def _run_road_calculation(self, sources, dest, radius, step, max_dist):
+    def _run_road_calculation(self, sources, dest, radius, step, max_dist, log_to_main_terminal=False, road_name=None):
         """Runs interception calculation and renders output report."""
         src = [str(s).strip().upper() for s in (sources or []) if str(s).strip()]
         destination = (dest or "").strip().upper()
@@ -679,11 +747,15 @@ class InterceptionFrame(ctk.CTkFrame):
         if result.get("ok"):
             self._render_snare_success(result, src, destination)
             self.output.see("end")
+            if log_to_main_terminal and hasattr(self.controller, "log"):
+                self.controller.log(f"Calculation for route {road_name or ''} succeeded", source="INTERCEPTION")
             return
 
         message = result.get("message") or "Calculation failed."
         self._render_snare_failure(message, src, destination, radius, step, max_dist)
         self.output.see("end")
+        if log_to_main_terminal and hasattr(self.controller, "log"):
+            self.controller.log(f"Calculation for route {road_name or ''} failed", source="INTERCEPTION")
 
     def _save_road_common(self, road_name):
         road_name = (road_name or "").strip()
@@ -787,6 +859,10 @@ class InterceptionFrame(ctk.CTkFrame):
             DrakePopup.error("INTERCEPTION", str(e), parent=self)
 
     def load_road_preset(self, road_name=None):
+        # Log explicite dans le terminal principal (log_message)
+        if hasattr(self.controller, "log"):
+            self.controller.log(f"Attempting to load route: {road_name or self.road_selected_name}", source="INTERCEPTION")
+        # Log explicite dans le terminal principal
         selected = (road_name or self.road_selected_name or "").strip()
         if not selected and self._widget_exists("road_name_entry"):
             selected = self.road_name_entry.get().strip()
@@ -823,21 +899,9 @@ class InterceptionFrame(ctk.CTkFrame):
         else:
             self.dest_selector.set("DESTINATION")
 
-        self.radius_entry.delete(0, "end")
-        self.radius_entry.insert(0, f"{road['radius']:.0f}")
-
-        self.step_entry.delete(0, "end")
-        self.step_entry.insert(0, f"{road['step']:.0f}")
-
-        self.max_dist_entry.delete(0, "end")
-        self.max_dist_entry.insert(0, f"{road['max_dist']:.0f}")
-
         if hasattr(self, "road_name_entry"):
             self.road_name_entry.delete(0, "end")
             self.road_name_entry.insert(0, road["name"])
-        if hasattr(self, "snare_road_name_entry"):
-            self.snare_road_name_entry.delete(0, "end")
-            self.snare_road_name_entry.insert(0, road["name"])
         first_source = road.get("source_names", [None])[0]
         if first_source and self._widget_exists("start_selector"):
             self.start_selector.set(first_source)
@@ -855,16 +919,20 @@ class InterceptionFrame(ctk.CTkFrame):
             self.controller.log(f"Interception road loaded: {road['name']}", source="INTERCEPTION")
         # Loading a saved road must immediately run interception with loaded values.
         try:
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Running calculation for route: {road['name']}", source="INTERCEPTION")
             self._run_road_calculation(
                 loaded_sources,
                 destination,
                 float(road["radius"]),
                 float(road["step"]),
                 float(road["max_dist"]),
+                log_to_main_terminal=True,
+                road_name=road['name']
             )
         except Exception as e:
-            self.output.insert("end", f"[ERROR] Auto-generate failed after load: {e}\n")
-            self.output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Calculation for route {road['name']} failed", source="INTERCEPTION")
         self.refresh_roads()
 
     def delete_road_preset(self, road_name=None):
