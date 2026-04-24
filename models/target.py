@@ -47,9 +47,9 @@ class Target(BaseModel):
     ]
 
     # Valeurs par défaut
-    DEFAULT_ALIGNMENT = "NEUTRE"
-    DEFAULT_PVP_LVL = "Inconnu"
-    DEFAULT_ACTIVITY = "Inconnu"
+    DEFAULT_ALIGNMENT = "NEUTRAL"
+    DEFAULT_PVP_LVL = "UNKNOWN"
+    DEFAULT_ACTIVITY = "UNKNOWN"
     DEFAULT_THREAT = "LOW"
 
     def __init__(
@@ -90,15 +90,15 @@ class Target(BaseModel):
 
     def is_threat(self) -> bool:
         """Retourne True si c'est une menace (ENNEMI ou PIRATE)."""
-        return self.alignment in ["ENNEMI", "PIRATE"]
+        return self.alignment in ["ENEMY", "PIRATE"]
 
     def is_friendly(self) -> bool:
         """Retourne True si c'est un allié."""
-        return self.alignment == "AMI"
+        return self.alignment == "ALLY"
 
     def is_neutral(self) -> bool:
         """Retourne True si c'est neutre."""
-        return self.alignment == "NEUTRE"
+        return self.alignment == "NEUTRAL"
 
     def add_win(self) -> None:
         """Incrémente le compteur de victoires."""
@@ -140,9 +140,9 @@ class Target(BaseModel):
             date=data.get("date"),
             wins=data.get("wins", 0),
             losses=data.get("losses", 0),
-            alignment=data.get("alignment", "NEUTRE"),
-            pvp_lvl=data.get("pvp_lvl", "Inconnu"),
-            activity=data.get("activity", "Inconnu"),
+            alignment=data.get("alignment", "NEUTRAL"),
+            pvp_lvl=data.get("pvp_lvl", "UNKNOWN"),
+            activity=data.get("activity", "UNKNOWN"),
             sid=data.get("sid", "N/A"),
             org_rank=data.get("org_rank", "N/A"),
             enlisted_date=data.get("enlisted_date", "N/A"),

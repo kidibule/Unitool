@@ -48,7 +48,7 @@ class LoggerController:
         org_rank: str = "",
         language: str = "",
         affiliates: str = "",
-        alignment: str = "NEUTRE",
+        alignment: str = "NEUTRAL",
         ship: str = "",
         pvp_lvl: str = "",
         activity: str = "",
@@ -159,7 +159,7 @@ class LoggerController:
                 row.get("ship", "").upper(),
                 row.get("threat", "LOW"),
                 row.get("notes", ""),
-                row.get("alignment", "NEUTRE"),
+                row.get("alignment", "NEUTRAL"),
             )
             self.app.commit(sql, params)
             self._sync_ship_to_catalog(row.get("ship", ""))
@@ -190,7 +190,7 @@ class LoggerController:
         specialization: str = "GENERAL",
         allies: str = "",
         enemies: str = "",
-        alignment: str = "NEUTRE",
+        alignment: str = "NEUTRAL",
         updated_at: str | None = None,
     ) -> None:
         sql = """
@@ -239,7 +239,7 @@ class LoggerController:
                     sid,
                     row.get("name", ""),
                     (row.get("tag") or "").upper(),
-                    row.get("alignment", "NEUTRE"),
+                    row.get("alignment", "NEUTRAL"),
                 ),
             )
             count += 1

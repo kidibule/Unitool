@@ -102,7 +102,7 @@ class ScannerController:
         exists = self.app.query("SELECT pseudo FROM targets WHERE pseudo=?", (handle,))
         if not exists:
             self.app.commit(
-                "INSERT INTO targets (pseudo, date, alignment) VALUES (?, strftime('%d/%m/%Y','now'), 'NEUTRE')",
+                "INSERT INTO targets (pseudo, date, alignment) VALUES (?, strftime('%d/%m/%Y','now'), 'NEUTRAL')",
                 (handle,),
             )
             try:

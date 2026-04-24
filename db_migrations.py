@@ -68,9 +68,9 @@ def _add_column_if_missing(cursor, table: str, column: str, col_type: str) -> No
     """Ajoute une colonne uniquement si elle est absente. Logue le résultat."""
     if not _column_exists(cursor, table, column):
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-        logger.info(f"  Colonne ajoutée : {table}.{column}")
+        logger.info(f"  Column added: {table}.{column}")
     else:
-        logger.debug(f"  Colonne déjà présente (ignorée) : {table}.{column}")
+        logger.debug(f"  Column already present (skipped): {table}.{column}")
 
 
 # ---------------------------------------------------------------------------
@@ -95,9 +95,9 @@ def _m001_schema_initial(cursor):
             date           TEXT,
             wins           INTEGER DEFAULT 0,
             losses         INTEGER DEFAULT 0,
-            alignment      TEXT DEFAULT 'NEUTRE',
-            pvp_lvl        TEXT DEFAULT 'Inconnu',
-            activity       TEXT DEFAULT 'Inconnu',
+            alignment      TEXT DEFAULT 'NEUTRAL',
+            pvp_lvl        TEXT DEFAULT 'UNKNOWN',
+            activity       TEXT DEFAULT 'UNKNOWN',
             sid            TEXT DEFAULT 'N/A',
             org_rank       TEXT DEFAULT 'N/A',
             enlisted_date  TEXT DEFAULT 'N/A',
@@ -147,7 +147,7 @@ def _m001_schema_initial(cursor):
             enemies          TEXT DEFAULT '',
             neutrals         TEXT DEFAULT '',
             updated_at       TEXT,
-            alignment        TEXT DEFAULT 'NEUTRE'
+            alignment        TEXT DEFAULT 'NEUTRAL'
         )
     """)
 
@@ -322,8 +322,8 @@ def _m001_schema_initial(cursor):
 
 def _m002_targets_colonnes_legacy(cursor):
     """Ajoute les colonnes ajoutées progressivement à la table targets (bases legacy)."""
-    _add_column_if_missing(cursor, "targets", "pvp_lvl",       "TEXT DEFAULT 'Inconnu'")
-    _add_column_if_missing(cursor, "targets", "activity",      "TEXT DEFAULT 'Inconnu'")
+    _add_column_if_missing(cursor, "targets", "pvp_lvl",       "TEXT DEFAULT 'UNKNOWN'")
+    _add_column_if_missing(cursor, "targets", "activity",      "TEXT DEFAULT 'UNKNOWN'")
     _add_column_if_missing(cursor, "targets", "sid",           "TEXT DEFAULT 'N/A'")
     _add_column_if_missing(cursor, "targets", "org_rank",      "TEXT DEFAULT 'N/A'")
     _add_column_if_missing(cursor, "targets", "enlisted_date", "TEXT DEFAULT 'N/A'")
@@ -338,7 +338,7 @@ def _m003_organizations_colonnes_legacy(cursor):
     _add_column_if_missing(cursor, "organizations", "allies",         "TEXT DEFAULT ''")
     _add_column_if_missing(cursor, "organizations", "enemies",        "TEXT DEFAULT ''")
     _add_column_if_missing(cursor, "organizations", "neutrals",       "TEXT DEFAULT ''")
-    _add_column_if_missing(cursor, "organizations", "alignment",      "TEXT DEFAULT 'NEUTRE'")
+    _add_column_if_missing(cursor, "organizations", "alignment",      "TEXT DEFAULT 'NEUTRAL'")
     _add_column_if_missing(cursor, "organizations", "updated_at",     "TEXT")
 
 
@@ -401,10 +401,10 @@ def _m006_loadout_rebuild_pk(cursor):
     expected_pk = ["ship_name", "profile_name", "category", "subtype_name", "slot_number"]
 
     if "profile_name" in cols and "subtype_name" in cols and pk_cols == expected_pk:
-        logger.debug("  ship_loadout : clé primaire déjà correcte, rien à faire.")
+        logger.debug("  ship_loadout: primary key already correct, nothing to do.")
         return
 
-    logger.info("  ship_loadout : reconstruction avec la clé primaire correcte...")
+    logger.info("  ship_loadout: rebuilding with correct primary key...")
 
     cursor.execute("""
         CREATE TABLE ship_loadout_new (
@@ -454,7 +454,27 @@ def _m006_loadout_rebuild_pk(cursor):
 
     cursor.execute("DROP TABLE ship_loadout")
     cursor.execute("ALTER TABLE ship_loadout_new RENAME TO ship_loadout")
-    logger.info("  ship_loadout : reconstruction terminée.")
+    logger.info("  ship_loadout: rebuild complete.")
+
+
+# ---------------------------------------------------------------------------
+# Liste ordonnée des migrations
+# Règle : ne jamais modifier une entrée existante, seulement en ajouter.
+# ---------------------------------------------------------------------------
+
+def _m007_localise_fr_to_en(cursor):
+    """Replace French alignment/status values with English equivalents in existing data."""
+    # targets: alignment
+    cursor.execute("UPDATE targets SET alignment = 'NEUTRAL' WHERE alignment = 'NEUTRE'")
+    cursor.execute("UPDATE targets SET alignment = 'ENEMY'   WHERE alignment = 'ENNEMI'")
+    cursor.execute("UPDATE targets SET alignment = 'ALLY'    WHERE alignment = 'AMI'")
+    # targets: pvp_lvl / activity
+    cursor.execute("UPDATE targets SET pvp_lvl  = 'UNKNOWN' WHERE pvp_lvl  = 'Inconnu'")
+    cursor.execute("UPDATE targets SET activity = 'UNKNOWN' WHERE activity = 'Inconnu'")
+    # organizations: alignment
+    cursor.execute("UPDATE organizations SET alignment = 'NEUTRAL' WHERE alignment = 'NEUTRE'")
+    cursor.execute("UPDATE organizations SET alignment = 'ENEMY'   WHERE alignment = 'ENNEMI'")
+    cursor.execute("UPDATE organizations SET alignment = 'ALLY'    WHERE alignment = 'AMI'")
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +489,7 @@ MIGRATIONS = [
     (4, _m004_ships_colonnes_legacy),
     (5, _m005_locations_colonnes_legacy),
     (6, _m006_loadout_rebuild_pk),
+    (7, _m007_localise_fr_to_en),
 ]
 
 
@@ -489,14 +510,14 @@ def run_migrations(conn, cursor) -> None:
     pending = [(v, fn) for v, fn in MIGRATIONS if v > current]
 
     if not pending:
-        logger.debug(f"Base à jour (version {current}), aucune migration à appliquer.")
+        logger.debug(f"Database up to date (version {current}), no migration to apply.")
         return
 
     for version, fn in pending:
-        logger.info(f"[MIGRATION] Application de la migration {version} : {fn.__name__}")
+        logger.info(f"[MIGRATION] Applying migration {version}: {fn.__name__}")
         fn(cursor)
         _set_version(cursor, version)
         conn.commit()
-        logger.info(f"[MIGRATION] Migration {version} appliquée avec succès.")
+        logger.info(f"[MIGRATION] Migration {version} applied successfully.")
 
-    logger.info(f"[MIGRATION] Base mise à jour : version {current} → {pending[-1][0]}")
+    logger.info(f"[MIGRATION] Database updated: version {current} -> {pending[-1][0]}")

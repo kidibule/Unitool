@@ -71,7 +71,7 @@ class TestShip:
         comp = Component(name="LASER", brand="RSI", type_name="ENERGY", category="WEAPON", size=1, grade="A")
         ok, msg = ship.can_add_component(comp)
         assert ok is False
-        assert "Aucun slot" in msg
+        assert "No [" in msg
 
     def test_can_add_component_taille_trop_grande_refuse(self):
         ship = self._make_ship()
@@ -79,7 +79,7 @@ class TestShip:
         comp = Component(name="BIG_GUN", brand="RSI", type_name="BALLISTIC", category="WEAPON", size=3, grade="A")
         ok, msg = ship.can_add_component(comp)
         assert ok is False
-        assert "TAILLE" in msg
+        assert "SIZE" in msg
 
     def test_can_add_component_valide(self):
         ship = self._make_ship()

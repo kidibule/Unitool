@@ -225,7 +225,7 @@ class ShipController:
     def import_ships_from_csv(self):
         file_path = filedialog.askopenfilename(
             filetypes=[("CSV files", "*.csv")],
-            title="IMPORTER LA FLOTTE",
+            title="IMPORT FLEET",
         )
         if not file_path:
             return
@@ -234,7 +234,7 @@ class ShipController:
             with open(file_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 self.import_ships_csv(list(reader))
-            messagebox.showinfo("UNITOOL", "Importation terminée avec succès !")
+            messagebox.showinfo("UNITOOL", "Import successful!")
         except Exception as e:
             messagebox.showerror("Import Error", str(e))
 
@@ -242,7 +242,7 @@ class ShipController:
         file_path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
-            title="EXPORTER LA FLOTTE",
+            title="EXPORT FLEET",
         )
         if not file_path:
             return
@@ -258,7 +258,7 @@ class ShipController:
 
             if hasattr(self.app, "log"):
                 self.app.log(f"EXPORT SUCCESS: {file_path}", source="SYSTEM")
-            messagebox.showinfo("UNITOOL", "Exportation réussie !")
+            messagebox.showinfo("UNITOOL", "Export successful!")
         except Exception as e:
             messagebox.showerror("Export Error", str(e))
 
@@ -283,7 +283,7 @@ class ShipController:
         old_name = (original_name or "").strip().upper()
         new_name = (data.get("name") or "").strip().upper()
         if not old_name or not new_name:
-            raise ValueError("Nom de composant invalide.")
+            raise ValueError("Invalid component name.")
 
         params = (
             new_name,
@@ -349,7 +349,7 @@ class ShipController:
     def create_component_category(self, category_name: str) -> None:
         category = (category_name or "").strip().upper()
         if not category:
-            raise ValueError("TYPE requis.")
+            raise ValueError("TYPE is required.")
         self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", (category,))
 
     def delete_component_category(self, category_name: str) -> None:
@@ -374,7 +374,7 @@ class ShipController:
         cat = (category or "").strip().upper()
         subtype = (subtype_name or "").strip().upper()
         if not cat or not subtype:
-            raise ValueError("CATEGORY et SUBTYPE requis.")
+            raise ValueError("CATEGORY and SUBTYPE are required.")
 
         self.app.commit(
             "INSERT OR IGNORE INTO component_categories (name) VALUES (?)",
@@ -423,9 +423,9 @@ class ShipController:
         size = self._safe_int(max_size, 0)
 
         if not ship or not cat or not subtype:
-            raise ValueError("Paramètres invalides pour le slot de sous-type.")
+            raise ValueError("Invalid parameters for subtype slot.")
         if qty <= 0 or size <= 0:
-            raise ValueError("max_qty et max_size doivent être > 0.")
+            raise ValueError("max_qty and max_size must be > 0.")
 
         self.app.commit(
             """
@@ -778,7 +778,7 @@ class ShipController:
 
             if slot_index is None:
                 if hasattr(self.app, "log"):
-                    self.app.log("EQUIP REJECTED: Limite du sous-type atteinte.", source="FLEET")
+                    self.app.log("EQUIP REJECTED: Subtype slot limit reached.", source="FLEET")
                 return False
 
             saved = self.mount_component(
@@ -790,7 +790,7 @@ class ShipController:
                 profile,
             )
             if saved and hasattr(self.app, "log"):
-                self.app.log(f"LOADOUT: {new_comp.name} équipé sur {ship.name}", source="FLEET")
+                self.app.log(f"LOADOUT: {new_comp.name} equipped on {ship.name}", source="FLEET")
             return saved
 
         except Exception as e:

@@ -73,7 +73,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.org_type.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.org_type.set(self.org_type_placeholder)
 
-        self.org_align = DrakeComboBox(f_type_align, values=["NEUTRE", "AMI", "ENNEMI"])
+        self.org_align = DrakeComboBox(f_type_align, values=["NEUTRAL", "ALLY", "ENEMY"])
         self.org_align.pack(side="right", fill="x", expand=True, padx=(5, 0))
         self.org_align.set(self.org_align_placeholder)
 
@@ -121,7 +121,7 @@ class LoggerFrame(ctk.CTkFrame):
                 org_type_val = "ORGANIZATION"
             org_align_val = self.org_align.get()
             if org_align_val == self.org_align_placeholder:
-                org_align_val = "NEUTRE"
+                org_align_val = "NEUTRAL"
             self.controller.logger.save_organization(
                 sid=sid,
                 name=name,
@@ -234,7 +234,7 @@ class LoggerFrame(ctk.CTkFrame):
         #--- 5. ALIGNEMENT & PROFIL ---
         self.a_btn = DrakeComboBox(
             self.tab_targets,
-            values=["AMI", "NEUTRE", "ENNEMI"]
+            values=["ALLY", "NEUTRAL", "ENEMY"]
         )
 
         self.a_btn.pack(pady=(5, 10), padx=50, fill="x")
@@ -285,13 +285,13 @@ class LoggerFrame(ctk.CTkFrame):
         rank_val = (self.rank_in.get() or "").upper()
         lang_val = (self.lang_in.get() or "").upper()
         aff_val = (self.aff_in.get() or "").upper()
-        align_val = self.a_btn.get() or "NEUTRE"
+        align_val = self.a_btn.get() or "NEUTRAL"
         if align_val == self.target_alignment_placeholder:
-            align_val = "NEUTRE"
+            align_val = "NEUTRAL"
         ship_val = (self.s_in.get() or "").upper()
         pvp_val = (self.pvp_in.get() or "").upper()
         if pvp_val == self.target_pvp_placeholder or pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
-            pvp_val = "Inconnu"
+            pvp_val = "UNKNOWN"
         act_val = (self.act_in.get() or "").upper()
         if act_val == self.target_activity_placeholder:
             act_val = ""

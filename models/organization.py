@@ -50,7 +50,7 @@ class Organization(BaseModel):
         enemies: str = "",
         neutrals: str = "",
         updated_at: str = None,
-        alignment: str = "NEUTRE"
+        alignment: str = "NEUTRAL"
     ):
         # Identifiants
         self.sid = sid.upper() if sid else ""
@@ -76,7 +76,7 @@ class Organization(BaseModel):
         # Metadata
         self.updated_at = updated_at or datetime.now().strftime("%d/%m/%Y")
 
-        self.alignment = alignment.upper() if alignment else "NEUTRE"
+        self.alignment = alignment.upper() if alignment else "NEUTRAL"
 
     def is_large(self) -> bool:
         """Retourne True si l'org a plus de 100 membres."""
@@ -96,7 +96,7 @@ class Organization(BaseModel):
         return self.to_tuple(self.COLUMNS)
 
     def is_enemy(self) -> bool:
-        return self.alignment in ["ENNEMI", "PIRATE", "HOSTILE"]
+        return self.alignment in ["ENEMY", "PIRATE", "HOSTILE"]
 
     def is_friendly(self) -> bool:
-        return self.alignment == "AMI"
+        return self.alignment == "ALLY"

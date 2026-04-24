@@ -127,18 +127,18 @@ class Ship(BaseModel):
         cap = self.capabilities.get(component.category.upper())
         
         if not cap:
-            return False, f"ERREUR : Aucun slot [{component.category}] sur ce châssis."
+            return False, f"ERROR: No [{component.category}] slot on this chassis."
 
         # 1. Vérification de la Taille (S1, S2, etc.)
         if int(component.size) > cap["max_size"]:
-            return False, f"TAILLE : S{component.size} excède la limite (Max S{cap['max_size']})."
+            return False, f"SIZE: S{component.size} exceeds limit (Max S{cap['max_size']})."
 
         # 2. Vérification de la Quantité d'emplacements
         current_count = sum(1 for c in self.components if c.category == component.category)
         if current_count >= cap["max_qty"]:
-            return False, f"SLOTS : Tous les emplacements [{component.category}] sont occupés ({cap['max_qty']}/{cap['max_qty']})."
+            return False, f"SLOTS: All [{component.category}] slots are full ({cap['max_qty']}/{cap['max_qty']})."
 
-        return True, "Configuration valide."
+        return True, "Valid configuration."
 
     def add_component(self, component: Component) -> bool:
         """Ajoute le composant seulement si la validation passe."""
@@ -146,7 +146,7 @@ class Ship(BaseModel):
         if allowed:
             self.components.append(component)
             return True
-        print(f"REFUSÉ : {message}") # Debug ou Log
+        print(f"REJECTED: {message}") # Debug ou Log
         return False
 
     @classmethod

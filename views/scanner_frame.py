@@ -183,7 +183,7 @@ class ScannerFrame(ctk.CTkFrame):
                 # --- [BLOC 1 : IDENTITÉ & TYPE] ---
                 self.org_results.insert("end", " ■ ", alignment) 
                 
-                self.org_results.insert("end", f"{name} ", (tag_name_click, "NEUTRE"))
+                self.org_results.insert("end", f"{name} ", (tag_name_click, "NEUTRAL"))
                 self.org_results.insert("end", "[")
                 self.org_results.insert("end", f"{sid}", (tag_link, "link_org"))
                 self.org_results.insert("end", "]")
@@ -273,17 +273,17 @@ class ScannerFrame(ctk.CTkFrame):
         self.results.tag_config("link_org", foreground=DrakeConfig.TEXT_SECONDARY, underline=True)
         self.results.tag_config("link_rsi", foreground="#00aaff", underline=True)
         self.results.tag_config("ship_name_white", foreground=DrakeConfig.TEXT_MAIN)
-        self.results.tag_config("AMI", foreground="#00FF00")
-        self.results.tag_config("ENNEMI", foreground=DrakeConfig.ACCENT_ERROR)
-        self.results.tag_config("NEUTRE", foreground=DrakeConfig.TEXT_MAIN)
+        self.results.tag_config("ALLY", foreground="#00FF00")
+        self.results.tag_config("ENEMY", foreground=DrakeConfig.ACCENT_ERROR)
+        self.results.tag_config("NEUTRAL", foreground=DrakeConfig.TEXT_MAIN)
         self.results.tag_config("open_contract", foreground=DrakeConfig.ACCENT_PRIMARY)
         self.results.tag_config("closed_contract", foreground="green")
 
         self.org_results.tag_config("ACCENT", foreground="#ff8c00")
         self.org_results.tag_config("link_org", foreground=DrakeConfig.TEXT_SECONDARY, underline=True)
-        self.org_results.tag_config("NEUTRE", foreground="white")
-        self.org_results.tag_config("ENNEMI", foreground="#ff4444")
-        self.org_results.tag_config("AMI", foreground="#00FF00")
+        self.org_results.tag_config("NEUTRAL", foreground="white")
+        self.org_results.tag_config("ENEMY", foreground="#ff4444")
+        self.org_results.tag_config("ALLY", foreground="#00FF00")
 
         for k in ["link", "link_org", "link_rsi"]:
             self.results.tag_bind(k, "<Enter>", lambda e: self.results.configure(cursor="hand2"))
@@ -695,7 +695,7 @@ class ScannerFrame(ctk.CTkFrame):
         align_f = ctk.CTkFrame(frame, fg_color=DrakeConfig.BG_PANEL)
         align_f.pack(fill="x", pady=4)
         ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
-        e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
+        e_align = DrakeComboBox(align_f, values=["NEUTRAL", "ALLY", "ENEMY"])
         e_align.set(d[8] if len(d) > 8 and d[8] else "ALIGNMENT")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 
@@ -1079,7 +1079,7 @@ class ScannerFrame(ctk.CTkFrame):
         align_f.pack(fill="x", pady=4)
         ctk.CTkLabel(align_f, text="ALIGNMENT", font=("Segoe UI", 10, "bold"), text_color=DrakeConfig.TEXT_SECONDARY, width=150).pack(side="left", padx=8)
         
-        e_align = DrakeComboBox(align_f, values=["NEUTRE", "AMI", "ENNEMI"])
+        e_align = DrakeComboBox(align_f, values=["NEUTRAL", "ALLY", "ENEMY"])
         e_align.set(org.alignment if hasattr(org, 'alignment') and org.alignment else "ALIGNMENT")
         e_align.pack(side="right", fill="x", expand=True, padx=8)
 

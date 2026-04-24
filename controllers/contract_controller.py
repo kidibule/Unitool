@@ -52,7 +52,7 @@ class ContractController:
         check = self.app.query("SELECT pseudo FROM targets WHERE pseudo=?", (target.upper(),))
         if not check:
             self.app.commit(
-                "INSERT INTO targets (pseudo, wins, date, alignment) VALUES (?,?,?,'ENNEMI')",
+                "INSERT INTO targets (pseudo, wins, date, alignment) VALUES (?,?,?,'ENEMY')",
                 (target.upper(), 1, datetime.now().strftime("%d/%m/%y"))
             )
 

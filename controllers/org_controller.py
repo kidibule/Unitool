@@ -64,7 +64,7 @@ class OrgController:
                 pass
             
             if hasattr(self.app, "log"):
-                self.app.log(f"Org {sid} mise à jour (Champs: {list(cleaned_kwargs.keys())})", source="ORG_CTRL")
+                self.app.log(f"Org {sid} updated (Fields: {list(cleaned_kwargs.keys())})", source="ORG_CTRL")
 
     def get_diplomatic_report(self, sid: str) -> dict:
         """Génère un dictionnaire des relations pour la vue."""
