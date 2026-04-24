@@ -99,7 +99,7 @@ class LoggerController:
         self._sync_ship_to_catalog(ship)
         if pseudo and ship:
             try:
-                self.app.db.add_ship(pseudo.upper(), ship.upper())
+                self.app.db.targets.add_player_ship(pseudo.upper(), ship.upper())
             except Exception:
                 pass
         try:
@@ -165,7 +165,7 @@ class LoggerController:
             self._sync_ship_to_catalog(row.get("ship", ""))
             if row.get("pseudo") and row.get("ship"):
                 try:
-                    self.app.db.add_ship((row.get("pseudo") or "").upper(), (row.get("ship") or "").upper())
+                    self.app.db.targets.add_player_ship((row.get("pseudo") or "").upper(), (row.get("ship") or "").upper())
                 except Exception:
                     pass
             count += 1

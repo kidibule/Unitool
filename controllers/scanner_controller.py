@@ -126,21 +126,21 @@ class ScannerController:
                 )
                 if not already:
                     created = f"{legacy_date} 00:00" if "/" in legacy_date else legacy_date
-                    self.app.db.add_target_note(handle, legacy_note, created)
+                    self.app.db.targets.add_note(handle, legacy_note, created)
 
-        self.app.db.add_target_note(handle, note)
+        self.app.db.targets.add_note(handle, note)
 
     def get_target_notes(self, pseudo: str, limit: int = 50) -> list:
         """Retourne les notes d'une cible (id, note_text, created_at)."""
-        return self.app.db.get_target_notes(pseudo, limit=limit)
+        return self.app.db.targets.get_notes(pseudo, limit=limit)
 
     def update_target_note(self, pseudo: str, note_id: int, note_text: str) -> None:
         """Modifie une entree du journal de la cible."""
-        self.app.db.update_target_note(pseudo, note_id, note_text)
+        self.app.db.targets.update_note(pseudo, note_id, note_text)
 
     def delete_target_note(self, pseudo: str, note_id: int) -> None:
         """Supprime une entree du journal de la cible."""
-        self.app.db.delete_target_note(pseudo, note_id)
+        self.app.db.targets.delete_note(pseudo, note_id)
 
     def export_targets_csv(self) -> list:
         """Recupere tous les targets pour export."""

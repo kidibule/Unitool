@@ -173,11 +173,11 @@ class AppController:
 
     def upsert_target_intel(self, data: dict) -> None:
         """Insère ou met à jour les infos récupérées par le bot."""
-        self.db.upsert_target_intel(data)
+        self.db.targets.upsert_intel(data)
 
     def get_target_by_handle(self, handle: str) -> dict:
         """Récupère les infos d'un joueur pour la preview."""
-        return self.db.get_target_by_handle(handle)
+        return self.db.targets.get_by_handle(handle)
 
     def get_dashboard_stats(self) -> dict:
         """Retourne les compteurs affichés dans le panneau intel principal."""

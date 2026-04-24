@@ -128,18 +128,18 @@ class OrgController:
             if not already:
                 legacy_date = str(org.updated_at or "").strip() or "N/A"
                 created = f"{legacy_date} 00:00" if "/" in legacy_date else legacy_date
-                self.app.db.add_org_note(org_sid, legacy_note, created)
+                self.app.db.orgs.add_note(org_sid, legacy_note, created)
 
-        self.app.db.add_org_note(org_sid, note)
+        self.app.db.orgs.add_note(org_sid, note)
 
     def get_org_notes(self, sid: str, limit: int = 50) -> list:
         """Retourne les notes d'organisation (id, note_text, created_at)."""
-        return self.app.db.get_org_notes(sid, limit=limit)
+        return self.app.db.orgs.get_notes(sid, limit=limit)
 
     def update_org_note(self, sid: str, note_id: int, note_text: str) -> None:
         """Modifie une entree du journal d'organisation."""
-        self.app.db.update_org_note(sid, note_id, note_text)
+        self.app.db.orgs.update_note(sid, note_id, note_text)
 
     def delete_org_note(self, sid: str, note_id: int) -> None:
         """Supprime une entree du journal d'organisation."""
-        self.app.db.delete_org_note(sid, note_id)
+        self.app.db.orgs.delete_note(sid, note_id)

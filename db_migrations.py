@@ -1,0 +1,502 @@
+"""Système de migrations versionnées pour UNITOOL.
+
+Principe :
+  - Une table `schema_version` stocke le numéro de la dernière migration appliquée.
+  - Les migrations sont des fonctions numérotées appliquées dans l'ordre.
+  - Chaque migration n'est appliquée qu'une seule fois.
+  - Les erreurs sont loguées clairement — plus de try/except silencieux.
+
+Pour ajouter une migration :
+  1. Écrire une nouvelle fonction _mXXX_description(cursor)
+  2. L'ajouter à la fin de la liste MIGRATIONS
+  3. Ne jamais modifier une migration déjà déployée — toujours en ajouter une nouvelle
+"""
+
+import logging
+
+logger = logging.getLogger("unitool.migrations")
+
+# ---------------------------------------------------------------------------
+# Données de référence (seed)
+# ---------------------------------------------------------------------------
+
+_SHIP_ROLE_OPTIONS = [
+    "LIGHT FIGHTER", "MEDIUM FIGHTER", "HEAVY FIGHTER", "STEALTH FIGHTER",
+    "INTERDICTOR", "INTERCEPTOR", "GUNSHIP", "BOMBER", "DROPSHIP", "MINELAYER",
+    "SNUB FIGHTER", "LIGHT FREIGHT", "MEDIUM FREIGHT", "HEAVY FREIGHT",
+    "CARGO", "TRANSPORT", "PASSENGER", "LUXURY", "REFUEL", "PATHFINDER",
+    "EXPEDITION", "TOURING", "SCIENCE", "RESEARCH", "REPORTING", "DATA",
+    "PROSPECTING", "MINING", "SALVAGE", "REPAIR", "REFINING", "MEDICAL",
+    "CONSTRUCTION", "RACING", "MODULAR", "STARTER", "CORVETTE", "FRIGATE",
+    "DESTROYER", "CARRIER",
+]
+
+_SHIP_CAREER_OPTIONS = [
+    "COMBAT", "TRANSPORT", "EXPLORATION", "INDUSTRIAL",
+    "SCIENCE", "COMPETITION", "SUPPORT", "INTERDICTION",
+]
+
+# ---------------------------------------------------------------------------
+# Utilitaires internes
+# ---------------------------------------------------------------------------
+
+def _get_version(cursor) -> int:
+    """Retourne le numéro de la dernière migration appliquée (0 si aucune)."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+    )
+    row = cursor.execute("SELECT version FROM schema_version").fetchone()
+    return row[0] if row else 0
+
+
+def _set_version(cursor, version: int) -> None:
+    """Enregistre le numéro de la migration qui vient d'être appliquée."""
+    cursor.execute("DELETE FROM schema_version")
+    cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+
+
+def _column_exists(cursor, table: str, column: str) -> bool:
+    """Vérifie si une colonne existe dans une table."""
+    cols = [
+        row[1]
+        for row in cursor.execute(f"PRAGMA table_info({table})").fetchall()
+    ]
+    return column in cols
+
+
+def _add_column_if_missing(cursor, table: str, column: str, col_type: str) -> None:
+    """Ajoute une colonne uniquement si elle est absente. Logue le résultat."""
+    if not _column_exists(cursor, table, column):
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        logger.info(f"  Colonne ajoutée : {table}.{column}")
+    else:
+        logger.debug(f"  Colonne déjà présente (ignorée) : {table}.{column}")
+
+
+# ---------------------------------------------------------------------------
+# Migrations
+# ---------------------------------------------------------------------------
+
+def _m001_schema_initial(cursor):
+    """Crée toutes les tables de base avec leur schéma complet et à jour.
+
+    Les bases fraîches obtiennent d'emblée le schéma final — elles n'ont donc
+    pas besoin des migrations suivantes (ADD COLUMN), qui ne servent qu'aux
+    bases legacy créées avant le système de versioning.
+    """
+    # --- Targets ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS targets (
+            pseudo         TEXT PRIMARY KEY,
+            org            TEXT,
+            ship           TEXT,
+            threat         TEXT,
+            notes          TEXT,
+            date           TEXT,
+            wins           INTEGER DEFAULT 0,
+            losses         INTEGER DEFAULT 0,
+            alignment      TEXT DEFAULT 'NEUTRE',
+            pvp_lvl        TEXT DEFAULT 'Inconnu',
+            activity       TEXT DEFAULT 'Inconnu',
+            sid            TEXT DEFAULT 'N/A',
+            org_rank       TEXT DEFAULT 'N/A',
+            enlisted_date  TEXT DEFAULT 'N/A',
+            language       TEXT DEFAULT 'N/A',
+            affiliates     TEXT DEFAULT 'NONE'
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS target_notes (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_pseudo TEXT NOT NULL,
+            note_text     TEXT NOT NULL,
+            created_at    TEXT NOT NULL
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_target_notes_pseudo ON target_notes(target_pseudo)"
+    )
+
+    # --- Organizations ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS org_notes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            org_sid    TEXT NOT NULL,
+            note_text  TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_org_notes_sid ON org_notes(org_sid)"
+    )
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS organizations (
+            sid              TEXT PRIMARY KEY,
+            name             TEXT,
+            tag              TEXT,
+            description      TEXT,
+            member_count     INTEGER DEFAULT 0,
+            visible_members  TEXT DEFAULT '[]',
+            redacted_members TEXT DEFAULT '[]',
+            ranks            TEXT DEFAULT '{}',
+            org_type         TEXT DEFAULT 'ORGANIZATION',
+            specialization   TEXT DEFAULT 'GENERAL',
+            allies           TEXT DEFAULT '',
+            enemies          TEXT DEFAULT '',
+            neutrals         TEXT DEFAULT '',
+            updated_at       TEXT,
+            alignment        TEXT DEFAULT 'NEUTRE'
+        )
+    """)
+
+    # --- Contracts ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS contracts (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            target        TEXT,
+            client        TEXT,
+            reward        TEXT,
+            status        TEXT DEFAULT 'OPEN',
+            date          TEXT,
+            priority      TEXT DEFAULT 'MEDIUM',
+            contract_type TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS contract_types (
+            name   TEXT PRIMARY KEY,
+            reward TEXT
+        )
+    """)
+
+    # --- Ships ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ships (
+            name               TEXT PRIMARY KEY,
+            brand              TEXT,
+            role               TEXT,
+            career             TEXT,
+            size               TEXT,
+            crew_size          INTEGER DEFAULT 0,
+            scm_speed          TEXT,
+            scm_boost_forward  TEXT,
+            scm_boost_backward TEXT,
+            nav_max_speed      TEXT,
+            pitch              TEXT,
+            yaw                TEXT,
+            roll               TEXT,
+            boosted_pitch      TEXT,
+            boosted_yaw        TEXT,
+            boosted_roll       TEXT,
+            power_consumption  TEXT,
+            cm_decoy_noise     TEXT,
+            hp                 INTEGER DEFAULT 0,
+            cargo              TEXT,
+            dimensions         TEXT,
+            mass               TEXT,
+            hydrogen_capacity  TEXT,
+            qt_fuel_capacity   TEXT,
+            expedition_fee     TEXT,
+            claim_time         TEXT,
+            expedite_time      TEXT
+        )
+    """)
+
+    cursor.execute("CREATE TABLE IF NOT EXISTS ship_roles (name TEXT PRIMARY KEY)")
+    cursor.executemany(
+        "INSERT OR IGNORE INTO ship_roles (name) VALUES (?)",
+        [(r,) for r in _SHIP_ROLE_OPTIONS],
+    )
+    cursor.execute("CREATE TABLE IF NOT EXISTS ship_careers (name TEXT PRIMARY KEY)")
+    cursor.executemany(
+        "INSERT OR IGNORE INTO ship_careers (name) VALUES (?)",
+        [(c,) for c in _SHIP_CAREER_OPTIONS],
+    )
+
+    # --- Components ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS component_categories (name TEXT PRIMARY KEY)
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS component_types (
+            name     TEXT PRIMARY KEY,
+            category TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS components (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            name      TEXT UNIQUE,
+            brand     TEXT,
+            type_name TEXT,
+            category  TEXT,
+            size      INTEGER,
+            grade     TEXT,
+            stats     TEXT,
+            FOREIGN KEY (type_name) REFERENCES component_types(name)
+        )
+    """)
+
+    # --- Ship specs & loadout ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ship_specs (
+            ship_name TEXT,
+            category  TEXT,
+            max_qty   INTEGER,
+            max_size  INTEGER,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            PRIMARY KEY (ship_name, category)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ship_subtype_specs (
+            ship_name    TEXT,
+            category     TEXT,
+            subtype_name TEXT,
+            max_qty      INTEGER,
+            max_size     INTEGER,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            PRIMARY KEY (ship_name, category, subtype_name)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ship_slots (
+            ship_name    TEXT,
+            slot_type    TEXT,
+            slot_size    INTEGER,
+            max_quantity INTEGER,
+            FOREIGN KEY (ship_name) REFERENCES ships(name)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ship_loadout (
+            ship_name      TEXT,
+            profile_name   TEXT NOT NULL DEFAULT 'DEFAULT',
+            category       TEXT,
+            subtype_name   TEXT NOT NULL DEFAULT 'GENERIC',
+            slot_number    INTEGER,
+            component_name TEXT,
+            quantity       INTEGER DEFAULT 1,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            FOREIGN KEY (component_name) REFERENCES components(name),
+            PRIMARY KEY (ship_name, profile_name, category, subtype_name, slot_number)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ship_loadout_profiles (
+            ship_name    TEXT,
+            profile_name TEXT,
+            PRIMARY KEY (ship_name, profile_name),
+            FOREIGN KEY (ship_name) REFERENCES ships(name)
+        )
+    """)
+    cursor.execute("""
+        INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name)
+        SELECT DISTINCT ship_name, COALESCE(NULLIF(profile_name, ''), 'DEFAULT')
+        FROM ship_loadout
+    """)
+
+    # --- Player ships ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS player_ships (
+            pseudo TEXT,
+            ship   TEXT,
+            PRIMARY KEY (pseudo, ship)
+        )
+    """)
+
+    # --- Locations ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS locations (
+            name        TEXT PRIMARY KEY,
+            x           REAL,
+            y           REAL,
+            z           REAL,
+            type        TEXT DEFAULT 'POI',
+            parent_name TEXT
+        )
+    """)
+
+
+def _m002_targets_colonnes_legacy(cursor):
+    """Ajoute les colonnes ajoutées progressivement à la table targets (bases legacy)."""
+    _add_column_if_missing(cursor, "targets", "pvp_lvl",       "TEXT DEFAULT 'Inconnu'")
+    _add_column_if_missing(cursor, "targets", "activity",      "TEXT DEFAULT 'Inconnu'")
+    _add_column_if_missing(cursor, "targets", "sid",           "TEXT DEFAULT 'N/A'")
+    _add_column_if_missing(cursor, "targets", "org_rank",      "TEXT DEFAULT 'N/A'")
+    _add_column_if_missing(cursor, "targets", "enlisted_date", "TEXT DEFAULT 'N/A'")
+    _add_column_if_missing(cursor, "targets", "language",      "TEXT DEFAULT 'N/A'")
+    _add_column_if_missing(cursor, "targets", "affiliates",    "TEXT DEFAULT 'NONE'")
+
+
+def _m003_organizations_colonnes_legacy(cursor):
+    """Ajoute les colonnes ajoutées progressivement à la table organizations (bases legacy)."""
+    _add_column_if_missing(cursor, "organizations", "org_type",       "TEXT DEFAULT 'ORGANIZATION'")
+    _add_column_if_missing(cursor, "organizations", "specialization", "TEXT DEFAULT 'GENERAL'")
+    _add_column_if_missing(cursor, "organizations", "allies",         "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "organizations", "enemies",        "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "organizations", "neutrals",       "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "organizations", "alignment",      "TEXT DEFAULT 'NEUTRE'")
+    _add_column_if_missing(cursor, "organizations", "updated_at",     "TEXT")
+
+
+def _m004_ships_colonnes_legacy(cursor):
+    """Ajoute les colonnes de stats vaisseau à la table ships (bases legacy)."""
+    ship_cols = [
+        ("brand",              "TEXT"),
+        ("role",               "TEXT"),
+        ("career",             "TEXT"),
+        ("size",               "TEXT"),
+        ("crew_size",          "INTEGER DEFAULT 0"),
+        ("scm_speed",          "TEXT"),
+        ("scm_boost_forward",  "TEXT"),
+        ("scm_boost_backward", "TEXT"),
+        ("nav_max_speed",      "TEXT"),
+        ("pitch",              "TEXT"),
+        ("yaw",                "TEXT"),
+        ("roll",               "TEXT"),
+        ("boosted_pitch",      "TEXT"),
+        ("boosted_yaw",        "TEXT"),
+        ("boosted_roll",       "TEXT"),
+        ("power_consumption",  "TEXT"),
+        ("cm_decoy_noise",     "TEXT"),
+        ("hp",                 "INTEGER DEFAULT 0"),
+        ("cargo",              "TEXT"),
+        ("dimensions",         "TEXT"),
+        ("mass",               "TEXT"),
+        ("hydrogen_capacity",  "TEXT"),
+        ("qt_fuel_capacity",   "TEXT"),
+        ("expedition_fee",     "TEXT"),
+        ("claim_time",         "TEXT"),
+        ("expedite_time",      "TEXT"),
+    ]
+    for col_name, col_type in ship_cols:
+        _add_column_if_missing(cursor, "ships", col_name, col_type)
+
+
+def _m005_locations_colonnes_legacy(cursor):
+    """Ajoute type et parent_name à la table locations (bases legacy)."""
+    _add_column_if_missing(cursor, "locations", "type",        "TEXT DEFAULT 'POI'")
+    _add_column_if_missing(cursor, "locations", "parent_name", "TEXT")
+
+
+def _m006_loadout_rebuild_pk(cursor):
+    """Reconstruit ship_loadout avec la bonne clé primaire si nécessaire (bases legacy).
+
+    Les bases créées avant la migration 001 pouvaient avoir ship_loadout sans
+    profile_name ou subtype_name dans la clé primaire. Cette migration détecte
+    ce cas et reconstruit la table proprement en préservant les données.
+    """
+    cols = [
+        row[1]
+        for row in cursor.execute("PRAGMA table_info(ship_loadout)").fetchall()
+    ]
+    pk_cols = [
+        row[1]
+        for row in cursor.execute("PRAGMA table_info(ship_loadout)").fetchall()
+        if row[5] > 0
+    ]
+    expected_pk = ["ship_name", "profile_name", "category", "subtype_name", "slot_number"]
+
+    if "profile_name" in cols and "subtype_name" in cols and pk_cols == expected_pk:
+        logger.debug("  ship_loadout : clé primaire déjà correcte, rien à faire.")
+        return
+
+    logger.info("  ship_loadout : reconstruction avec la clé primaire correcte...")
+
+    cursor.execute("""
+        CREATE TABLE ship_loadout_new (
+            ship_name      TEXT,
+            profile_name   TEXT NOT NULL DEFAULT 'DEFAULT',
+            category       TEXT,
+            subtype_name   TEXT NOT NULL DEFAULT 'GENERIC',
+            slot_number    INTEGER,
+            component_name TEXT,
+            quantity       INTEGER DEFAULT 1,
+            FOREIGN KEY (ship_name) REFERENCES ships(name),
+            FOREIGN KEY (component_name) REFERENCES components(name),
+            PRIMARY KEY (ship_name, profile_name, category, subtype_name, slot_number)
+        )
+    """)
+
+    if "profile_name" in cols and "subtype_name" in cols:
+        cursor.execute("""
+            INSERT OR REPLACE INTO ship_loadout_new
+            SELECT ship_name,
+                   COALESCE(NULLIF(profile_name, ''), 'DEFAULT'),
+                   category,
+                   COALESCE(NULLIF(subtype_name, ''), 'GENERIC'),
+                   slot_number, component_name, COALESCE(quantity, 1)
+            FROM ship_loadout
+        """)
+    elif "profile_name" in cols:
+        cursor.execute("""
+            INSERT OR REPLACE INTO ship_loadout_new
+            SELECT sl.ship_name,
+                   COALESCE(NULLIF(sl.profile_name, ''), 'DEFAULT'),
+                   sl.category,
+                   COALESCE(NULLIF(c.type_name, ''), 'GENERIC'),
+                   sl.slot_number, sl.component_name, COALESCE(sl.quantity, 1)
+            FROM ship_loadout sl
+            LEFT JOIN components c ON c.name = sl.component_name
+        """)
+    else:
+        cursor.execute("""
+            INSERT OR REPLACE INTO ship_loadout_new
+            SELECT sl.ship_name, 'DEFAULT', sl.category,
+                   COALESCE(NULLIF(c.type_name, ''), 'GENERIC'),
+                   sl.slot_number, sl.component_name, COALESCE(sl.quantity, 1)
+            FROM ship_loadout sl
+            LEFT JOIN components c ON c.name = sl.component_name
+        """)
+
+    cursor.execute("DROP TABLE ship_loadout")
+    cursor.execute("ALTER TABLE ship_loadout_new RENAME TO ship_loadout")
+    logger.info("  ship_loadout : reconstruction terminée.")
+
+
+# ---------------------------------------------------------------------------
+# Liste ordonnée des migrations
+# Règle : ne jamais modifier une entrée existante, seulement en ajouter.
+# ---------------------------------------------------------------------------
+
+MIGRATIONS = [
+    (1, _m001_schema_initial),
+    (2, _m002_targets_colonnes_legacy),
+    (3, _m003_organizations_colonnes_legacy),
+    (4, _m004_ships_colonnes_legacy),
+    (5, _m005_locations_colonnes_legacy),
+    (6, _m006_loadout_rebuild_pk),
+]
+
+
+# ---------------------------------------------------------------------------
+# Point d'entrée public
+# ---------------------------------------------------------------------------
+
+def run_migrations(conn, cursor) -> None:
+    """Applique toutes les migrations manquantes dans l'ordre.
+
+    Args:
+        conn:   connexion SQLite (pour les commits par migration)
+        cursor: curseur SQLite actif
+    """
+    current = _get_version(cursor)
+    conn.commit()  # valide la création de schema_version si elle vient d'être créée
+
+    pending = [(v, fn) for v, fn in MIGRATIONS if v > current]
+
+    if not pending:
+        logger.debug(f"Base à jour (version {current}), aucune migration à appliquer.")
+        return
+
+    for version, fn in pending:
+        logger.info(f"[MIGRATION] Application de la migration {version} : {fn.__name__}")
+        fn(cursor)
+        _set_version(cursor, version)
+        conn.commit()
+        logger.info(f"[MIGRATION] Migration {version} appliquée avec succès.")
+
+    logger.info(f"[MIGRATION] Base mise à jour : version {current} → {pending[-1][0]}")
