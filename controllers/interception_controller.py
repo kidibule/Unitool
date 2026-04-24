@@ -72,6 +72,27 @@ class InterceptionController:
         rows = self.master.query("SELECT name FROM locations ORDER BY name ASC")
         return [row[0] for row in rows]
 
+    def get_location(self, name):
+        """Returns full data dict for a location, or None if not found."""
+        location_name = (name or "").strip().upper()
+        if not location_name or location_name == "NO DATA":
+            return None
+        rows = self.master.query(
+            "SELECT name, x, y, z, type, parent_name FROM locations WHERE name = ?",
+            (location_name,),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "name": row[0],
+            "x": row[1],
+            "y": row[2],
+            "z": row[3],
+            "type": (row[4] or "POI").upper(),
+            "parent_name": row[5] or "NONE",
+        }
+
     def get_road_names(self):
         """Returns sorted saved interception road names."""
         rows = self.master.query(

@@ -28,6 +28,8 @@ class InterceptionFrame(ctk.CTkFrame):
         self.moon_vars = {}
         self.road_selected_name = ""
         self.road_editing_name = ""
+        self.pos_editing_name = ""
+        self.pos_list_frame = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -232,10 +234,9 @@ class InterceptionFrame(ctk.CTkFrame):
                 self.dest_selector.set(current_dest)
             else:
                 self.dest_selector.set("DESTINATION")
-        if self._widget_exists("del_pos_selector"):
-            self.del_pos_selector.configure(values=new_list)
         if self._widget_exists("new_pos_type"):
             self.on_location_type_change(self.new_pos_type.get())
+        self.refresh_position_list()
         self.refresh_start_selector_options()
         self.refresh_roads()
         self.output.insert("end", ">>> Database refreshed: Selectors updated.\n")
@@ -1069,6 +1070,253 @@ class InterceptionFrame(ctk.CTkFrame):
         self.new_pos_parent.configure(values=values)
         self.new_pos_parent.set("NONE")
 
+    # ── Position list (card-based, like road list) ─────────────────────────
+
+    def refresh_position_list(self):
+        """Rebuilds the position card list inside the position manager popup."""
+        if self.pos_list_frame is None:
+            return
+        try:
+            if not self.pos_list_frame.winfo_exists():
+                self.pos_list_frame = None
+                return
+        except Exception:
+            self.pos_list_frame = None
+            return
+
+        for widget in self.pos_list_frame.winfo_children():
+            widget.destroy()
+
+        names = self.get_location_names()
+        if not names:
+            ctk.CTkLabel(
+                self.pos_list_frame,
+                text="NO POSITION SAVED",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=(8, 10))
+            return
+
+        for pos_name in names:
+            loc = self.controller.interception.get_location(pos_name)
+            if not loc:
+                continue
+
+            editing = pos_name == (self.pos_editing_name or "")
+            card = ctk.CTkFrame(
+                self.pos_list_frame,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.ACCENT_PRIMARY if editing else DrakeConfig.BORDER_COLOR,
+            )
+            card.pack(fill="x", padx=8, pady=3)
+
+            if editing:
+                self._render_pos_edit_row(card, loc)
+            else:
+                self._render_pos_display_row(card, pos_name, loc)
+
+    def _render_pos_display_row(self, parent, pos_name, loc):
+        left = ctk.CTkFrame(parent, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
+
+        ctk.CTkLabel(
+            left,
+            text=pos_name,
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        ).pack(anchor="w")
+
+        loc_type = loc.get("type", "POI")
+        parent_name = loc.get("parent_name") or ""
+        try:
+            coords_str = f"X:{float(loc['x']):.0f}  Y:{float(loc['y']):.0f}  Z:{float(loc['z']):.0f}"
+        except (TypeError, ValueError):
+            coords_str = "no coords"
+
+        detail = loc_type
+        if parent_name and parent_name.upper() != "NONE":
+            detail += f" | {parent_name}"
+        detail += f"  |  {coords_str}"
+
+        ctk.CTkLabel(
+            left,
+            text=detail,
+            font=DrakeConfig.FONT_LOGS,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w")
+
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=7)
+
+        DrakeButton(
+            right,
+            text="EDIT",
+            width=50,
+            height=26,
+            command=lambda n=pos_name: self.start_pos_edit(n),
+        ).pack(side="left", padx=(0, 6))
+
+        DrakeButton(
+            right,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda n=pos_name: self.delete_pos_from_list(n),
+        ).pack(side="left")
+
+    def _render_pos_edit_row(self, parent, loc):
+        editor = ctk.CTkFrame(parent, fg_color="transparent")
+        editor.pack(fill="x", expand=True, padx=8, pady=8)
+
+        # Row 1: name + type
+        top = ctk.CTkFrame(editor, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 6))
+
+        name_entry = DrakeEntry(top, placeholder_text="Name")
+        name_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        name_entry.insert(0, loc["name"])
+
+        type_combo = DrakeComboBox(
+            top,
+            values=["STATION", "PLANET", "MOON", "LAGRANGE", "OUTPOST", "ASTEROID", "OTHER"],
+            width=140,
+        )
+        type_combo.pack(side="left")
+        type_combo.set(loc.get("type", "STATION") or "STATION")
+
+        # Row 2: X Y Z
+        middle = ctk.CTkFrame(editor, fg_color="transparent")
+        middle.pack(fill="x", pady=(0, 6))
+
+        x_entry = DrakeEntry(middle, placeholder_text="X")
+        x_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        if loc.get("x") is not None:
+            x_entry.insert(0, str(loc["x"]))
+
+        y_entry = DrakeEntry(middle, placeholder_text="Y")
+        y_entry.pack(side="left", padx=(0, 8), expand=True, fill="x")
+        if loc.get("y") is not None:
+            y_entry.insert(0, str(loc["y"]))
+
+        z_entry = DrakeEntry(middle, placeholder_text="Z")
+        z_entry.pack(side="left", expand=True, fill="x")
+        if loc.get("z") is not None:
+            z_entry.insert(0, str(loc["z"]))
+
+        # Row 3: parent location
+        parent_row = ctk.CTkFrame(editor, fg_color="transparent")
+        parent_row.pack(fill="x", pady=(0, 6))
+
+        def _get_parent_values(t):
+            t = (t or "").strip().upper()
+            try:
+                if t == "MOON":
+                    cands = self.controller.interception.get_location_names_by_type(["PLANET"])
+                elif t == "PLANET":
+                    cands = self.controller.interception.get_location_names()
+                else:
+                    cands = []
+            except Exception:
+                cands = []
+            return ["NONE"] + [n for n in cands if n != "NO DATA"]
+
+        parent_combo = DrakeComboBox(parent_row, values=_get_parent_values(loc.get("type", "")))
+        parent_combo.pack(fill="x")
+        parent_combo.set(loc.get("parent_name") or "NONE")
+
+        def _on_type_change(val):
+            new_vals = _get_parent_values(val)
+            parent_combo.configure(values=new_vals)
+            parent_combo.set("NONE")
+
+        type_combo.configure(command=_on_type_change)
+
+        # Bottom: SAVE / CANCEL / DELETE
+        bottom = ctk.CTkFrame(editor, fg_color="transparent")
+        bottom.pack(fill="x")
+
+        DrakeButton(
+            bottom,
+            text="SAVE",
+            width=52,
+            height=26,
+            command=lambda old=loc["name"]: self.save_pos_row_inline(
+                old, name_entry, type_combo, parent_combo, x_entry, y_entry, z_entry
+            ),
+        ).pack(side="left", padx=(0, 6))
+
+        DrakeButton(
+            bottom,
+            text="CANCEL",
+            width=70,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            command=self.cancel_pos_edit,
+        ).pack(side="left", padx=(0, 6))
+
+        DrakeButton(
+            bottom,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda n=loc["name"]: self.delete_pos_from_list(n),
+        ).pack(side="left")
+
+    def on_edit_pos_type_change(self, selected_type):
+        pass  # kept for compatibility, logic now lives inside _render_pos_edit_row
+
+    def on_edit_pos_select(self, selected):
+        """Loads the selected position data into the EDIT POSITION fields."""
+        if not selected or selected == "NO DATA":
+            return
+        try:
+            loc = self.controller.interception.get_location(selected)
+        except Exception:
+            loc = None
+        if not loc:
+            return
+
+        if self._widget_exists("edit_pos_name"):
+            self.edit_pos_name.delete(0, "end")
+            self.edit_pos_name.insert(0, loc["name"])
+
+        if self._widget_exists("edit_pos_type"):
+            loc_type = loc["type"] or "STATION"
+            valid_types = ["STATION", "PLANET", "MOON", "LAGRANGE", "OUTPOST", "ASTEROID", "OTHER"]
+            self.edit_pos_type.set(loc_type if loc_type in valid_types else "OTHER")
+            self.on_edit_pos_type_change(loc_type)
+
+        if self._widget_exists("edit_pos_parent"):
+            parent = loc["parent_name"] or "NONE"
+            # Make sure the value is in the list, otherwise add it
+            current_values = self.edit_pos_parent.cget("values") or []
+            if parent not in current_values and parent != "NONE":
+                self.edit_pos_parent.configure(values=["NONE", parent] + list(current_values)[1:])
+            self.edit_pos_parent.set(parent)
+
+        for field, key in [("edit_pos_x", "x"), ("edit_pos_y", "y"), ("edit_pos_z", "z")]:
+            if self._widget_exists(field):
+                entry = getattr(self, field)
+                entry.delete(0, "end")
+                val = loc.get(key)
+                if val is not None:
+                    entry.insert(0, str(val))
+
     def _ocr_fill_position(self):
         """Opens a file dialog, runs OCR to extract CamPos Planet Zone coords and fills X/Y/Z fields."""
         path = filedialog.askopenfilename(
@@ -1170,10 +1418,11 @@ class InterceptionFrame(ctk.CTkFrame):
         DrakeButton(root, text="OCR FROM SCREENSHOT", command=self._ocr_fill_position).pack(pady=(4, 2), padx=12, fill="x")
         DrakeButton(root, text="SAVE POSITION", command=self.action_create_position).pack(pady=(2, 8), padx=12, fill="x")
 
-        DrakeTitle4(root, text="DELETE POSITION").pack(pady=(6, 2), padx=12)
-        self.del_pos_selector = DrakeComboBox(root, values=location_list)
-        self.del_pos_selector.pack(pady=4, padx=12, fill="x")
-        DrakeClearButton(root, text="DELETE POSITION", command=self.action_delete_position).pack(pady=(2, 8), padx=12, fill="x")
+        # ── EXISTING POSITIONS ────────────────────────────────────────
+        DrakeTitle4(root, text="EXISTING POSITIONS").pack(pady=(8, 4), padx=12)
+        self.pos_list_frame = ctk.CTkFrame(root, fg_color="transparent")
+        self.pos_list_frame.pack(fill="x", padx=4, pady=(0, 8))
+        self.refresh_position_list()
 
         self.on_location_type_change(self.new_pos_type.get())
 
@@ -1232,17 +1481,56 @@ class InterceptionFrame(ctk.CTkFrame):
         except Exception as e:
             DrakePopup.error("INTERCEPTION", str(e), parent=self)
 
-    def action_delete_position(self):
-        name = self.del_pos_selector.get().strip().upper() if hasattr(self, "del_pos_selector") else ""
-        if not name or name == "NO DATA":
-            DrakePopup.warning("INTERCEPTION", "Select a position to delete.", parent=self)
+    def start_pos_edit(self, pos_name):
+        self.pos_editing_name = (pos_name or "").strip()
+        self.refresh_position_list()
+
+    def cancel_pos_edit(self):
+        self.pos_editing_name = ""
+        self.refresh_position_list()
+
+    def save_pos_row_inline(self, old_name, name_entry, type_combo, parent_combo, x_entry, y_entry, z_entry):
+        new_name = name_entry.get().strip().upper()
+        if not new_name:
+            DrakePopup.warning("INTERCEPTION", "Position name is required.", parent=self)
             return
 
-        if not DrakePopup.yesno("INTERCEPTION", f"Delete position {name}?", parent=self):
-            return
+        loc_type = type_combo.get().strip().upper()
+        parent_name = parent_combo.get().strip().upper()
+        x = x_entry.get().strip()
+        y = y_entry.get().strip()
+        z = z_entry.get().strip()
 
         try:
+            is_rename = new_name != old_name.strip().upper()
+            saved_name = self.controller.interception.upsert_location(new_name, x, y, z, loc_type, parent_name)
+            if is_rename:
+                try:
+                    self.controller.interception.delete_location(old_name)
+                except Exception:
+                    pass
+                self.selected_sources = [
+                    saved_name if s == old_name.strip().upper() else s for s in self.selected_sources
+                ]
+                self.update_count_label()
+            self.pos_editing_name = ""
+            self.refresh_locations()
+            self.output.insert("end", f"[~] Position updated: {saved_name}\n")
+            self.output.see("end")
+            if hasattr(self.controller, "log"):
+                self.controller.log(f"Interception position updated: {saved_name}", source="INTERCEPTION")
+        except Exception as e:
+            DrakePopup.error("INTERCEPTION", str(e), parent=self)
+
+    def delete_pos_from_list(self, name):
+        if not name or name == "NO DATA":
+            return
+        if not DrakePopup.yesno("INTERCEPTION", f"Delete position {name}?", parent=self):
+            return
+        try:
             deleted_name = self.controller.interception.delete_location(name)
+            if self.pos_editing_name == deleted_name:
+                self.pos_editing_name = ""
             self.selected_sources = [s for s in self.selected_sources if s != deleted_name]
             self.update_count_label()
             self.refresh_locations()
