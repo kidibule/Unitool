@@ -1,6 +1,6 @@
 from db_connection import DBConnection
 from db_migrations import run_migrations
-from repositories.target_repository import TargetRepository
+from repositories.player_repository import PlayerRepository
 from repositories.org_repository import OrgRepository
 from repositories.location_repository import LocationRepository
 from repositories.ship_repository import ShipRepository
@@ -16,7 +16,7 @@ class Database(DBConnection):
         self.setup()
 
         # Repositories — un par domaine fonctionnel
-        self.targets = TargetRepository(self)
+        self.players = PlayerRepository(self)
         self.orgs = OrgRepository(self)
         self.locations = LocationRepository(self)
         self.ships = ShipRepository(self)

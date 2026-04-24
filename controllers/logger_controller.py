@@ -1,7 +1,7 @@
 """LoggerController — gère l'archivage et import/export de dossiers."""
 
 from datetime import datetime
-from models import Target
+from models import Player
 
 
 class LoggerController:
@@ -40,7 +40,7 @@ class LoggerController:
         """API publique pour forcer la synchro d'un ship dans le catalogue."""
         self._sync_ship_to_catalog(ship_name)
 
-    def save_target(
+    def save_player(
         self,
         pseudo: str,
         org: str = "",
@@ -59,7 +59,7 @@ class LoggerController:
     ) -> None:
         """Enregistre un dossier complet (insert ou update)."""
         sql = """
-        INSERT INTO targets (pseudo, org, sid, org_rank, language, affiliates, alignment, 
+        INSERT INTO players (pseudo, org, sid, org_rank, language, affiliates, alignment, 
                             ship, pvp_lvl, activity, notes, date, threat, wins, losses)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pseudo) DO UPDATE SET 
@@ -99,7 +99,7 @@ class LoggerController:
         self._sync_ship_to_catalog(ship)
         if pseudo and ship:
             try:
-                self.app.db.targets.add_player_ship(pseudo.upper(), ship.upper())
+                self.app.db.players.add_player_ship(pseudo.upper(), ship.upper())
             except Exception:
                 pass
         try:
@@ -113,35 +113,35 @@ class LoggerController:
         except Exception:
             pass
 
-    def get_target_comparison_row(self, pseudo: str):
+    def get_player_comparison_row(self, pseudo: str):
         """Retourne les champs nécessaires pour vérifier les changements avant sauvegarde."""
         rows = self.app.query(
             """
             SELECT org, sid, org_rank, language, affiliates, alignment,
                    ship, pvp_lvl, activity, notes, threat, wins, losses
-            FROM targets
+            FROM players
             WHERE pseudo = ?
             """,
             (pseudo.upper(),),
         )
         return rows[0] if rows else None
 
-    def load_target(self, pseudo: str) -> list:
+    def load_player(self, pseudo: str) -> list:
         """Récupère un dossier complet par pseudo."""
-        return self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo.upper(),))
+        return self.app.query("SELECT * FROM players WHERE pseudo=?", (pseudo.upper(),))
 
-    def load_target_row(self, pseudo: str):
-        rows = self.load_target(pseudo)
+    def load_player_row(self, pseudo: str):
+        rows = self.load_player(pseudo)
         return rows[0] if rows else None
 
-    def load_target_as_model(self, pseudo: str) -> Target:
+    def load_player_as_model(self, pseudo: str) -> Player:
         """Récupère un dossier et retourne un objet Target."""
-        row = self.app.query("SELECT * FROM targets WHERE pseudo=?", (pseudo.upper(),))
+        row = self.app.query("SELECT * FROM players WHERE pseudo=?", (pseudo.upper(),))
         if row:
-            return Target.from_db_row(row[0])
+            return Player.from_db_row(row[0])
         return None
 
-    def import_targets_csv(self, rows: list) -> None:
+    def import_players_csv(self, rows: list) -> None:
         """Importe une liste de rows CSV dans la DB.
 
         Args:
@@ -150,7 +150,7 @@ class LoggerController:
         count = 0
         for row in rows:
             sql = """
-            INSERT OR REPLACE INTO targets (pseudo, org, ship, threat, notes, alignment)
+            INSERT OR REPLACE INTO players (pseudo, org, ship, threat, notes, alignment)
             VALUES (?, ?, ?, ?, ?, ?)
             """
             params = (
@@ -165,7 +165,7 @@ class LoggerController:
             self._sync_ship_to_catalog(row.get("ship", ""))
             if row.get("pseudo") and row.get("ship"):
                 try:
-                    self.app.db.targets.add_player_ship((row.get("pseudo") or "").upper(), (row.get("ship") or "").upper())
+                    self.app.db.players.add_player_ship((row.get("pseudo") or "").upper(), (row.get("ship") or "").upper())
                 except Exception:
                     pass
             count += 1
@@ -253,9 +253,9 @@ class LoggerController:
     def export_organizations_csv(self) -> list:
         return self.app.query("SELECT sid, name, tag, alignment FROM organizations")
 
-    def export_targets_csv(self) -> list:
+    def export_players_csv(self) -> list:
         """Récupère toutes les targets pour export CSV."""
-        return self.app.query("SELECT * FROM targets")
+        return self.app.query("SELECT * FROM players")
 
     def clear_all_fields(self) -> None:
         """Utilitaire pour nettoyer (dans les vues)."""

@@ -477,6 +477,15 @@ def _m007_localise_fr_to_en(cursor):
     cursor.execute("UPDATE organizations SET alignment = 'ALLY'    WHERE alignment = 'AMI'")
 
 
+def _m008_rename_targets_to_players(cursor):
+    """Rename the targets/target_notes tables and target_pseudo column to players/player_notes/player_pseudo."""
+    cursor.execute("ALTER TABLE targets RENAME TO players")
+    cursor.execute("ALTER TABLE target_notes RENAME TO player_notes")
+    cursor.execute("ALTER TABLE player_notes RENAME COLUMN target_pseudo TO player_pseudo")
+    cursor.execute("DROP INDEX IF EXISTS idx_target_notes_pseudo")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_player_notes_pseudo ON player_notes(player_pseudo)")
+
+
 # ---------------------------------------------------------------------------
 # Liste ordonnée des migrations
 # Règle : ne jamais modifier une entrée existante, seulement en ajouter.
@@ -490,6 +499,7 @@ MIGRATIONS = [
     (5, _m005_locations_colonnes_legacy),
     (6, _m006_loadout_rebuild_pk),
     (7, _m007_localise_fr_to_en),
+    (8, _m008_rename_targets_to_players),
 ]
 
 

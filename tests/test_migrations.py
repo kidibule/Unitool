@@ -97,7 +97,7 @@ class TestRunMigrations:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        for expected in ["targets", "ships", "components", "ship_loadout",
+        for expected in ["players", "ships", "components", "ship_loadout",
                          "organizations", "locations", "schema_version"]:
             assert expected in tables, f"Table manquante : {expected}"
 
@@ -111,9 +111,11 @@ class TestRunMigrations:
     def test_reprend_a_partir_de_la_bonne_version(self):
         conn, cursor = make_db()
         # Simule une base partiellement migrée (migrations 1-3 déjà appliquées)
-        run_migrations(conn, cursor)
-        _set_version(cursor, 3)
-        conn.commit()
+        _get_version(cursor)  # crée schema_version
+        for version, fn in MIGRATIONS[:3]:
+            fn(cursor)
+            _set_version(cursor, version)
+            conn.commit()
         # Relancer ne doit pas crasher et doit arriver à la version finale
         run_migrations(conn, cursor)
         assert _get_version(cursor) == MIGRATIONS[-1][0]
@@ -121,10 +123,10 @@ class TestRunMigrations:
     def test_targets_a_toutes_les_colonnes_apres_migration(self):
         conn, cursor = make_db()
         run_migrations(conn, cursor)
-        cols = [r[1] for r in cursor.execute("PRAGMA table_info(targets)").fetchall()]
+        cols = [r[1] for r in cursor.execute("PRAGMA table_info(players)").fetchall()]
         for col in ["pseudo", "pvp_lvl", "activity", "sid", "org_rank",
                     "enlisted_date", "language", "affiliates"]:
-            assert col in cols, f"Colonne manquante dans targets : {col}"
+            assert col in cols, f"Colonne manquante dans players : {col}"
 
     def test_ship_loadout_a_la_bonne_cle_primaire(self):
         conn, cursor = make_db()

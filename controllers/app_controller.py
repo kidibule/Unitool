@@ -173,25 +173,25 @@ class AppController:
 
     def upsert_target_intel(self, data: dict) -> None:
         """Insère ou met à jour les infos récupérées par le bot."""
-        self.db.targets.upsert_intel(data)
+        self.db.players.upsert_intel(data)
 
     def get_target_by_handle(self, handle: str) -> dict:
         """Récupère les infos d'un joueur pour la preview."""
-        return self.db.targets.get_by_handle(handle)
+        return self.db.players.get_by_handle(handle)
 
     def get_dashboard_stats(self) -> dict:
         """Retourne les compteurs affichés dans le panneau intel principal."""
         try:
-            targets_count = self.query("SELECT COUNT(*) FROM targets")
+            players_count = self.query("SELECT COUNT(*) FROM players")
             active_contracts = self.query(
                 "SELECT COUNT(*) FROM contracts WHERE status != 'CLOSED'"
             )
             organizations_count = self.query("SELECT COUNT(*) FROM organizations")
 
             return {
-                "targets": int(targets_count[0][0]) if targets_count else 0,
+                "players": int(players_count[0][0]) if players_count else 0,
                 "active_contracts": int(active_contracts[0][0]) if active_contracts else 0,
                 "organizations": int(organizations_count[0][0]) if organizations_count else 0,
             }
         except Exception:
-            return {"targets": 0, "active_contracts": 0, "organizations": 0}
+            return {"players": 0, "active_contracts": 0, "organizations": 0}

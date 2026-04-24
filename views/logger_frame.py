@@ -28,12 +28,12 @@ class LoggerFrame(ctk.CTkFrame):
         self.tabview.add("ORGANIZATIONS")
         self.tabview.add("SHIPS")
 
-        self.tab_targets = self.tabview.tab("PLAYERS")
+        self.tab_players = self.tabview.tab("PLAYERS")
         self.tab_orgs = self.tabview.tab("ORGANIZATIONS")
         self.tab_ships = self.tabview.tab("SHIPS")
 
         # Appels des setups
-        self.setup_targets_tab()
+        self.setup_players_tab()
         self.setup_orgs_tab()
         self.setup_ships_tab()
 
@@ -177,11 +177,11 @@ class LoggerFrame(ctk.CTkFrame):
         self.org_align.set(self.org_align_placeholder)
         self.focus_set()
 
-    def setup_targets_tab(self):
-        self.target_threat_placeholder = "THREAT LEVEL"
-        self.target_alignment_placeholder = "ALIGNMENT"
-        self.target_pvp_placeholder = "PVP LEVEL"
-        self.target_activity_placeholder = "ACTIVITY"
+    def setup_players_tab(self):
+        self.player_threat_placeholder = "THREAT LEVEL"
+        self.player_alignment_placeholder = "ALIGNMENT"
+        self.player_pvp_placeholder = "PVP LEVEL"
+        self.player_activity_placeholder = "ACTIVITY"
         
         entry_kwargs = {
             "font": DrakeConfig.FONT_LOGS,
@@ -193,20 +193,20 @@ class LoggerFrame(ctk.CTkFrame):
         }
 
         # --- 1. IDENTITÉ & MENACE ---
-        f_top = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_top = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         f_top.pack(pady=(20, 10), padx=50, fill="x")
 
-        self.p_in = DrakeEntry(f_top, placeholder_text="TARGET HANDLE", **entry_kwargs)
+        self.p_in = DrakeEntry(f_top, placeholder_text="PLAYER HANDLE", **entry_kwargs)
         self.p_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.p_in.bind("<Return>", self.load_target)
+        self.p_in.bind("<Return>", self.load_player)
 
         self.threat_in = DrakeComboBox(f_top, values=["LOW", "MEDIUM", "HIGH", "CRITICAL"],)
-        self.threat_in.set(self.target_threat_placeholder)
+        self.threat_in.set(self.player_threat_placeholder)
 
         self.threat_in.pack(side="right")
 
         # --- 2. DONNÉES RSI (ORG, SID, RANK) ---
-        f_rsi = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_rsi = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         f_rsi.pack(pady=5, padx=50, fill="x")
         self.o_in = DrakeEntry(f_rsi, placeholder_text="ORGANIZATION", **entry_kwargs)
         self.o_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -216,7 +216,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.rank_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 3. INFOS COMPLÉMENTAIRES ---
-        f_info = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_info = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         f_info.pack(pady=5, padx=50, fill="x")
         self.lang_in = DrakeEntry(f_info, placeholder_text="LANGUAGE", **entry_kwargs)
         self.lang_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -224,7 +224,7 @@ class LoggerFrame(ctk.CTkFrame):
         self.aff_in.pack(side="left", fill="x", expand=True, padx=(5, 0))
 
         # --- 4. COMBAT STATS (WINS / LOSSES) ---
-        f_stats = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_stats = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         f_stats.pack(pady=5, padx=50, fill="x")
         self.wins_in = DrakeEntry(f_stats, placeholder_text="WINS", **entry_kwargs)
         self.wins_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
@@ -233,34 +233,34 @@ class LoggerFrame(ctk.CTkFrame):
 
         #--- 5. ALIGNEMENT & PROFIL ---
         self.a_btn = DrakeComboBox(
-            self.tab_targets,
+            self.tab_players,
             values=["ALLY", "NEUTRAL", "ENEMY"]
         )
 
         self.a_btn.pack(pady=(5, 10), padx=50, fill="x")
-        self.a_btn.set(self.target_alignment_placeholder)
+        self.a_btn.set(self.player_alignment_placeholder)
 
-        f_combat = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        f_combat = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         f_combat.pack(pady=5, padx=50, fill="x")
         self.pvp_in = DrakeComboBox(
             f_combat, 
             values=["NOOB", "ROOKIE", "VETERAN", "ACE"],
 )
         self.pvp_in.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.pvp_in.set(self.target_pvp_placeholder)
+        self.pvp_in.set(self.player_pvp_placeholder)
         self.act_in = DrakeComboBox(
             f_combat,
             values=["PIRATE", "BOUNTY HUNTER", "MINER", "TRADER"]
         )
         self.act_in.pack(side="right", fill="x", expand=True, padx=(5, 0))
-        self.act_in.set(self.target_activity_placeholder)
+        self.act_in.set(self.player_activity_placeholder)
 
-        self.s_in = DrakeEntry(self.tab_targets, placeholder_text="CURRENT SHIP", **entry_kwargs)
+        self.s_in = DrakeEntry(self.tab_players, placeholder_text="CURRENT SHIP", **entry_kwargs)
         self.s_in.pack(pady=5, padx=50, fill="x")
 
         # --- 6. NOTES ---
         self.n_in = ctk.CTkTextbox(
-            self.tab_targets,
+            self.tab_players,
             height=80,
             font=DrakeConfig.FONT_LOGS,
             fg_color=DrakeConfig.BG_TERMINAL,
@@ -271,10 +271,10 @@ class LoggerFrame(ctk.CTkFrame):
         self.n_in.pack(pady=10, padx=50, fill="x")
 
         # --- BOUTONS ---
-        self.btn_save = DrakeButton(self.tab_targets, text="SYNCHRONIZE DATABASE", command=self.save, height=45)
+        self.btn_save = DrakeButton(self.tab_players, text="SYNCHRONIZE DATABASE", command=self.save, height=45)
         self.btn_save.pack(pady=10, padx=50, fill="x")
 
-        DrakeClearButton(self.tab_targets, text="CLEAR", command=self.clear_fields, height=45).pack(pady=(0, 20), padx=50, fill="x")
+        DrakeClearButton(self.tab_players, text="CLEAR", command=self.clear_fields, height=45).pack(pady=(0, 20), padx=50, fill="x")
 
     def save(self):
         h = self.p_in.get().strip().upper()
@@ -286,19 +286,19 @@ class LoggerFrame(ctk.CTkFrame):
         lang_val = (self.lang_in.get() or "").upper()
         aff_val = (self.aff_in.get() or "").upper()
         align_val = self.a_btn.get() or "NEUTRAL"
-        if align_val == self.target_alignment_placeholder:
+        if align_val == self.player_alignment_placeholder:
             align_val = "NEUTRAL"
         ship_val = (self.s_in.get() or "").upper()
         pvp_val = (self.pvp_in.get() or "").upper()
-        if pvp_val == self.target_pvp_placeholder or pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
+        if pvp_val == self.player_pvp_placeholder or pvp_val not in ("NOOB", "ROOKIE", "VETERAN", "ACE"):
             pvp_val = "UNKNOWN"
         act_val = (self.act_in.get() or "").upper()
-        if act_val == self.target_activity_placeholder:
+        if act_val == self.player_activity_placeholder:
             act_val = ""
         notes_val = self.n_in.get("0.0", "end").strip()
         date_val = datetime.now().strftime("%d/%m/%Y")
         threat_val = self.threat_in.get()
-        if threat_val == self.target_threat_placeholder:
+        if threat_val == self.player_threat_placeholder:
             threat_val = "LOW"
         wins_val = self.wins_in.get() or 0
         losses_val = self.loss_in.get() or 0
@@ -317,7 +317,7 @@ class LoggerFrame(ctk.CTkFrame):
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, "0")
 
-        existing = self.controller.logger.get_target_comparison_row(h)
+        existing = self.controller.logger.get_player_comparison_row(h)
 
         if existing:
             row = existing
@@ -353,7 +353,7 @@ class LoggerFrame(ctk.CTkFrame):
                 if not confirm:
                     return
 
-        self.controller.logger.save_target(
+        self.controller.logger.save_player(
             pseudo=h,
             org=org_val,
             sid=sid_val,
@@ -376,22 +376,22 @@ class LoggerFrame(ctk.CTkFrame):
         except Exception:
             pass
 
-    def load_target(self, event=None):
+    def load_player(self, event=None):
         pseudo = self.p_in.get().strip().upper()
-        r = self.controller.logger.load_target_row(pseudo)
+        r = self.controller.logger.load_player_row(pseudo)
         if r:
             self.o_in.delete(0, "end")
             self.o_in.insert(0, r[1] or "")
             self.s_in.delete(0, "end")
             self.s_in.insert(0, r[2] or "")
-            self.threat_in.set(r[3] or self.target_threat_placeholder)
+            self.threat_in.set(r[3] or self.player_threat_placeholder)
             self.n_in.delete("0.0", "end")
             self.n_in.insert("0.0", r[4] or "")
             self.wins_in.delete(0, "end")
             self.wins_in.insert(0, str(r[6] or 0))
             self.loss_in.delete(0, "end")
             self.loss_in.insert(0, str(r[7] or 0))
-            self.a_btn.set(r[8] or self.target_alignment_placeholder)
+            self.a_btn.set(r[8] or self.player_alignment_placeholder)
             try:
                 if hasattr(self.controller, "log"):
                     self.controller.log(f"Loaded file: {pseudo}", source="SYSTEM")
@@ -405,7 +405,7 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             with open(path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
-                self.controller.logger.import_targets_csv(list(reader))
+                self.controller.logger.import_players_csv(list(reader))
                 self.controller.log("Import completed.", source="DATA")
             try:
                 if hasattr(self.controller, "log"):
@@ -419,7 +419,7 @@ class LoggerFrame(ctk.CTkFrame):
         path = filedialog.asksaveasfilename(defaultextension=".csv")
         if not path:
             return
-        data = self.controller.logger.export_targets_csv()
+        data = self.controller.logger.export_players_csv()
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(
@@ -455,10 +455,10 @@ class LoggerFrame(ctk.CTkFrame):
             self.wins_in,
             self.loss_in,
         ]:
-            self.threat_in.set(self.target_threat_placeholder)
-            self.pvp_in.set(self.target_pvp_placeholder)
-            self.a_btn.set(self.target_alignment_placeholder)
-            self.act_in.set(self.target_activity_placeholder)
+            self.threat_in.set(self.player_threat_placeholder)
+            self.pvp_in.set(self.player_pvp_placeholder)
+            self.a_btn.set(self.player_alignment_placeholder)
+            self.act_in.set(self.player_activity_placeholder)
 
             e.delete(0, "end")
             self.n_in.delete("0.0", "end")

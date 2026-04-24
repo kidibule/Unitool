@@ -1,6 +1,6 @@
 """IntelligenceController — gère le scraping et l'analyse de renseignements."""
 
-from models import Target
+from models import Player
 
 
 class IntelligenceController:
@@ -70,7 +70,7 @@ class IntelligenceController:
 
         if updates:
             params.append(pseudo.upper())
-            sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
+            sql = f"UPDATE players SET {', '.join(updates)} WHERE pseudo=?"
             self.app.commit(sql, tuple(params))
             try:
                 if hasattr(self.app, "notify_stats_changed"):
@@ -80,14 +80,14 @@ class IntelligenceController:
 
     def get_all_targets(self) -> list:
         """Récupère tous les targets pour analyse."""
-        return self.app.query("SELECT * FROM targets")
+        return self.app.query("SELECT * FROM players")
 
     def get_target_snapshot(self, handle: str):
         """Retourne l'état local utilisé pour comparer avant upsert."""
         rows = self.app.query(
             """
             SELECT org, sid, org_rank, enlisted_date, language, affiliates
-            FROM targets
+            FROM players
             WHERE pseudo = ?
             """,
             (handle.upper(),),
@@ -128,7 +128,7 @@ class IntelligenceController:
             if handle and handle != "[REDACTED]":
                 # Insérer ou mettre à jour
                 sql = """
-                INSERT INTO targets (pseudo, org, org_rank, date)
+                INSERT INTO players (pseudo, org, org_rank, date)
                 VALUES (?, ?, ?, datetime('now'))
                 ON CONFLICT(pseudo) DO UPDATE SET
                     org=excluded.org,

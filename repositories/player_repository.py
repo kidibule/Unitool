@@ -20,7 +20,7 @@ class PlayerRepository:
     def upsert_intel(self, data: dict) -> None:
         """Insère ou met à jour les infos récupérées par le scanner."""
         sql = """
-            INSERT INTO targets
+            INSERT INTO players
                 (pseudo, org, sid, affiliates, org_rank, enlisted_date, language, date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(pseudo) DO UPDATE SET
@@ -52,7 +52,7 @@ class PlayerRepository:
             return None
         sql = """
             SELECT org, sid, org_rank, enlisted_date, language
-            FROM targets
+            FROM players
             WHERE UPPER(pseudo) = UPPER(?)
         """
         rows = self._db.query(sql, (handle,))
@@ -80,12 +80,12 @@ class PlayerRepository:
 
         created = created_at or time.strftime("%d/%m/%Y %H:%M")
         self._db.commit(
-            "INSERT INTO target_notes (target_pseudo, note_text, created_at) VALUES (?, ?, ?)",
+            "INSERT INTO player_notes (player_pseudo, note_text, created_at) VALUES (?, ?, ?)",
             (handle, note, created),
         )
-        # Compatibilité : conserve la dernière note dans la table targets.
+        # Compatibilité : conserve la dernière note dans la table players.
         self._db.commit(
-            "UPDATE targets SET notes=?, date=? WHERE pseudo=?",
+            "UPDATE players SET notes=?, date=? WHERE pseudo=?",
             (note, time.strftime("%d/%m/%Y"), handle),
         )
 
@@ -96,8 +96,8 @@ class PlayerRepository:
             return []
 
         sql = (
-            "SELECT id, note_text, created_at FROM target_notes "
-            "WHERE target_pseudo=? ORDER BY id DESC"
+            "SELECT id, note_text, created_at FROM player_notes "
+            "WHERE player_pseudo=? ORDER BY id DESC"
         )
         params: tuple = (handle,)
         if limit and int(limit) > 0:
@@ -113,7 +113,7 @@ class PlayerRepository:
         if not handle or not note:
             return
         self._db.commit(
-            "UPDATE target_notes SET note_text=? WHERE id=? AND target_pseudo=?",
+            "UPDATE player_notes SET note_text=? WHERE id=? AND player_pseudo=?",
             (note, int(note_id), handle),
         )
 
@@ -123,7 +123,7 @@ class PlayerRepository:
         if not handle:
             return
         self._db.commit(
-            "DELETE FROM target_notes WHERE id=? AND target_pseudo=?",
+            "DELETE FROM player_notes WHERE id=? AND player_pseudo=?",
             (int(note_id), handle),
         )
 

@@ -1,6 +1,6 @@
 """ScannerController — gere la recherche et edition de cibles."""
 
-from models import Target
+from models import Player
 
 
 class ScannerController:
@@ -9,37 +9,37 @@ class ScannerController:
     def __init__(self, app_controller):
         self.app = app_controller
 
-    def search_targets(self, query: str) -> list:
+    def search_players(self, query: str) -> list:
         """Cherche des cibles par pseudo, org ou SID."""
         if len(query) <= 1:
             return []
 
         sql = """
         SELECT pseudo, org, ship, alignment, pvp_lvl, activity, sid, enlisted_date, language
-        FROM targets
+        FROM players
         WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?
         """
         return self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
 
-    def search_targets_as_models(self, query: str) -> list:
+    def search_players_as_models(self, query: str) -> list:
         """Cherche des cibles et retourne des objets Target."""
         if len(query) <= 1:
             return []
 
-        sql = "SELECT * FROM targets WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?"
+        sql = "SELECT * FROM players WHERE pseudo LIKE ? OR org LIKE ? OR sid LIKE ?"
         rows = self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
-        return [Target.from_db_row(row) for row in rows]
+        return [Player.from_db_row(row) for row in rows]
 
-    def get_target_full(self, pseudo: str) -> list:
+    def get_player_full(self, pseudo: str) -> list:
         """Recupere toutes les colonnes d'une cible."""
         sql = (
             "SELECT pseudo, org, ship, threat, notes, date, wins, losses, alignment, "
             "pvp_lvl, activity, sid, org_rank, enlisted_date, language, affiliates "
-            "FROM targets WHERE pseudo=?"
+            "FROM players WHERE pseudo=?"
         )
         return self.app.query(sql, (pseudo.upper(),))
 
-    def update_target(
+    def update_player(
         self,
         pseudo: str,
         org: str = None,
@@ -84,7 +84,7 @@ class ScannerController:
 
         if updates:
             params.append(pseudo.upper())
-            sql = f"UPDATE targets SET {', '.join(updates)} WHERE pseudo=?"
+            sql = f"UPDATE players SET {', '.join(updates)} WHERE pseudo=?"
             self.app.commit(sql, tuple(params))
             try:
                 if hasattr(self.app, "notify_stats_changed"):
@@ -92,17 +92,17 @@ class ScannerController:
             except Exception:
                 pass
 
-    def add_target_note(self, pseudo: str, note_text: str) -> None:
+    def add_player_note(self, pseudo: str, note_text: str) -> None:
         """Ajoute une note au journal de la cible, cree la cible si absente."""
         handle = str(pseudo or "").strip().upper()
         note = str(note_text or "").strip()
         if not handle or not note:
             return
 
-        exists = self.app.query("SELECT pseudo FROM targets WHERE pseudo=?", (handle,))
+        exists = self.app.query("SELECT pseudo FROM players WHERE pseudo=?", (handle,))
         if not exists:
             self.app.commit(
-                "INSERT INTO targets (pseudo, date, alignment) VALUES (?, strftime('%d/%m/%Y','now'), 'NEUTRAL')",
+                "INSERT INTO players (pseudo, date, alignment) VALUES (?, strftime('%d/%m/%Y','now'), 'NEUTRAL')",
                 (handle,),
             )
             try:
@@ -111,9 +111,9 @@ class ScannerController:
             except Exception:
                 pass
 
-        # Migration douce: si une ancienne note existe dans targets.notes, on l'importe une seule fois.
+        # Migration douce: si une ancienne note existe dans players.notes, on l'importe une seule fois.
         legacy = self.app.query(
-            "SELECT notes, date FROM targets WHERE pseudo=?",
+            "SELECT notes, date FROM players WHERE pseudo=?",
             (handle,),
         )
         if legacy:
@@ -121,30 +121,30 @@ class ScannerController:
             legacy_date = str(legacy[0][1] or "").strip() or "N/A"
             if legacy_note:
                 already = self.app.query(
-                    "SELECT 1 FROM target_notes WHERE target_pseudo=? AND note_text=? LIMIT 1",
+                    "SELECT 1 FROM player_notes WHERE player_pseudo=? AND note_text=? LIMIT 1",
                     (handle, legacy_note),
                 )
                 if not already:
                     created = f"{legacy_date} 00:00" if "/" in legacy_date else legacy_date
-                    self.app.db.targets.add_note(handle, legacy_note, created)
+                    self.app.db.players.add_note(handle, legacy_note, created)
 
-        self.app.db.targets.add_note(handle, note)
+        self.app.db.players.add_note(handle, note)
 
-    def get_target_notes(self, pseudo: str, limit: int = 50) -> list:
+    def get_player_notes(self, pseudo: str, limit: int = 50) -> list:
         """Retourne les notes d'une cible (id, note_text, created_at)."""
-        return self.app.db.targets.get_notes(pseudo, limit=limit)
+        return self.app.db.players.get_notes(pseudo, limit=limit)
 
-    def update_target_note(self, pseudo: str, note_id: int, note_text: str) -> None:
+    def update_player_note(self, pseudo: str, note_id: int, note_text: str) -> None:
         """Modifie une entree du journal de la cible."""
-        self.app.db.targets.update_note(pseudo, note_id, note_text)
+        self.app.db.players.update_note(pseudo, note_id, note_text)
 
-    def delete_target_note(self, pseudo: str, note_id: int) -> None:
+    def delete_player_note(self, pseudo: str, note_id: int) -> None:
         """Supprime une entree du journal de la cible."""
-        self.app.db.targets.delete_note(pseudo, note_id)
+        self.app.db.players.delete_note(pseudo, note_id)
 
-    def export_targets_csv(self) -> list:
+    def export_players_csv(self) -> list:
         """Recupere tous les targets pour export."""
-        rows = self.app.query("SELECT * FROM targets")
+        rows = self.app.query("SELECT * FROM players")
         try:
             if hasattr(self.app, "log"):
                 self.app.log(f"Exporting {len(rows)} targets to CSV", source="SCANNER")

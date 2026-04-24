@@ -46,13 +46,13 @@ class ContractController:
         self.app.commit("UPDATE contracts SET status='CLOSED' WHERE id=?", (contract_id,))
         
         # Tentative d'update du pseudo, sinon création
-        self.app.commit("UPDATE targets SET wins = wins + 1 WHERE pseudo=?", (target.upper(),))
+        self.app.commit("UPDATE players SET wins = wins + 1 WHERE pseudo=?", (target.upper(),))
         
         # On vérifie si on doit insérer la cible (si non existante)
-        check = self.app.query("SELECT pseudo FROM targets WHERE pseudo=?", (target.upper(),))
+        check = self.app.query("SELECT pseudo FROM players WHERE pseudo=?", (target.upper(),))
         if not check:
             self.app.commit(
-                "INSERT INTO targets (pseudo, wins, date, alignment) VALUES (?,?,?,'ENEMY')",
+                "INSERT INTO players (pseudo, wins, date, alignment) VALUES (?,?,?,'ENEMY')",
                 (target.upper(), 1, datetime.now().strftime("%d/%m/%y"))
             )
 
@@ -132,7 +132,7 @@ class ContractController:
     def get_suggestions(self, text: str) -> list:
         """Fournit des suggestions de pseudos pour l'auto-complétion."""
         if not text: return []
-        rows = self.app.query("SELECT pseudo FROM targets WHERE pseudo LIKE ? LIMIT 8", (text.upper() + '%',))
+        rows = self.app.query("SELECT pseudo FROM players WHERE pseudo LIKE ? LIMIT 8", (text.upper() + '%',))
         return [r[0] for r in rows]
     
     def get_contract_reward_for_type(self, type_name: str) -> str:

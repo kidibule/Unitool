@@ -53,11 +53,11 @@ class ScannerFrame(ctk.CTkFrame):
 
         self.tabview = DrakeConfig.create_tabview(self)
 
-        self.tab_targets = self.tabview.add("TARGETS")
+        self.tab_players = self.tabview.add("PLAYERS")
         self.tab_orgs = self.tabview.add("ORGANIZATIONS")
         self.tab_ships = self.tabview.add("SHIPS")
 
-        self.setup_targets_tab()
+        self.setup_players_tab()
         self.setup_orgs_tab()
         self.setup_ships_tab()
         self.setup_tags()
@@ -99,33 +99,33 @@ class ScannerFrame(ctk.CTkFrame):
         except Exception:
             pass
 
-    def setup_targets_tab(self):
+    def setup_players_tab(self):
         """Configure l'onglet de recherche de joueurs."""
         self.search_entry = DrakeEntry(
-            self.tab_targets, placeholder_text="ENTER A HANDLE OR SID...", 
+            self.tab_players, placeholder_text="ENTER A HANDLE OR SID...", 
             height=40, fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY
         )
         self.search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.search_entry.bind("<KeyRelease>", self.run_scan)
 
-        toolbar = ctk.CTkFrame(self.tab_targets, fg_color="transparent")
+        toolbar = ctk.CTkFrame(self.tab_players, fg_color="transparent")
         toolbar.pack(fill="x", padx=20, pady=5)
 
         DrakeButton(
             toolbar,
             text="IMPORT CSV",
             width=150,
-            command=self.import_targets_csv,
+            command=self.import_players_csv,
         ).pack(side="left", padx=5)
 
         DrakeButton(
             toolbar,
             text="EXPORT CSV",
             width=150,
-            command=self.export_targets_csv,
+            command=self.export_players_csv,
         ).pack(side="left", padx=5)
 
-        self.results = DrakeTerminal(self.tab_targets)
+        self.results = DrakeTerminal(self.tab_players)
         self.results.pack(pady=5, padx=10, fill="both", expand=True)
 
    
@@ -300,12 +300,12 @@ class ScannerFrame(ctk.CTkFrame):
             self._log(f"Opening RSI organization: {clean_sid}")
             webbrowser.open(f"https://robertsspaceindustries.com/orgs/{clean_sid}")
 
-    def open_target_notes_manager(self, pseudo, parent=None):
+    def open_player_notes_manager(self, pseudo, parent=None):
         """Fenetre dediee pour gerer les notes Intel d'une cible."""
         owner = parent if parent is not None else self
         toplevel = DrakeConfig.create_modal_window(
             parent=owner,
-            title=f"DRAKE - TARGET INTEL: {pseudo}",
+            title=f"DRAKE - PLAYER INTEL: {pseudo}",
             geometry="620x560",
             fg_color=DrakeConfig.BG_MAIN,
             resizable=True,
@@ -347,7 +347,7 @@ class ScannerFrame(ctk.CTkFrame):
         )
         journal_list.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
-        def open_edit_target_note(note_id: int, current_text: str) -> None:
+        def open_edit_player_note(note_id: int, current_text: str) -> None:
             edit_win = DrakeConfig.create_modal_window(
                 parent=toplevel,
                 title=f"EDIT NOTE #{note_id}",
@@ -378,18 +378,18 @@ class ScannerFrame(ctk.CTkFrame):
                 if not new_text:
                     DrakePopup.error("ERROR", "Note cannot be empty.", parent=edit_win)
                     return
-                self.controller.scanner.update_target_note(pseudo, note_id, new_text)
+                self.controller.scanner.update_player_note(pseudo, note_id, new_text)
                 edit_win.destroy()
                 refresh_note_journal()
                 self.run_scan(None)
 
             DrakeButton(edit_win, text="SAVE", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
 
-        def delete_target_note(note_id: int) -> None:
+        def delete_player_note(note_id: int) -> None:
             confirm = DrakePopup.yesno("CONFIRMATION", f"Delete note #{note_id}?", parent=toplevel)
             if not confirm:
                 return
-            self.controller.scanner.delete_target_note(pseudo, note_id)
+            self.controller.scanner.delete_player_note(pseudo, note_id)
             refresh_note_journal()
             self.run_scan(None)
 
@@ -397,7 +397,7 @@ class ScannerFrame(ctk.CTkFrame):
             for child in journal_list.winfo_children():
                 child.destroy()
 
-            notes = self.controller.scanner.get_target_notes(pseudo, limit=100)
+            notes = self.controller.scanner.get_player_notes(pseudo, limit=100)
             if notes:
                 for note_id, note_text, created_at in notes:
                     row = ctk.CTkFrame(journal_list, fg_color=DrakeConfig.BG_PANEL)
@@ -418,7 +418,7 @@ class ScannerFrame(ctk.CTkFrame):
                         text="EDIT",
                         width=90,
                         height=26,
-                        command=lambda nid=note_id, txt=note_text: open_edit_target_note(nid, txt),
+                        command=lambda nid=note_id, txt=note_text: open_edit_player_note(nid, txt),
                     ).pack(side="right", padx=(4, 0))
 
                     DrakeButton(
@@ -428,7 +428,7 @@ class ScannerFrame(ctk.CTkFrame):
                         height=26,
                         fg_color="#8b2c2c",
                         hover_color="#a63a3a",
-                        command=lambda nid=note_id: delete_target_note(nid),
+                        command=lambda nid=note_id: delete_player_note(nid),
                     ).pack(side="right", padx=(4, 0))
 
                     ctk.CTkLabel(
@@ -452,7 +452,7 @@ class ScannerFrame(ctk.CTkFrame):
             if not new_text:
                 DrakePopup.error("ERROR", "Note cannot be empty.", parent=toplevel)
                 return
-            self.controller.scanner.add_target_note(pseudo, new_text)
+            self.controller.scanner.add_player_note(pseudo, new_text)
             new_note_box.delete("0.0", "end")
             refresh_note_journal()
             self.run_scan(None)
@@ -636,7 +636,7 @@ class ScannerFrame(ctk.CTkFrame):
 
         refresh_org_journal()
 
-    def edit_target_window(self, pseudo):
+    def edit_player_window(self, pseudo):
         """Fenêtre d'édition — HANDLE et CREATION en lecture seule."""
         toplevel = DrakeConfig.create_modal_window(
             parent=self,
@@ -646,7 +646,7 @@ class ScannerFrame(ctk.CTkFrame):
             resizable=True,
         )
 
-        row = self.controller.scanner.get_target_full(pseudo)
+        row = self.controller.scanner.get_player_full(pseudo)
         if not row:
             return
         d = row[0]
@@ -728,7 +728,7 @@ class ScannerFrame(ctk.CTkFrame):
             for child in journal_list.winfo_children():
                 child.destroy()
 
-            notes = self.controller.scanner.get_target_notes(pseudo, limit=100)
+            notes = self.controller.scanner.get_player_notes(pseudo, limit=100)
             if notes:
                 for note_id, note_text, created_at in notes:
                     row = ctk.CTkFrame(journal_list, fg_color=DrakeConfig.BG_PANEL)
@@ -795,7 +795,7 @@ class ScannerFrame(ctk.CTkFrame):
                 }
                 
                 # Exécution
-                self.controller.scanner.update_target(pseudo, **data)
+                self.controller.scanner.update_player(pseudo, **data)
                 
                 # IMPORTANT : On rafraîchit d'abord
                 self.run_scan(None)
@@ -839,12 +839,12 @@ class ScannerFrame(ctk.CTkFrame):
         self.results.delete("0.0", "end")
 
         if len(q) > 1:
-            targets = self.controller.scanner.search_targets_as_models(q)
+            players = self.controller.scanner.search_players_as_models(q)
 
-            if not targets:
+            if not players:
                 return
 
-            for t in targets:
+            for t in players:
                 # Tags pour les liens cliquables
                 tag_p, tag_o, tag_r, tag_i = f"tp_{t.pseudo}", f"to_{t.pseudo}", f"tr_{t.pseudo}", f"ti_{t.pseudo}"
 
@@ -878,7 +878,7 @@ class ScannerFrame(ctk.CTkFrame):
 
                 # --- [BLOC 3 : NOTES / RENSEIGNEMENTS] ---
                 self.results.insert("end", "   " + "-"*45 + "\n", "separator")
-                notes = self.controller.scanner.get_target_notes(t.pseudo, limit=3)
+                notes = self.controller.scanner.get_player_notes(t.pseudo, limit=3)
                 if notes:
                     self.results.insert("end", "   INTEL:\n", ("notes_label", tag_i))
                     for note_id, note_text, created_at in notes:
@@ -928,16 +928,16 @@ class ScannerFrame(ctk.CTkFrame):
                 self.results.insert("end", f"{'='*60}\n")
 
                 # --- BINDINGS ---
-                self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=t.pseudo: self.edit_target_window(p))
+                self.results.tag_bind(tag_p, "<Button-1>", lambda e, p=t.pseudo: self.edit_player_window(p))
                 if is_valid_org:
                     self.results.tag_bind(tag_o, "<Button-1>", lambda e, s=t.sid: self.open_org(s))
                 self.results.tag_bind(tag_r, "<Button-1>", lambda e, p=t.pseudo: self.open_rsi(p))
-                self.results.tag_bind(tag_i, "<Button-1>", lambda e, p=t.pseudo: self.open_target_notes_manager(p))
+                self.results.tag_bind(tag_i, "<Button-1>", lambda e, p=t.pseudo: self.open_player_notes_manager(p))
                 self.results.tag_bind(tag_i, "<Enter>", lambda e: self.results.configure(cursor="hand2"))
                 self.results.tag_bind(tag_i, "<Leave>", lambda e: self.results.configure(cursor="arrow"))
 
-    def import_targets_csv(self):
-        """Import CSV strictement vers la table targets."""
+    def import_players_csv(self):
+        """Import CSV strictement vers la table players."""
         filename = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
         if not filename:
             return
@@ -947,16 +947,16 @@ class ScannerFrame(ctk.CTkFrame):
             with open(filename, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f, delimiter=";")
                 rows = list(reader)
-            self.controller.logger.import_targets_csv(rows)
+            self.controller.logger.import_players_csv(rows)
             self.run_scan(None)
-            DrakePopup.info("SYSTEMS", "TARGETS IMPORT COMPLETED", parent=main_win)
-            self._log(f"Targets imported from {filename}", source="SCANNER")
+            DrakePopup.info("SYSTEMS", "PLAYERS IMPORT COMPLETED", parent=main_win)
+            self._log(f"Players imported from {filename}", source="SCANNER")
         except Exception as e:
-            self._log(f"Targets import failed: {e}", source="ERROR")
+            self._log(f"Players import failed: {e}", source="ERROR")
             DrakePopup.error("ERROR", f"IMPORT FAILED: {e}", parent=main_win)
 
-    def export_targets_csv(self):
-        """Export CSV strictement depuis la table targets."""
+    def export_players_csv(self):
+        """Export CSV strictement depuis la table players."""
         filename = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV Files", "*.csv")],
@@ -966,16 +966,16 @@ class ScannerFrame(ctk.CTkFrame):
 
         main_win = self.winfo_toplevel()
         try:
-            rows = self.controller.scanner.export_targets_csv()
+            rows = self.controller.scanner.export_players_csv()
             with open(filename, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(["pseudo", "org", "ship", "threat", "notes", "alignment"])
                 for row in rows:
                     writer.writerow([row[0], row[1], row[2], row[3], row[4], row[8]])
-            DrakePopup.info("SYSTEMS", "TARGETS EXPORT COMPLETED", parent=main_win)
-            self._log(f"Targets exported to {filename}", source="SCANNER")
+            DrakePopup.info("SYSTEMS", "PLAYERS EXPORT COMPLETED", parent=main_win)
+            self._log(f"Players exported to {filename}", source="SCANNER")
         except Exception as e:
-            self._log(f"Targets export failed: {e}", source="ERROR")
+            self._log(f"Players export failed: {e}", source="ERROR")
             DrakePopup.error("ERROR", f"EXPORT FAILED: {e}", parent=main_win)
 
     def import_orgs_csv(self):

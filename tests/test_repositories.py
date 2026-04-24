@@ -3,7 +3,7 @@
 import sqlite3
 import pytest
 from db_migrations import run_migrations
-from repositories.target_repository import TargetRepository
+from repositories.player_repository import PlayerRepository
 from repositories.org_repository import OrgRepository
 from repositories.location_repository import LocationRepository
 from repositories.ship_repository import ShipRepository
@@ -41,17 +41,17 @@ def make_db():
 
 class TestTargetRepositoryIntel:
     def test_upsert_intel_insere_nouvelle_target(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         repo.upsert_intel({
             "Handle": "player1", "OrgaNom": "TEST_ORG", "SID": "SID001",
             "Affiliates": "NONE", "Rang": "MEMBER",
             "Date": "01/01/2024", "Language": "FR",
         })
-        rows = repo._db.query("SELECT pseudo FROM targets WHERE pseudo='PLAYER1'")
+        rows = repo._db.query("SELECT pseudo FROM players WHERE pseudo='PLAYER1'")
         assert len(rows) == 1
 
     def test_upsert_intel_met_a_jour_si_handle_existe_deja(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         data = {
             "Handle": "player1", "OrgaNom": "ORG_A", "SID": "SID001",
             "Affiliates": "NONE", "Rang": "MEMBER",
@@ -60,19 +60,19 @@ class TestTargetRepositoryIntel:
         repo.upsert_intel(data)
         data["OrgaNom"] = "ORG_B"
         repo.upsert_intel(data)
-        rows = repo._db.query("SELECT org FROM targets WHERE pseudo='PLAYER1'")
+        rows = repo._db.query("SELECT org FROM players WHERE pseudo='PLAYER1'")
         assert rows[0][0] == "ORG_B"
 
     def test_get_by_handle_retourne_none_si_inconnu(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         assert repo.get_by_handle("fantome") is None
 
     def test_get_by_handle_retourne_none_si_handle_vide(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         assert repo.get_by_handle("") is None
 
     def test_get_by_handle_retourne_les_bonnes_donnees(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         repo.upsert_intel({
             "Handle": "alice", "OrgaNom": "ALPHAORG", "SID": "ALP01",
             "Affiliates": "NONE", "Rang": "OFFICER",
@@ -89,33 +89,33 @@ class TestTargetRepositoryIntel:
 class TestTargetRepositoryNotes:
     def _make_target(self, db, handle="TESTUSER"):
         db.commit(
-            "INSERT OR IGNORE INTO targets (pseudo) VALUES (?)", (handle,)
+            "INSERT OR IGNORE INTO players (pseudo) VALUES (?)", (handle,)
         )
 
     def test_add_note_insere_une_note(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         self._make_target(db)
         repo.add_note("TESTUSER", "note un")
-        rows = db.query("SELECT note_text FROM target_notes WHERE target_pseudo='TESTUSER'")
+        rows = db.query("SELECT note_text FROM player_notes WHERE player_pseudo='TESTUSER'")
         assert len(rows) == 1
         assert rows[0][0] == "note un"
 
     def test_add_note_ignore_si_texte_vide(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         self._make_target(db)
         repo.add_note("TESTUSER", "  ")
-        rows = db.query("SELECT * FROM target_notes WHERE target_pseudo='TESTUSER'")
+        rows = db.query("SELECT * FROM player_notes WHERE player_pseudo='TESTUSER'")
         assert len(rows) == 0
 
     def test_get_notes_retourne_liste_vide_si_aucune(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         assert repo.get_notes("INEXISTANT") == []
 
     def test_get_notes_ordre_descendant(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         self._make_target(db)
         repo.add_note("TESTUSER", "note 1")
         repo.add_note("TESTUSER", "note 2")
@@ -126,27 +126,27 @@ class TestTargetRepositoryNotes:
 
     def test_update_note_modifie_le_texte(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         self._make_target(db)
         repo.add_note("TESTUSER", "ancienne note")
         note_id = db.query(
-            "SELECT id FROM target_notes WHERE target_pseudo='TESTUSER'"
+            "SELECT id FROM player_notes WHERE player_pseudo='TESTUSER'"
         )[0][0]
         repo.update_note("TESTUSER", note_id, "nouvelle note")
-        rows = db.query("SELECT note_text FROM target_notes WHERE id=?", (note_id,))
+        rows = db.query("SELECT note_text FROM player_notes WHERE id=?", (note_id,))
         assert rows[0][0] == "nouvelle note"
 
     def test_delete_note_supprime_la_note(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         self._make_target(db)
         repo.add_note("TESTUSER", "a supprimer")
         note_id = db.query(
-            "SELECT id FROM target_notes WHERE target_pseudo='TESTUSER'"
+            "SELECT id FROM player_notes WHERE player_pseudo='TESTUSER'"
         )[0][0]
         repo.delete_note("TESTUSER", note_id)
         rows = db.query(
-            "SELECT * FROM target_notes WHERE target_pseudo='TESTUSER'"
+            "SELECT * FROM player_notes WHERE player_pseudo='TESTUSER'"
         )
         assert len(rows) == 0
 
@@ -154,18 +154,18 @@ class TestTargetRepositoryNotes:
 class TestTargetRepositoryPlayerShips:
     def test_add_player_ship_insere(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         repo.add_player_ship("ALICE", "AURORA")
         rows = db.query("SELECT ship FROM player_ships WHERE pseudo='ALICE'")
         assert rows[0][0] == "AURORA"
 
     def test_get_player_ships_retourne_liste_vide_si_aucun(self):
-        repo = TargetRepository(make_db())
+        repo = PlayerRepository(make_db())
         assert repo.get_player_ships("INCONNU") == []
 
     def test_get_player_ships_retourne_les_ships(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         repo.add_player_ship("BOB", "AURORA")
         repo.add_player_ship("BOB", "CUTLASS")
         ships = repo.get_player_ships("BOB")
@@ -174,7 +174,7 @@ class TestTargetRepositoryPlayerShips:
 
     def test_delete_player_ship_supprime_un_ship_specifique(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         repo.add_player_ship("CHARLIE", "AURORA")
         repo.add_player_ship("CHARLIE", "CUTLASS")
         repo.delete_player_ship("CHARLIE", "AURORA")
@@ -184,7 +184,7 @@ class TestTargetRepositoryPlayerShips:
 
     def test_delete_all_player_ships_vide_tous_les_ships(self):
         db = make_db()
-        repo = TargetRepository(db)
+        repo = PlayerRepository(db)
         repo.add_player_ship("DAVE", "AURORA")
         repo.add_player_ship("DAVE", "CUTLASS")
         repo.delete_all_player_ships("DAVE")

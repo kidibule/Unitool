@@ -232,7 +232,7 @@ class MainView(ctk.CTkFrame):
         """Mise à jour des données temps réel du panel de droite"""
         try:
             stats = self.controller.get_dashboard_stats()
-            total = stats.get("targets", 0)
+            total = stats.get("players", 0)
             open_contracts = stats.get("active_contracts", 0)
             known_orgs = stats.get("organizations", 0)
 

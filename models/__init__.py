@@ -1,14 +1,14 @@
 """Package models — entités métier de l'application."""
 
 from .base_model import BaseModel
-from .target import Target
+from .player import Player
 from .contract import Contract
 from .contract_type import ContractType
 from .organization import Organization
 
 __all__ = [
     "BaseModel",
-    "Target",
+    "Player",
     "Contract",
     "ContractType",
     "Organization",
