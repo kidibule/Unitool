@@ -6,6 +6,7 @@ and snare distance computation.
 
 import customtkinter as ctk
 from datetime import datetime
+from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearButton, DrakeEntry, DrakePopup, DrakeTerminal, DrakeTitle2, DrakeTitle4
 
 class InterceptionFrame(ctk.CTkFrame):
@@ -1068,6 +1069,44 @@ class InterceptionFrame(ctk.CTkFrame):
         self.new_pos_parent.configure(values=values)
         self.new_pos_parent.set("NONE")
 
+    def _ocr_fill_position(self):
+        """Opens a file dialog, runs OCR to extract CamPos Planet Zone coords and fills X/Y/Z fields."""
+        path = filedialog.askopenfilename(
+            title="Select Star Citizen screenshot",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.bmp *.tiff"), ("All files", "*.*")],
+            parent=self.position_popup if self.position_popup else self,
+        )
+        if not path:
+            return
+        try:
+            from services.position_ocr_service import read_position_from_screenshot
+            result = read_position_from_screenshot(path)
+        except Exception as e:
+            DrakePopup.error("OCR", f"OCR error: {e}", parent=self)
+            return
+
+        if not result.get("ok"):
+            DrakePopup.warning("OCR", result.get("message", "Could not extract coordinates."), parent=self)
+            return
+
+        x, y, z = result["x"], result["y"], result["z"]
+        for entry, val in [(self.new_pos_x, x), (self.new_pos_y, y), (self.new_pos_z, z)]:
+            entry.delete(0, "end")
+            entry.insert(0, str(val))
+
+        # Remplir le nom si trouvé
+        location_name = result.get("location_name")
+        if location_name and hasattr(self, "new_pos_name"):
+            self.new_pos_name.delete(0, "end")
+            self.new_pos_name.insert(0, location_name)
+
+        if hasattr(self.controller, "log"):
+            self.controller.log(
+                f"OCR position extracted: X={x} Y={y} Z={z}" +
+                (f" | Name={location_name}" if location_name else ""),
+                source="INTERCEPTION"
+            )
+
     def _close_position_manager(self):
         if self.position_popup is not None:
             try:
@@ -1128,7 +1167,8 @@ class InterceptionFrame(ctk.CTkFrame):
         self.new_pos_z = DrakeEntry(root, placeholder_text="Z")
         self.new_pos_z.pack(pady=2, padx=12, fill="x")
 
-        DrakeButton(root, text="SAVE POSITION", command=self.action_create_position).pack(pady=(6, 8), padx=12, fill="x")
+        DrakeButton(root, text="OCR FROM SCREENSHOT", command=self._ocr_fill_position).pack(pady=(4, 2), padx=12, fill="x")
+        DrakeButton(root, text="SAVE POSITION", command=self.action_create_position).pack(pady=(2, 8), padx=12, fill="x")
 
         DrakeTitle4(root, text="DELETE POSITION").pack(pady=(6, 2), padx=12)
         self.del_pos_selector = DrakeComboBox(root, values=location_list)
