@@ -5,8 +5,9 @@ __pycache__/
 # Base de données locale (très important de l'ignorer)
 unitool_data.db
 
-# Environnement virtuel (si tu en crées un plus tard)
+# Environnement virtuel
 venv/
+.venv/
 .env
 
 
