@@ -709,6 +709,12 @@ class InterceptionFrame(ctk.CTkFrame):
             DrakePopup.warning("INTERCEPTION", "Select a destination first.", parent=self)
             return
 
+        if hasattr(self.controller, "log"):
+            self.controller.log(
+                f"Generating interception: sources=[{', '.join(sources)}] dest={dest}",
+                source="INTERCEPTION"
+            )
+
         # Utilisation des valeurs fixes
         self._run_road_calculation(
             sources,
@@ -716,6 +722,7 @@ class InterceptionFrame(ctk.CTkFrame):
             self.FIXED_RADIUS,
             self.FIXED_STEP,
             self.FIXED_MAX_DIST,
+            log_to_main_terminal=True,
         )
 
     def _run_road_calculation(self, sources, dest, radius, step, max_dist, log_to_main_terminal=False, road_name=None):
