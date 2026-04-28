@@ -25,12 +25,12 @@ UNITOOL cree automatiquement:
 ---
 
 ## 2. A quoi sert chaque menu
-- DATABASE: rechercher, lire et modifier les dossiers deja en base
+- DATABASE: rechercher, lire et modifier les dossiers deja en base (joueurs, orgs, vaisseaux)
 - CONTRACTS: creer/suivre/cloturer les missions
 - ARCHIVE: saisie manuelle + import/export CSV
 - INTEL: scanner RSI (joueurs et organisations)
-- INTERCEPTION: calcul de distance snare
-- SHIPS: flotte, composants, loadouts et configuration des slots
+- INTERCEPTION: calcul de distance snare quantique + gestion de routes
+- SHIP LOADOUT: loadout, composants et configuration des slots
 
 ---
 
@@ -46,20 +46,22 @@ UNITOOL cree automatiquement:
 ## 4. Utilisation express par module
 
 ### DATABASE
-- Saisir au moins 2 caracteres pour rechercher
+- Onglets : PLAYERS, ORGANIZATIONS, SHIPS
+- Saisir un handle ou SID pour rechercher (filtrage en temps reel)
 - Cliquer un pseudo/nom pour ouvrir la fiche editable
-- Bouton EXPORT DB pour extraire un CSV des targets
+- Boutons IMPORT CSV / EXPORT CSV dans chaque onglet
 
 ### CONTRACTS
 - Renseigner TARGET, CLIENT, REWARD, PRIORITE
-- ACCEPT pour creer
+- ACCEPT pour creer (le TYPE pre-remplit automatiquement la REWARD)
 - CLOSE pour cloturer
 - EDIT TYPES pour gerer les modeles de mission
 
 ### ARCHIVE
-- PLAYERS, ORGANIZATIONS, SHIPS
-- Permet la saisie manuelle propre
+- Onglets PLAYERS, ORGANIZATIONS, SHIPS (27 champs + OCR)
+- Saisie manuelle ou chargement depuis DB (Enter dans le champ nom)
 - Import/Export CSV dans chaque onglet
+- Bouton OCR SCREENSHOT IMPORT (onglet SHIPS) : extrait les stats depuis un screenshot du jeu
 
 ### INTEL
 - TRACK PLAYER: scan profil RSI puis SAVE CONTACT
@@ -67,15 +69,16 @@ UNITOOL cree automatiquement:
 - Double-clic membre: lance un scan joueur
 
 ### INTERCEPTION
-- Ajouter une ou plusieurs sources
+- Saisir un nom de route, selectionner les sources (START + ADD START)
 - Choisir destination
-- GENERATE SNARE COORDINATES
-- Lire la distance optimale en KM dans le terminal
+- GENERATE pour calculer la distance snare
+- SAVE pour enregistrer la route comme preset reutilisable
+- EDIT POSITIONS: ajouter des locations (OCR depuis screenshot F3 du jeu supporte)
 
-### SHIPS
-- SHIPS: recherche + import/export flotte
-- LOADOUT: equipement des composants par slot
-- CONFIG: creation categories/types + limites de slots
+### SHIP LOADOUT
+- SHIPS: catalogue + fiche technique + import/export + OCR Screenshot Import
+- LOADOUT: selection vaisseau + profil de loadout + equipement des slots + EDIT COMPONENTS
+- CONFIG: gestion categories/types + configuration des slots par vaisseau
 
 ---
 
@@ -94,7 +97,9 @@ Ships:
 ## 6. Depannage ultra-court
 - Lancement KO: verifier que `UNITOOL.exe` est bien lance depuis un dossier local
 - Scan INTEL vide: verifier internet et Chrome
-- Import CSV en erreur: verifier en-tetes et separateur
+- Import CSV en erreur: verifier en-tetes et separateur (`;`)
+- OCR Screenshot vide: verifier que Tesseract est installe (inclus dans le package .exe)
+- OCR Positions: activer l'overlay debug avec `F3` dans le jeu avant de faire le screenshot
 - Base a reinitialiser: fermer app, sauvegarder puis supprimer unitool_data.db, relancer
 
 ---

@@ -52,16 +52,21 @@ Au premier lancement, UNITOOL cree automatiquement:
 
 ## 5. Vue d'ensemble de l'interface
 Menu lateral principal:
-- `DATABASE` (Scanner cibles + organisations)
+- `DATABASE` (Scanner cibles, organisations et vaisseaux)
 - `CONTRACTS` (Bounty board)
 - `ARCHIVE` (saisie manuelle + import/export CSV)
 - `INTEL` (scraping RSI)
-- `INTERCEPTION` (snare distance)
-- `SHIPS` (catalogue flotte, composants, loadout)
+- `INTERCEPTION` (calcul snare quantique)
+- `SHIP LOADOUT` (gestion loadout, composants, configuration slots)
 
 Panneau droit (global):
-- compteurs (contacts, organisations, contrats actifs)
-- logs systeme en temps reel
+- compteur `KNOWN CONTACTS` (joueurs en base)
+- compteur `KNOWN ORGANIZATIONS` (organisations en base)
+- compteur `ACTIVE CONTRACTS` (affiche en rouge si > 0)
+- terminal `SYSTEM LOGS` : logs de l'application en temps reel
+- pied de page version : `VER ALPHA 1.0.0 - OPS STATUS: NOMINAL`
+
+Note: l'interface bascule automatiquement en mode compact si la fenetre est plus etroite que 1200 px (panneau Intel passe en bas).
 
 ---
 
@@ -69,27 +74,53 @@ Panneau droit (global):
 
 ### 6.1 DATABASE (Scanner)
 Permet de rechercher et modifier rapidement les donnees deja presentes dans la base.
+Trois onglets : `PLAYERS`, `ORGANIZATIONS`, `SHIPS`.
 
-#### Onglet TARGETS
-- Champ de recherche: saisir au moins 2 caracteres
-- Resultats affiches: pseudo, org/sid, stats combat, notes intel, historique contrats
-- Actions:
-  - clic sur pseudo: edition complete du dossier
-  - clic sur `[RSI]`: ouverture page citoyen RSI
-  - clic sur org/sid: ouverture page org RSI
-  - `EXPORT DB`: export CSV simplifie des targets
+#### Onglet PLAYERS
+- Champ de recherche : saisir un handle ou SID (filtrage en temps reel a chaque frappe)
+- Boutons :
+  - `IMPORT CSV` : importe des joueurs depuis un fichier CSV
+  - `EXPORT CSV` : exporte toute la base joueurs en CSV
+- Resultats affiches par fiche :
+  - indicateur de couleur alignement (ALLY=vert, ENEMY=rouge, NEUTRAL=blanc)
+  - handle cliquable → ouvre la fenetre d'edition `EDIT IFF DATA`
+  - organisation + SID cliquable → ouvre le profil RSI de l'orga
+  - lien `RSI` cliquable → ouvre le profil RSI du joueur
+  - vaisseau, niveau de menace, Win/Loss ratio, PVP level, activite, langue
+  - jusqu'a 3 dernieres notes Intel (cliquables → gestionnaire de notes)
+  - contrats actifs/clos lies a ce joueur
+
+#### Fenetre d'edition joueur
+Accessible par clic sur le handle. Champs editables :
+- Organisation, SID, Rank orga, Vaisseau, Threat, Alignment, PVP Level, Activity, Language
+- Handle et date de creation en lecture seule
+- Section `INTEL JOURNAL` : notes existantes avec date
+- Bouton `MANAGE NOTES` → gestionnaire de notes dedie
+- Boutons `SAVE CHANGES` / `CANCEL`
+
+#### Gestionnaire de notes joueur
+- Zone de saisie + bouton `ADD NOTE`
+- Liste des notes datees avec boutons `EDIT` / `DELETE` par note
+- Confirmation avant suppression
 
 #### Onglet ORGANIZATIONS
-- Recherche par nom ou SID
-- Affichage detaille: type, specialisation, roster visible, diplomatie, notes
-- Clic sur nom: edition de la fiche organisation
-- Clic sur SID: ouverture RSI org
+- Champ de recherche par nom ou SID (filtrage en temps reel)
+- Boutons `IMPORT CSV` / `EXPORT CSV`
+- Resultats affiches par fiche :
+  - indicateur d'alignement colore
+  - nom cliquable → ouvre la fenetre d'edition d'orga
+  - SID cliquable → ouvre le profil RSI de l'organisation
+  - type, specialisation, TAG, date de derniere mise a jour
+  - roster des membres (jusqu'a 15) : Handle | Rank, puis resume Total/Visible/Redacted
+  - description/Manifest (tronquee a 200 caracteres)
+  - Allies / Enemies
+  - jusqu'a 3 dernieres notes Intel (cliquables → gestionnaire de notes orga)
 
-#### Edition des fiches
-Dans les fenetres d'edition target/org:
-- modification des champs metier
-- gestion des notes (ajout, edition, suppression)
-- bouton de synchronisation pour enregistrer en base
+#### Gestionnaire de notes organisation
+Identique au gestionnaire joueur : `ADD NOTE`, liste datee, `EDIT`, `DELETE` par note.
+
+#### Onglet SHIPS
+Embarque directement le composant catalogue vaisseaux (voir section 6.6 SHIPS pour le detail).
 
 ---
 
@@ -115,20 +146,40 @@ Gestion des types:
 Ecran de saisie manuelle et de gestion CSV.
 
 #### Onglet PLAYERS
-- creation/mise a jour dossier joueur
-- chargement d'un dossier via `TARGET HANDLE` + Enter
-- import/export CSV
-- nettoyage formulaire (`CLEAR`)
+Champs de saisie :
+- Identite & Menace : Player Handle (Enter = charger fiche depuis DB), Threat Level (LOW/MEDIUM/HIGH/CRITICAL)
+- Donnees RSI : Organization, SID, Rank
+- Infos complementaires : Language, Affiliates
+- Combat Stats : Wins, Losses
+- Profil : Alignment (ALLY/NEUTRAL/ENEMY), PVP Level (NOOB/ROOKIE/VETERAN/ACE), Activity (PIRATE/BOUNTY HUNTER/MINER/TRADER)
+- Vaisseau : Current Ship
+- Notes : zone de texte libre (INTEL NOTES)
+
+Boutons :
+- `SYNCHRONIZE DATABASE` : sauvegarde avec detection de doublon et confirmation
+- `CLEAR` : remet tous les champs a zero
+- `IMPORT CSV` / `EXPORT CSV`
 
 #### Onglet ORGANIZATIONS
-- creation/mise a jour fiche org
-- import/export CSV
-- nettoyage formulaire
+Champs de saisie :
+- Identite : SID, TAG, Organization Name
+- Classification : Type (ORGANIZATION/SYNDICATE/FACTION/PMC), Alignement
+- Profil : Specialization
+- Diplomatie : Allies (TAGS), Enemies (TAGS)
+- Notes : zone de texte `MANIFEST & INTELLIGENCE NOTES`
+
+Boutons :
+- `REGISTER ORGANIZATION` : sauvegarde avec date automatique
+- `CLEAR`
+- `IMPORT CSV` / `EXPORT CSV`
 
 #### Onglet SHIPS
-- creation/mise a jour fiche vaisseau
-- import/export CSV
-- chargement par nom (Enter)
+Formulaire complet a 27 parametres (voir section 6.6 SHIPS pour le detail complet des champs).
+Boutons :
+- `OCR SCREENSHOT IMPORT` : extrait automatiquement les stats depuis un screenshot du jeu
+- `SYNC SHIP TO DATABASE` : sauvegarde le vaisseau
+- `CLEAR`
+- `IMPORT CSV` / `EXPORT CSV`
 
 ---
 
@@ -152,50 +203,120 @@ Module de collecte automatique RSI avec Selenium.
 ---
 
 ### 6.5 INTERCEPTION
-Calcul d'une distance optimale de deploiement snare.
+Calcul d'une distance optimale de deploiement snare quantique.
 
-Workflow:
-1. Selectionner un point de depart
-2. Ajouter des sources (`ADD`) (option: inclure les lunes si source = planete)
-3. Selectionner une destination
-4. Activer/desactiver les sources voulues
-5. Cliquer `GENERATE SNARE COORDINATES`
+#### Configuration d'une route
+- Champ `Road name` : nom de la route d'interception
+- Selecteur preset `Mantis` (actuel)
+- Bouton `SAVE` : sauvegarde la route (Radius 20 000, Step 500, Max dist 250 000)
+- Selecteur `START` : point de depart de la route + bouton `ADD START` pour ajouter la source
+- Selecteur `DESTINATION` : filtre automatiquement les sources incompatibles a la selection
+- Bouton `GENERATE` : lance le calcul d'interception quantum
+- Bouton `CLEAR` : efface toutes les sources
 
-Resultat:
-- distance optimale en KM
-- instructions de deploiement affichees dans le terminal
+#### Section START SOURCES
+- Affiche le nombre de sources selectionnees
+- Chaque source active dispose d'un bouton `REMOVE` individuel
 
-Gestion des positions:
-- bouton `EDIT POSITIONS`
-- ajout d'une position (nom, type, parent, X/Y/Z)
-- suppression d'une position (si non liee comme parent)
+#### Workflow standard
+1. Saisir un nom de route
+2. Selectionner le point de depart (`START`) et cliquer `ADD START` (repetez pour plusieurs sources)
+3. Selectionner la destination (`DESTINATION`)
+4. Cliquer `GENERATE`
+5. Lire le resultat dans le terminal de sortie
+
+#### Terminal de sortie
+- Rapport detaille du calcul (distance optimale, parametres utilises)
+- Logs de chaque action
+
+#### Section REGISTERED ROAD PRESETS
+- Liste scrollable de toutes les routes sauvegardees
+- Chaque carte affiche : nom, destination, nombre de sources, Radius, Step, Max
+- Boutons par route :
+  - `LOAD` : charge la route dans les selecteurs
+  - `EDIT` : edition inline (nom, destination, Radius/Step/Max, sources)
+  - `DELETE` : suppression avec validation
+
+#### Gestionnaire de positions
+Bouton `EDIT POSITIONS` → permet d'ajouter, editer et supprimer des locations.
+- Champs : nom, type, parent, coordonnees X/Y/Z
+- **OCR supporté** : bouton d'import desde un screenshot Star Citizen (overlay F3 du jeu)
+  - Activer l'overlay debug avec la touche `F3` dans le jeu
+  - Faire un screenshot
+  - UNITOOL extrait automatiquement les coordonnees X/Y/Z et le nom de la localisation
 
 ---
 
-### 6.6 SHIPS
-Gestion flotte avancée en 3 onglets.
+### 6.6 SHIPS / SHIP LOADOUT
+Gestion flotte avancee accessible via `SHIP LOADOUT` dans le menu (ou depuis l'onglet SHIPS de DATABASE pour le catalogue).
+Trois onglets : `SHIPS`, `LOADOUT`, `CONFIG`.
 
-#### SHIPS
-- recherche par nom/role
-- affichage fiche technique
-- import/export CSV flotte
-- affichage du loadout par defaut (slots vides inclus)
+#### Onglet SHIPS — Catalogue et fiches techniques
+- Champ de recherche par nom ou role (filtrage en temps reel)
+- Boutons : `IMPORT CSV` / `EXPORT CSV`
+- Resultats par vaisseau :
+  - Nom, marque, classe de taille, role, carriere
+  - Stats : Cargo (SCU), Claim time, Expedite time, Expedition Fee, crew
+  - Stats de vol : SCM speed, Nav max speed, HP, Pitch/Yaw/Roll, Boosted Pitch/Yaw/Roll
+  - Default Loadout par categorie avec chaque slot (equipe ou EMPTY)
+  - **Double-clic** → ouvre la fenetre d'edition du vaisseau
 
-#### LOADOUT
-- selection vaisseau
-- profils de loadout (creation, chargement)
-- equipement des slots par categorie/sous-type
-- purge complete des slots (`CLEAR ALL SLOTS`)
-- acces au manager composants (`EDIT COMPONENTS`)
+#### Fenetre d'edition vaisseau
+Trois sous-onglets :
+- `GENERAL` : Manufacturer, Model Name, Size Class, Role(s), Carriere
+- `FLIGHT` : SCM Speed, Boost Fwd/Bwd, Nav Speed, H2 Capacity, QT Fuel, Pitch/Yaw/Roll
+- `LOGISTICS` : HP, Power, CM, Cargo, Mass, Dimensions, Expedition Fee, Claim Time, Expedite Time
 
-#### CONFIG
-- creation categories et types de composants
-- configuration des slots par vaisseau:
-  - categorie
-  - type
-  - quantite max
-  - taille max
-- sauvegarde/suppression des specifications
+#### Ajout/Edition manuelle d'un vaisseau (27 parametres)
+
+| Section | Champs |
+|---|---|
+| Identite | Ship Name (Enter = charger), Manufacturer |
+| Role(s) | 2 combos role, Career, Size, Crew |
+| Propulsion | SCM Speed, Boost Fwd/Bwd, Nav Max Speed, H2 Capacity, QT Fuel |
+| Flight Dynamics | Pitch, Yaw, Roll + Boosted Pitch/Yaw/Roll |
+| Survivabilite | Total HP, Power, CM Decoy/Noise, Cargo (SCU), Mass, Dimensions |
+| Economie | Expedition Fee, Claim Time, Expedite Time |
+
+Boutons :
+- `OCR SCREENSHOT IMPORT` : ouvre un selecteur d'image et extrait automatiquement tous les champs depuis un screenshot MOBIGLAS/stats du jeu
+- `SYNC SHIP TO DATABASE` : sauvegarde le vaisseau
+- `CLEAR` : remet tous les champs a zero
+
+#### Onglet LOADOUT — Equipement des vaisseaux
+**Panneau gauche :**
+- Champ de recherche vaisseau avec autosuggestion (navigation clavier, indicateur X/total)
+- Selecteur de profil de loadout (combo)
+- Champ `NEW PROFILE NAME` + bouton `CREATE PROFILE`
+- Terminal `CURRENT CONFIGURATION` : resume texte du loadout actuel
+
+**Panneau droit :**
+- Zone scrollable `HARDPOINT CONFIGURATION`
+- Pour chaque slot defini : categorie, type, composant equipe (ou EMPTY)
+- Bouton `EDIT COMPONENTS` → ouvre le gestionnaire de composants
+
+#### Gestionnaire de composants (`EDIT COMPONENTS`)
+**Ajout :**
+- Slot Category (combo : SYSTEMS/WEAPON/PROPULSION/MODULE)
+- Module Type (filtre par categorie)
+- Model Name, Manufacturer
+- Size (0-5), Grade (A/B/C/D)
+- Bouton `SAVE TO DATABASE`
+
+**Catalogue :**
+- Liste scrollable par categorie : Nom, Marque, Type, Taille, Grade
+- Boutons `EDIT` (edition inline avec SAVE/CANCEL/DELETE) et `DELETE` (avec confirmation)
+
+#### Onglet CONFIG — Configuration des slots
+**Panneau gauche — Categories et types :**
+- Champ `NEW CATEGORY NAME` + bouton `ADD CATEGORY`
+- Selecteur de categorie + champ `NEW TYPE NAME` + bouton `ADD TYPE`
+- Selecteur types existants + bouton `DELETE TYPE`
+
+**Panneau droit — Slots par vaisseau :**
+- Formulaire : SHIP, CATEGORY, TYPE, MAX QTY, MAX SIZE + bouton `SAVE SLOT`
+- Zone scrollable `REGISTERED SLOT SPECS` : liste groupee par vaisseau
+- Chaque ligne editable inline avec boutons `EDIT` / `DELETE`
 
 ---
 
