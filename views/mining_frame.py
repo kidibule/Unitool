@@ -28,7 +28,7 @@ class MiningFrame(ctk.CTkFrame):
         # En-tête
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
-        DrakeTitle1(header, text="MINING").pack(side="left")
+        DrakeTitle1(header, text="MINING").pack(anchor="center")
 
         # TabView
         self.tabview = DrakeConfig.create_tabview(self)
@@ -44,20 +44,21 @@ class MiningFrame(ctk.CTkFrame):
         tab = self.tab_sigs
 
         # ── Barre de recherche ──────────────────────────────────────────────
-        search_frame = ctk.CTkFrame(tab, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
-        search_frame.pack(fill="x", padx=15, pady=(10, 5))
+        search_outer = ctk.CTkFrame(tab, fg_color=DrakeConfig.BG_PANEL, corner_radius=0)
+        search_outer.pack(fill="x", padx=15, pady=(10, 5))
 
         ctk.CTkLabel(
-            search_frame,
-            text="IDENTIFIER UNE SIGNATURE :",
+            search_outer,
+            text="IDENTIFIER UNE SIGNATURE",
             font=DrakeConfig.FONT_UI,
             text_color=DrakeConfig.TEXT_SECONDARY,
-        ).pack(side="left", padx=(15, 8), pady=10)
+        ).pack(anchor="center", pady=(8, 0))
 
-        self.search_var = ctk.StringVar()
+        search_frame = ctk.CTkFrame(search_outer, fg_color="transparent")
+        search_frame.pack(anchor="center", pady=(4, 8))
+
         self.search_entry = DrakeEntry(
             search_frame,
-            textvariable=self.search_var,
             placeholder_text="ex: 7 200",
             width=160,
         )
@@ -287,7 +288,7 @@ class MiningFrame(ctk.CTkFrame):
     # ── Logique de recherche ─────────────────────────────────────────────────
 
     def _do_search(self):
-        raw = self.search_var.get().strip()
+        raw = self.search_entry.get().strip()
         if not raw:
             self._clear_search()
             return
@@ -344,7 +345,7 @@ class MiningFrame(ctk.CTkFrame):
             pass
 
     def _clear_search(self):
-        self.search_var.set("")
+        self.search_entry.delete(0, "end")
         self.result_label.configure(text="")
         self._clear_highlights()
 

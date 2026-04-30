@@ -347,43 +347,25 @@ class ScannerFrame(ctk.CTkFrame):
         )
         journal_list.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
-        def open_edit_player_note(note_id: int, current_text: str) -> None:
-            edit_win = DrakeConfig.create_modal_window(
-                parent=toplevel,
-                title=f"EDIT NOTE #{note_id}",
-                geometry="520x260",
-                fg_color=DrakeConfig.BG_MAIN,
-                resizable=True,
-            )
+        editing = {"id": None}
 
-            ctk.CTkLabel(
-                edit_win,
-                text=f"NOTE #{note_id}",
-                font=DrakeConfig.FONT_UI,
-                text_color=DrakeConfig.ACCENT_PRIMARY,
-            ).pack(pady=(12, 6))
+        def start_player_note_edit(note_id: int) -> None:
+            editing["id"] = note_id
+            refresh_note_journal()
 
-            edit_box = ctk.CTkTextbox(
-                edit_win,
-                height=130,
-                fg_color=DrakeConfig.BG_TERMINAL,
-                border_color=DrakeConfig.BORDER_COLOR,
-                border_width=1,
-            )
-            edit_box.insert("0.0", current_text)
-            edit_box.pack(fill="both", expand=True, padx=12, pady=8)
+        def cancel_player_note_edit() -> None:
+            editing["id"] = None
+            refresh_note_journal()
 
-            def save_note_edit() -> None:
-                new_text = edit_box.get("0.0", "end").strip()
-                if not new_text:
-                    DrakePopup.error("ERROR", "Note cannot be empty.", parent=edit_win)
-                    return
-                self.controller.scanner.update_player_note(pseudo, note_id, new_text)
-                edit_win.destroy()
-                refresh_note_journal()
-                self.run_scan(None)
-
-            DrakeButton(edit_win, text="SAVE", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
+        def save_player_note_inline(note_id: int, edit_box) -> None:
+            new_text = edit_box.get("0.0", "end").strip()
+            if not new_text:
+                DrakePopup.error("ERROR", "Note cannot be empty.", parent=toplevel)
+                return
+            self.controller.scanner.update_player_note(pseudo, note_id, new_text)
+            editing["id"] = None
+            refresh_note_journal()
+            self.run_scan(None)
 
         def delete_player_note(note_id: int) -> None:
             confirm = DrakePopup.yesno("CONFIRMATION", f"Delete note #{note_id}?", parent=toplevel)
@@ -400,7 +382,14 @@ class ScannerFrame(ctk.CTkFrame):
             notes = self.controller.scanner.get_player_notes(pseudo, limit=100)
             if notes:
                 for note_id, note_text, created_at in notes:
-                    row = ctk.CTkFrame(journal_list, fg_color=DrakeConfig.BG_PANEL)
+                    is_editing = note_id == editing["id"]
+                    row = ctk.CTkFrame(
+                        journal_list,
+                        fg_color=DrakeConfig.BG_PANEL,
+                        corner_radius=0,
+                        border_width=1,
+                        border_color=DrakeConfig.ACCENT_PRIMARY if is_editing else DrakeConfig.BORDER_COLOR,
+                    )
                     row.pack(fill="x", padx=4, pady=4)
 
                     top = ctk.CTkFrame(row, fg_color="transparent")
@@ -413,33 +402,66 @@ class ScannerFrame(ctk.CTkFrame):
                         text_color=DrakeConfig.ACCENT_PRIMARY,
                     ).pack(side="left")
 
-                    DrakeButton(
-                        top,
-                        text="EDIT",
-                        width=90,
-                        height=26,
-                        command=lambda nid=note_id, txt=note_text: open_edit_player_note(nid, txt),
-                    ).pack(side="right", padx=(4, 0))
+                    if is_editing:
+                        edit_box = ctk.CTkTextbox(
+                            row,
+                            height=80,
+                            fg_color=DrakeConfig.BG_TERMINAL,
+                            border_color=DrakeConfig.BORDER_COLOR,
+                            border_width=1,
+                        )
+                        edit_box.insert("0.0", note_text)
+                        edit_box.pack(fill="x", padx=8, pady=(4, 4))
 
-                    DrakeButton(
-                        top,
-                        text="DELETE",
-                        width=90,
-                        height=26,
-                        fg_color="#8b2c2c",
-                        hover_color="#a63a3a",
-                        command=lambda nid=note_id: delete_player_note(nid),
-                    ).pack(side="right", padx=(4, 0))
+                        btn_row = ctk.CTkFrame(row, fg_color="transparent")
+                        btn_row.pack(fill="x", padx=8, pady=(0, 8))
 
-                    ctk.CTkLabel(
-                        row,
-                        text=note_text,
-                        justify="left",
-                        anchor="w",
-                        wraplength=520,
-                        text_color=DrakeConfig.TEXT_MAIN,
-                        font=("Segoe UI", 10),
-                    ).pack(fill="x", padx=8, pady=(0, 8))
+                        DrakeButton(
+                            btn_row,
+                            text="SAVE",
+                            width=80,
+                            height=26,
+                            command=lambda nid=note_id, eb=edit_box: save_player_note_inline(nid, eb),
+                        ).pack(side="left", padx=(0, 6))
+
+                        DrakeButton(
+                            btn_row,
+                            text="CANCEL",
+                            width=80,
+                            height=26,
+                            fg_color="transparent",
+                            border_width=1,
+                            border_color=DrakeConfig.BORDER_COLOR,
+                            command=cancel_player_note_edit,
+                        ).pack(side="left")
+                    else:
+                        DrakeButton(
+                            top,
+                            text="EDIT",
+                            width=90,
+                            height=26,
+                            command=lambda nid=note_id: start_player_note_edit(nid),
+                        ).pack(side="right", padx=(4, 0))
+
+                        DrakeButton(
+                            top,
+                            text="DELETE",
+                            width=90,
+                            height=26,
+                            fg_color="#8b2c2c",
+                            hover_color="#a63a3a",
+                            command=lambda nid=note_id: delete_player_note(nid),
+                        ).pack(side="right", padx=(4, 0))
+
+                        ctk.CTkLabel(
+                            row,
+                            text=note_text,
+                            justify="left",
+                            anchor="w",
+                            wraplength=520,
+                            text_color=DrakeConfig.TEXT_MAIN,
+                            font=("Segoe UI", 10),
+                        ).pack(fill="x", padx=8, pady=(0, 8))
             else:
                 ctk.CTkLabel(
                     journal_list,
@@ -515,43 +537,25 @@ class ScannerFrame(ctk.CTkFrame):
         )
         journal_list.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
-        def open_edit_org_note(note_id: int, current_text: str) -> None:
-            edit_win = DrakeConfig.create_modal_window(
-                parent=toplevel,
-                title=f"EDIT ORG NOTE #{note_id}",
-                geometry="520x260",
-                fg_color=DrakeConfig.BG_MAIN,
-                resizable=True,
-            )
+        editing_org = {"id": None}
 
-            ctk.CTkLabel(
-                edit_win,
-                text=f"ORG NOTE #{note_id}",
-                font=DrakeConfig.FONT_UI,
-                text_color=DrakeConfig.ACCENT_PRIMARY,
-            ).pack(pady=(12, 6))
+        def start_org_note_edit(note_id: int) -> None:
+            editing_org["id"] = note_id
+            refresh_org_journal()
 
-            edit_box = ctk.CTkTextbox(
-                edit_win,
-                height=130,
-                fg_color=DrakeConfig.BG_TERMINAL,
-                border_color=DrakeConfig.BORDER_COLOR,
-                border_width=1,
-            )
-            edit_box.insert("0.0", current_text)
-            edit_box.pack(fill="both", expand=True, padx=12, pady=8)
+        def cancel_org_note_edit() -> None:
+            editing_org["id"] = None
+            refresh_org_journal()
 
-            def save_note_edit() -> None:
-                new_text = edit_box.get("0.0", "end").strip()
-                if not new_text:
-                    DrakePopup.error("ERROR", "Note cannot be empty.", parent=edit_win)
-                    return
-                self.controller.org.update_org_note(sid, note_id, new_text)
-                edit_win.destroy()
-                refresh_org_journal()
-                self.run_org_scan(None)
-
-            DrakeButton(edit_win, text="SAVE", command=save_note_edit, height=38).pack(fill="x", padx=12, pady=(0, 12))
+        def save_org_note_inline(note_id: int, edit_box) -> None:
+            new_text = edit_box.get("0.0", "end").strip()
+            if not new_text:
+                DrakePopup.error("ERROR", "Note cannot be empty.", parent=toplevel)
+                return
+            self.controller.org.update_org_note(sid, note_id, new_text)
+            editing_org["id"] = None
+            refresh_org_journal()
+            self.run_org_scan(None)
 
         def delete_org_note(note_id: int) -> None:
             confirm = DrakePopup.yesno("CONFIRMATION", f"Delete org note #{note_id}?", parent=toplevel)
@@ -568,7 +572,14 @@ class ScannerFrame(ctk.CTkFrame):
             notes = self.controller.org.get_org_notes(sid, limit=100)
             if notes:
                 for note_id, note_text, created_at in notes:
-                    row = ctk.CTkFrame(journal_list, fg_color=DrakeConfig.BG_PANEL)
+                    is_editing = note_id == editing_org["id"]
+                    row = ctk.CTkFrame(
+                        journal_list,
+                        fg_color=DrakeConfig.BG_PANEL,
+                        corner_radius=0,
+                        border_width=1,
+                        border_color=DrakeConfig.ACCENT_PRIMARY if is_editing else DrakeConfig.BORDER_COLOR,
+                    )
                     row.pack(fill="x", padx=4, pady=4)
 
                     top = ctk.CTkFrame(row, fg_color="transparent")
@@ -581,33 +592,66 @@ class ScannerFrame(ctk.CTkFrame):
                         text_color=DrakeConfig.ACCENT_PRIMARY,
                     ).pack(side="left")
 
-                    DrakeButton(
-                        top,
-                        text="EDIT",
-                        width=90,
-                        height=26,
-                        command=lambda nid=note_id, txt=note_text: open_edit_org_note(nid, txt),
-                    ).pack(side="right", padx=(4, 0))
+                    if is_editing:
+                        edit_box = ctk.CTkTextbox(
+                            row,
+                            height=80,
+                            fg_color=DrakeConfig.BG_TERMINAL,
+                            border_color=DrakeConfig.BORDER_COLOR,
+                            border_width=1,
+                        )
+                        edit_box.insert("0.0", note_text)
+                        edit_box.pack(fill="x", padx=8, pady=(4, 4))
 
-                    DrakeButton(
-                        top,
-                        text="DELETE",
-                        width=90,
-                        height=26,
-                        fg_color="#8b2c2c",
-                        hover_color="#a63a3a",
-                        command=lambda nid=note_id: delete_org_note(nid),
-                    ).pack(side="right", padx=(4, 0))
+                        btn_row = ctk.CTkFrame(row, fg_color="transparent")
+                        btn_row.pack(fill="x", padx=8, pady=(0, 8))
 
-                    ctk.CTkLabel(
-                        row,
-                        text=note_text,
-                        justify="left",
-                        anchor="w",
-                        wraplength=520,
-                        text_color=DrakeConfig.TEXT_MAIN,
-                        font=("Segoe UI", 10),
-                    ).pack(fill="x", padx=8, pady=(0, 8))
+                        DrakeButton(
+                            btn_row,
+                            text="SAVE",
+                            width=80,
+                            height=26,
+                            command=lambda nid=note_id, eb=edit_box: save_org_note_inline(nid, eb),
+                        ).pack(side="left", padx=(0, 6))
+
+                        DrakeButton(
+                            btn_row,
+                            text="CANCEL",
+                            width=80,
+                            height=26,
+                            fg_color="transparent",
+                            border_width=1,
+                            border_color=DrakeConfig.BORDER_COLOR,
+                            command=cancel_org_note_edit,
+                        ).pack(side="left")
+                    else:
+                        DrakeButton(
+                            top,
+                            text="EDIT",
+                            width=90,
+                            height=26,
+                            command=lambda nid=note_id: start_org_note_edit(nid),
+                        ).pack(side="right", padx=(4, 0))
+
+                        DrakeButton(
+                            top,
+                            text="DELETE",
+                            width=90,
+                            height=26,
+                            fg_color="#8b2c2c",
+                            hover_color="#a63a3a",
+                            command=lambda nid=note_id: delete_org_note(nid),
+                        ).pack(side="right", padx=(4, 0))
+
+                        ctk.CTkLabel(
+                            row,
+                            text=note_text,
+                            justify="left",
+                            anchor="w",
+                            wraplength=520,
+                            text_color=DrakeConfig.TEXT_MAIN,
+                            font=("Segoe UI", 10),
+                        ).pack(fill="x", padx=8, pady=(0, 8))
             else:
                 ctk.CTkLabel(
                     journal_list,
@@ -896,10 +940,12 @@ class ScannerFrame(ctk.CTkFrame):
                     client_contracts = self.controller.contract.get_contracts_for_client(t.pseudo)
 
                     if target_contracts or client_contracts:
-                        t_open = sum(1 for c in target_contracts if c[4] != "CLOSED")
-                        c_open = sum(1 for c in client_contracts if c[4] != "CLOSED")
-                        
-                        self.results.insert("end", f"   CONTRACT HISTORY: TARGET(O:{t_open}) | CLIENT(O:{c_open})\n")
+                        t_open   = sum(1 for c in target_contracts if c[4] != "CLOSED")
+                        t_closed = sum(1 for c in target_contracts if c[4] == "CLOSED")
+                        c_open   = sum(1 for c in client_contracts if c[4] != "CLOSED")
+                        c_closed = sum(1 for c in client_contracts if c[4] == "CLOSED")
+
+                        self.results.insert("end", f"   CONTRACT HISTORY: TARGET(O:{t_open} C:{t_closed}) | CLIENT(O:{c_open} C:{c_closed})\n")
 
                         # Section : Joueur est la Cible
                         if target_contracts:

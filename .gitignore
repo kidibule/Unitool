@@ -10,5 +10,6 @@ venv/
 .venv/
 .env
 
+documentation/
 
 unitool.log
