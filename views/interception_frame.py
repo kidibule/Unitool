@@ -12,10 +12,10 @@ from drake_ui.engine import DrakeConfig, DrakeComboBox, DrakeButton, DrakeClearB
 class InterceptionFrame(ctk.CTkFrame):
     """UI view for interception calculations and location management."""
 
-    # Valeurs fixes pour radius, step et max_dist (Star Citizen)
-    FIXED_RADIUS = 20000
-    FIXED_STEP = 500
-    FIXED_MAX_DIST = 250000
+    # Paramètres QED Mantis (mètres, unité native Star Citizen)
+    FIXED_RADIUS = 20_000          # 20 km  — portée perpendiculaire du QED (snare range)
+    FIXED_STEP = 500               # conservé pour compatibilité
+    FIXED_MAX_DIST = 10_000_000_000_000  # ~10 000 Mm — valeur sentinelle, jamais atteinte
 
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
@@ -1631,24 +1631,34 @@ class InterceptionFrame(ctk.CTkFrame):
         values = point or [0.0, 0.0, 0.0]
         return f"X={values[0]:,.2f} | Y={values[1]:,.2f} | Z={values[2]:,.2f}"
 
+    @staticmethod
+    def _fmt_dist(meters: float) -> str:
+        """Retourne la distance dans l'unité Star Citizen la plus lisible.
+
+        < 1 000 m      →  m   (ex : 500.0 m)
+        < 1 000 000 m  →  km  (ex : 50.00 km)
+        ≥ 1 000 000 m  →  Mm  (ex : 5.250 Mm)
+        """
+        m = abs(meters)
+        if m < 1_000:
+            return f"{meters:,.1f} m"
+        elif m < 1_000_000:
+            return f"{meters / 1_000:,.2f} km"
+        else:
+            return f"{meters / 1_000_000:,.3f} Mm"
+
     def _render_snare_success(self, result, sources, dest):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        distance_m = float(result.get("distance_units", 0.0))
-        distance_mm = distance_m / 1_000_000.0
-        radius_m = float(result.get("radius_units", 0.0))
-        step_m = float(result.get("step_units", 0.0))
-        max_dist_m = float(result.get("max_dist_units", distance_m))
+        distance_m  = float(result.get("distance_units", 0.0))
+        radius_m    = float(result.get("radius_units", 0.0))
+        max_dist_m  = float(result.get("max_dist_units", distance_m))
+        zone_start  = float(result.get("zone_start_units", max(0.0, distance_m - radius_m)))
+        zone_end    = float(result.get("zone_end_units",   distance_m + radius_m))
 
-        # Compute a practical positioning window around the optimal distance.
-        window_m = max(step_m * 10.0, radius_m * 0.25)
-        zone_min_m = max(0.0, distance_m - window_m)
-        zone_max_m = min(max_dist_m, distance_m + window_m)
-
-        zone_min_mm = zone_min_m / 1_000_000.0
-        zone_max_mm = zone_max_m / 1_000_000.0
         point = result.get("point")
         avg_dir = result.get("avg_dir")
         limiting = result.get("limiting_source") or "NONE"
+        fd = self._fmt_dist
 
         self.output.insert("end", "SNARE INTERCEPTION REPORT\n")
         self.output.insert("end", f"Generated at   : {timestamp}\n")
@@ -1657,31 +1667,37 @@ class InterceptionFrame(ctk.CTkFrame):
         self.output.insert("end", f"Destination    : {dest}\n")
 
         self.output.insert("end", "\n[PARAMETERS]\n")
-        self.output.insert("end", f"Radius         : {radius_m:,.0f} m\n")
-        self.output.insert("end", f"Step           : {step_m:,.0f} m\n")
-        self.output.insert("end", f"Max distance   : {max_dist_m:,.0f} m\n")
+        self.output.insert("end", f"Snare range    : {fd(radius_m)}\n")
         self.output.insert("end", f"Limiting source: {limiting}\n")
+
+        self.output.insert("end", "\n[SOURCE ANALYSIS]\n")
+        for detail in result.get("source_details", []):
+            src_name  = detail.get("name", "?")
+            route_len = detail.get("route_length", 0.0)
+            origin_r  = detail.get("origin_range", detail.get("origin_diameter", 0.0))
+            lim_c     = detail.get("limiting_c", "self")
+            sd        = detail.get("snare_dist", 0.0)
+            c_tag     = f"  [C={lim_c}]" if lim_c and lim_c != "self" else ""
+            self.output.insert("end", f"  {src_name:<12} route={fd(route_len)}  range={fd(origin_r)}  → {fd(sd)}{c_tag}\n")
 
         self.output.insert("end", "\n[SOLUTION]\n")
         self.output.insert("end", f"Snare point    : {self._format_vector(point)}\n")
-        self.output.insert("end", f"Optimal range  : {distance_m:,.0f} m ({distance_mm:.3f} Mm)\n")
+        self.output.insert("end", f"Snare distance : {fd(distance_m)}\n")
         if avg_dir is not None:
             self.output.insert("end", f"Average dir    : {self._format_vector(avg_dir)}\n")
 
         self.output.insert("end", "\n[INTERCEPTION WINDOW]\n")
         self.output.insert("end", "+" + "-" * 66 + "+\n")
-        self.output.insert(
-            "end",
-            f"| WORKING ZONE : {zone_min_m:>12,.0f} m -> {zone_max_m:>12,.0f} m ({zone_min_mm:.3f} -> {zone_max_mm:.3f} Mm) |\n",
-        )
-        self.output.insert(
-            "end",
-            f"| OPTIMAL POS. : {distance_m:>12,.0f} m ({distance_mm:.3f} Mm)" + " " * 27 + "|\n",
-        )
-        self.output.insert(
-            "end",
-            f"| GUIDANCE     : Stay between {zone_min_mm:.3f} Mm and {zone_max_mm:.3f} Mm" + " " * 12 + "|\n",
-        )
+        op = f"| SNARE DISTANCE: {fd(distance_m)}"
+        self.output.insert("end", op.ljust(68) + " |\n")
+        zs = f"| ZONE START    : {fd(zone_start)}  (approche cible)"
+        self.output.insert("end", zs.ljust(68) + " |\n")
+        ze = f"| ZONE END      : {fd(zone_end)}  (sortie cible)"
+        self.output.insert("end", ze.ljust(68) + " |\n")
+        rng = f"| QED RANGE     : {fd(radius_m)} (portée perpendiculaire)"
+        self.output.insert("end", rng.ljust(68) + " |\n")
+        gd = f"| GUIDANCE      : Positionner le Mantis à {fd(distance_m)} de {dest}"
+        self.output.insert("end", gd.ljust(68) + " |\n")
         self.output.insert("end", "+" + "-" * 66 + "+\n")
 
         self.output.insert("end", "\n[STATUS]\n")
@@ -1690,15 +1706,16 @@ class InterceptionFrame(ctk.CTkFrame):
 
     def _render_snare_failure(self, message, sources, dest, radius, step, max_dist):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fd = self._fmt_dist
         self.output.insert("end", "SNARE INTERCEPTION REPORT\n")
         self.output.insert("end", f"Generated at   : {timestamp}\n")
         self.output.insert("end", "\n[INPUT]\n")
         self.output.insert("end", f"Start points   : {', '.join(sources)}\n")
         self.output.insert("end", f"Destination    : {dest}\n")
         self.output.insert("end", "\n[PARAMETERS]\n")
-        self.output.insert("end", f"Radius         : {radius:,.0f} m\n")
-        self.output.insert("end", f"Step           : {step:,.0f} m\n")
-        self.output.insert("end", f"Max distance   : {max_dist:,.0f} m\n")
+        self.output.insert("end", f"Radius         : {fd(radius)}\n")
+        self.output.insert("end", f"Step           : {fd(step)}\n")
+        self.output.insert("end", f"Max distance   : {fd(max_dist)}\n")
         self.output.insert("end", "\n[STATUS]\n")
         self.output.insert("end", f"ERROR: {message}\n")
         self.output.insert("end", "=" * 72 + "\n")

@@ -486,10 +486,189 @@ def _m008_rename_targets_to_players(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_player_notes_pseudo ON player_notes(player_pseudo)")
 
 
+def _m009_seed_sc_locations(cursor):
+    """Upsert Star Citizen planets and moons with correct coordinates and hierarchy.
+
+    Les planètes sont insérées en premier pour que les lunes puissent référencer
+    leur parent. Les coordonnées sont en km (format natif Star Citizen).
+    """
+    locations = [
+        # name,          x,            y,           z,      type,      parent
+        # --- Planètes ---
+        ("HURSTON",    12858745,          0,          0,  "PLANET",       None),
+        ("ARCCORP",    18545567,  -22151149,          0,  "PLANET",       None),
+        ("MICROTECH",  22935149,   29351490,          0,  "PLANET",       None),
+        ("CRUSADER",  -18962172,   -2665623,          0,  "PLANET",       None),
+        # --- Lunes de Hurston ---
+        ("ARIAL",      12858745,          0,       3815,    "MOON",  "HURSTON"),
+        ("ABERDEEN",   12858745,          0,      -3715,    "MOON",  "HURSTON"),
+        ("MAGDA",      12858745,       3315,          0,    "MOON",  "HURSTON"),
+        ("ITA",        12858745,      -3615,          0,    "MOON",  "HURSTON"),
+        # --- Lunes d'ArcCorp ---
+        ("LYRIA",      18545567,  -22151149,       3515,    "MOON",  "ARCCORP"),
+        ("WALA",       18545567,  -22151149,      -3815,    "MOON",  "ARCCORP"),
+        # --- Lunes de microTech ---
+        ("CALLIOPE",   22935149,   29351490,       4515,    "MOON",  "MICROTECH"),
+        ("CLIO",       22935149,   29351490,      -4215,    "MOON",  "MICROTECH"),
+        ("EUTERPE",    22935149,      33866,          0,    "MOON",  "MICROTECH"),
+        # --- Lunes de Crusader ---
+        ("CELLIN",    -18962172,   -2665623,      10115,    "MOON",  "CRUSADER"),
+        ("DAYMAR",    -18962172,   -2665623,     -10115,    "MOON",  "CRUSADER"),
+        ("YELA",      -18962172,     -12780,          0,    "MOON",  "CRUSADER"),
+    ]
+    for name, x, y, z, loc_type, parent in locations:
+        cursor.execute(
+            """
+            INSERT INTO locations (name, x, y, z, type, parent_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                x           = excluded.x,
+                y           = excluded.y,
+                z           = excluded.z,
+                type        = excluded.type,
+                parent_name = excluded.parent_name
+            """,
+            (name, x, y, z, loc_type, parent),
+        )
+
+
+def _m010_locations_km_to_meters(cursor):
+    """Convertit les coordonnées des locations de km en mètres.
+
+    La migration _m009 a inséré les coordonnées en km (données Excel).
+    Star Citizen utilise les mètres en interne, et COORD_UNIT = 'm'.
+    On multiplie donc toutes les coordonnées par 1000.
+    """
+    cursor.execute("UPDATE locations SET x = x * 1000, y = y * 1000, z = z * 1000")
+
+
+def _m011_locations_add_radius(cursor):
+    """Ajoute la colonne radius (mètres) et seed les rayons des corps célestes SC.
+
+    Le rayon est utilisé par l'algorithme triangle SnarePlan :
+        snare_dist = (snare_range × route_length) / (2 × source_radius)
+    """
+    _add_column_if_missing(cursor, "locations", "radius", "REAL DEFAULT 0")
+
+    radii = {
+        # Planètes (rayon en mètres)
+        "HURSTON":   1_000_000,
+        "ARCCORP":   1_000_000,
+        "MICROTECH": 1_000_000,
+        "CRUSADER":  7_491_000,
+        # Lunes de Hurston
+        "ARIAL":       315_000,
+        "ABERDEEN":    285_000,
+        "MAGDA":       290_000,
+        "ITA":         325_000,
+        # Lunes d'ArcCorp
+        "LYRIA":       223_000,
+        "WALA":        283_000,
+        # Lunes de microTech
+        "CALLIOPE":    240_000,
+        "CLIO":        250_000,
+        "EUTERPE":     215_000,
+        # Lunes de Crusader
+        "CELLIN":      260_000,
+        "DAYMAR":      295_000,
+        "YELA":        312_000,
+    }
+    for name, radius in radii.items():
+        cursor.execute(
+            "UPDATE locations SET radius = ? WHERE name = ?",
+            (radius, name),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Liste ordonnée des migrations
 # Règle : ne jamais modifier une entrée existante, seulement en ajouter.
 # ---------------------------------------------------------------------------
+
+def _m012_locations_add_physics_grid(cursor):
+    """Ajoute la colonne physics_grid (mètres) : rayon réel de la zone de départ d'un vaisseau.
+
+    C'est cette valeur que SnarePlan utilise comme altitude dans la formule triangle
+    quand aucune lune externe n'est disponible comme point C :
+        snare_dist = snare_range × route_length / physics_grid
+    """
+    _add_column_if_missing(cursor, "locations", "physics_grid", "REAL DEFAULT 0")
+
+    physics_grids = {
+        # Planètes (mètres)
+        "HURSTON":    2_450_000,
+        "CRUSADER":  13_500_000,
+        "ARCCORP":    2_200_000,
+        "MICROTECH":  2_650_000,
+        # Lunes de Hurston
+        "ARIAL":       650_000,
+        "ABERDEEN":    580_000,
+        "MAGDA":       600_000,
+        "ITA":         680_000,
+        # Lunes de Crusader
+        "CELLIN":      550_000,
+        "DAYMAR":      620_000,
+        "YELA":        640_000,
+        # Lunes d'ArcCorp
+        "LYRIA":       480_000,
+        "WALA":        590_000,
+        # Lunes de microTech
+        "CALLIOPE":    520_000,
+        "CLIO":        540_000,
+        "EUTERPE":     450_000,
+    }
+    for name, pg in physics_grids.items():
+        cursor.execute(
+            "UPDATE locations SET physics_grid = ? WHERE name = ?",
+            (pg, name),
+        )
+
+
+def _m013_fix_moon_coordinates(cursor):
+    """Corrige les coordonnées erronées de certaines lunes (en mètres, post-m010).
+
+    Problèmes identifiés :
+    - YELA : Y = -12780 km (absolu) au lieu de -2665623 km (parent CRUSADER).
+      Résultat : YELA apparaissait à ~2,652,843 km de CRUSADER → triangle aberrant
+      → snare_dist = 239.91 km (faux).
+    - DAYMAR : Z-offset = 10,115 km seulement, trop petit versus la position réelle.
+      SnarePlan montre BC(Crusader-Daymar) ≈ 63,763 km avec altitude ≈ 52,559 km.
+      On repositionne DAYMAR à Z = -52,559 km de CRUSADER pour correspondre.
+
+    Toutes les valeurs ci-dessous sont en mètres (COORD_UNIT = 'm').
+    """
+    corrections = {
+        # (x_m, y_m, z_m)
+        # YELA : recalée sur le Y de CRUSADER + offset Z original -12780 km
+        "YELA":   (-18_962_172_000, -2_665_623_000, -12_780_000),
+        # DAYMAR : repositionné à altitude ≈ 52,559 km perpendiculaire à la route
+        #          CRUSADER→HURSTON pour donner snare_dist ≈ 12,134 km (SnarePlan)
+        "DAYMAR": (-18_962_172_000, -2_665_623_000, -52_559_000),
+    }
+    for name, (x, y, z) in corrections.items():
+        cursor.execute(
+            "UPDATE locations SET x = ?, y = ?, z = ? WHERE name = ?",
+            (x, y, z, name),
+        )
+
+
+def _m014_fix_cellin_coordinates(cursor):
+    """Corrige les coordonnées de CELLIN d'après les données SnarePlan.
+
+    SnarePlan CRUSADER+CELLIN→HURSTON (raw data) :
+        altitude = 42,293 km  (distance perpendiculaire à la route CRUSADER→HURSTON)
+        origin range (BC) = 51,294 km
+
+    Valeur précédente : Z = 10,115 km (placeholder symétrique de DAYMAR) → altitude
+    trop faible → physics_grid de CRUSADER (13,500 km) prenait le dessus à tort.
+
+    Coordonnée absolue en mètres (COORD_UNIT = 'm').
+    """
+    cursor.execute(
+        "UPDATE locations SET z = ? WHERE name = ?",
+        (42_293_000, "CELLIN"),
+    )
+
 
 MIGRATIONS = [
     (1, _m001_schema_initial),
@@ -500,6 +679,12 @@ MIGRATIONS = [
     (6, _m006_loadout_rebuild_pk),
     (7, _m007_localise_fr_to_en),
     (8, _m008_rename_targets_to_players),
+    (9, _m009_seed_sc_locations),
+    (10, _m010_locations_km_to_meters),
+    (11, _m011_locations_add_radius),
+    (12, _m012_locations_add_physics_grid),
+    (13, _m013_fix_moon_coordinates),
+    (14, _m014_fix_cellin_coordinates),
 ]
 
 

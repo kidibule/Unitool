@@ -403,8 +403,41 @@ class InterceptionController:
             "invalid_sources": [],
         }
 
+    def get_radius_from_db(self, name):
+        """Returns the radius (m) of a location, or 0 if unknown."""
+        res = self.master.query("SELECT radius FROM locations WHERE name = ?", (name,))
+        if res and res[0][0] is not None:
+            return float(res[0][0])
+        return 0.0
+
+    def get_physics_grid_from_db(self, name):
+        """Returns the physics grid radius (m) of a location.
+
+        C'est le rayon réel de la zone de départ des vaisseaux utilisé par SnarePlan
+        comme altitude dans la formule triangle quand aucun point C externe n'est disponible.
+        Tombe en fallback sur le rayon physique, puis sur 0.
+        """
+        res = self.master.query(
+            "SELECT physics_grid, radius FROM locations WHERE name = ?", (name,)
+        )
+        if res:
+            pg = res[0][0]
+            if pg is not None and float(pg) > 0:
+                return float(pg)
+            r = res[0][1]
+            if r is not None and float(r) > 0:
+                return float(r)
+        return 0.0
+
     def calculate_snare_solution(self, source_names, dest_name, radius=20000, max_dist=250000, step=500):
-        """Calculates a full snare solution (distance + point + metadata)."""
+        """Calculates a snare solution using the SnarePlan triangle formula.
+
+        Formula (per source):
+            snare_dist = (snare_range × route_length) / (2 × source_radius)
+        capped at max_dist (QED max range).
+
+        For multiple sources the most constraining (smallest) result is used.
+        """
         result = {
             "ok": False,
             "distance_units": 0.0,
@@ -416,19 +449,19 @@ class InterceptionController:
             "max_dist_units": float(max_dist),
             "step_units": float(step),
             "limiting_source": None,
+            "source_details": [],   # [{name, route_length, origin_diameter, snare_dist}]
             "message": "",
         }
 
         try:
-            radius = float(radius)
+            snare_range = float(radius)
             max_dist = float(max_dist)
-            step = float(step)
         except (TypeError, ValueError):
-            result["message"] = "radius, step and max_dist must be numeric."
+            result["message"] = "radius and max_dist must be numeric."
             return result
 
-        if radius <= 0 or max_dist <= 0 or step <= 0:
-            result["message"] = "radius, step and max_dist must be positive."
+        if snare_range <= 0 or max_dist <= 0:
+            result["message"] = "radius and max_dist must be positive."
             return result
 
         normalized_sources = [str(n).strip().upper() for n in (source_names or []) if str(n).strip()]
@@ -459,71 +492,109 @@ class InterceptionController:
             result["message"] = f"Source(s) not found: {', '.join(missing)}."
             return result
 
-        sources_coords = [coords_cache[name] for name in normalized_sources]
-
+        # ── Calcul triangle SnarePlan par source ──────────────────────
+        # Formule : snare_dist = snare_range × altitude_base_from_A / altitude
+        # où A=destination, B=source, C=autre source explicitement sélectionnée
         directions = []
-        for source in sources_coords:
-            dir_vec = end_coords - source
-            norm = np.linalg.norm(dir_vec)
-            if norm > 0:
-                directions.append(dir_vec / norm)
+        source_details = []
+        best_dist = max_dist          # on cherche le minimum contraint
+        limiting_source = None
 
-        if not directions:
-            result["message"] = "Cannot compute average direction: all sources overlap destination."
-            return result
+        for source_name in normalized_sources:
+            src_coords = coords_cache[source_name]
+            route_vec = end_coords - src_coords
+            route_length = float(np.linalg.norm(route_vec))
 
+            if route_length == 0.0:
+                result["message"] = f"Source {source_name} is at the same position as the destination."
+                return result
+
+            route_hat = route_vec / route_length
+            directions.append(route_hat)
+
+            src_radius = self.get_radius_from_db(source_name)
+            origin_diameter = 2.0 * src_radius
+            physics_grid = self.get_physics_grid_from_db(source_name)
+
+            # Candidat C virtuel : bord de la physics grid perpendiculaire à la route
+            if physics_grid > 0:
+                snare_dist = (snare_range * route_length) / physics_grid
+                best_c_name = "physics_grid"
+                best_origin_range = physics_grid
+            elif origin_diameter > 0:
+                snare_dist = (snare_range * route_length) / origin_diameter
+                best_c_name = "diameter"
+                best_origin_range = origin_diameter
+            else:
+                snare_dist = route_length / 2.0
+                best_c_name = "mid_route"
+                best_origin_range = 0.0
+            snare_dist = min(snare_dist, route_length)
+            best_snare = snare_dist
+
+            # Candidats C : uniquement les autres sources explicitement sélectionnées
+            for other in normalized_sources:
+                if other != source_name:
+                    c_coords = coords_cache.get(other)
+                    if c_coords is None:
+                        continue
+                    bc_vec = c_coords - src_coords
+                    proj = float(np.dot(bc_vec, route_hat))
+                    perp_vec = bc_vec - proj * route_hat
+                    altitude = float(np.linalg.norm(perp_vec))
+                    if altitude < 1.0:
+                        continue
+                    altitude_base_from_a = route_length - proj
+                    if altitude_base_from_a <= 0:
+                        continue
+                    candidate = (snare_range * altitude_base_from_a) / altitude
+                    candidate = min(candidate, route_length)
+                    if candidate < best_snare:
+                        best_snare = candidate
+                        best_c_name = other
+                        best_origin_range = float(np.linalg.norm(bc_vec))
+
+            source_details.append({
+                "name": source_name,
+                "route_length": route_length,
+                "origin_diameter": origin_diameter,
+                "origin_range": best_origin_range,
+                "limiting_c": best_c_name,
+                "snare_dist": best_snare,
+            })
+            snare_dist = best_snare
+
+            if snare_dist < best_dist:
+                best_dist = snare_dist
+                limiting_source = source_name
+
+        # ── Direction moyenne (pour affichage du point) ────────────────
         avg_dir = np.mean(directions, axis=0)
-        avg_norm = np.linalg.norm(avg_dir)
+        avg_norm = float(np.linalg.norm(avg_dir))
         if avg_norm == 0:
             result["message"] = "Average direction norm is zero."
             return result
         avg_dir = avg_dir / avg_norm
 
-        result["avg_dir"] = [float(v) for v in avg_dir]
+        best_point = end_coords - (avg_dir * best_dist)
 
-        max_iter = int(max_dist // step)
-        best_dist = None
-        best_point = None
-
-        for idx in range(max_iter + 1):
-            dist = idx * step
-            current_p = end_coords - (avg_dir * dist)
-            valid = True
-            limiting_source = None
-
-            for i, source in enumerate(sources_coords):
-                source_name = normalized_sources[i]
-                line_vec = end_coords - source
-                denom = float(np.dot(line_vec, line_vec))
-
-                if denom == 0:
-                    point_dist = float(np.linalg.norm(current_p - source))
-                else:
-                    t = float(np.dot(current_p - source, line_vec) / denom)
-                    t = max(0.0, min(1.0, t))
-                    closest = source + t * line_vec
-                    point_dist = float(np.linalg.norm(current_p - closest))
-
-                if point_dist > radius:
-                    valid = False
-                    limiting_source = source_name
-                    break
-
-            if valid:
-                best_dist = dist
-                best_point = current_p
-            else:
-                result["limiting_source"] = limiting_source
-                break
-
-        if best_dist is None:
-            result["message"] = "No valid snare point found (invalid at distance 0)."
-            return result
+        # ── Zone d'interception : fenêtre ± snare_range autour du point ──
+        limiting_detail = next(
+            (d for d in source_details if d["name"] == limiting_source), None
+        )
+        limiting_route = limiting_detail["route_length"] if limiting_detail else float(best_dist)
+        zone_start = max(0.0, best_dist - snare_range)
+        zone_end   = min(limiting_route, best_dist + snare_range)
 
         result["ok"] = True
         result["distance_units"] = float(best_dist)
         result["distance_km"] = self.units_to_km(best_dist)
+        result["zone_start_units"] = float(zone_start)
+        result["zone_end_units"]   = float(zone_end)
         result["point"] = [float(v) for v in best_point]
+        result["avg_dir"] = [float(v) for v in avg_dir]
+        result["limiting_source"] = limiting_source
+        result["source_details"] = source_details
         return result
 
     def calculate_snare_distance(self, source_names, dest_name, radius=20000, max_dist=250000, step=500):
