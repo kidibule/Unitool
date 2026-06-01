@@ -1118,6 +1118,30 @@ class InterceptionFrame(ctk.CTkFrame):
                 self._render_pos_display_row(card, pos_name, loc)
 
     def _render_pos_display_row(self, parent, pos_name, loc):
+        right = ctk.CTkFrame(parent, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=7)
+
+        DrakeButton(
+            right,
+            text="EDIT",
+            width=50,
+            height=26,
+            command=lambda n=pos_name: self.start_pos_edit(n),
+        ).pack(side="left", padx=(0, 6))
+
+        DrakeButton(
+            right,
+            text="DELETE",
+            width=64,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.ACCENT_ERROR,
+            text_color=DrakeConfig.ACCENT_ERROR,
+            hover_color="#330000",
+            command=lambda n=pos_name: self.delete_pos_from_list(n),
+        ).pack(side="left")
+
         left = ctk.CTkFrame(parent, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True, padx=10, pady=7)
 
@@ -1147,30 +1171,6 @@ class InterceptionFrame(ctk.CTkFrame):
             text_color=DrakeConfig.TEXT_SECONDARY,
             anchor="w",
         ).pack(anchor="w")
-
-        right = ctk.CTkFrame(parent, fg_color="transparent")
-        right.pack(side="right", padx=10, pady=7)
-
-        DrakeButton(
-            right,
-            text="EDIT",
-            width=50,
-            height=26,
-            command=lambda n=pos_name: self.start_pos_edit(n),
-        ).pack(side="left", padx=(0, 6))
-
-        DrakeButton(
-            right,
-            text="DELETE",
-            width=64,
-            height=26,
-            fg_color="transparent",
-            border_width=1,
-            border_color=DrakeConfig.ACCENT_ERROR,
-            text_color=DrakeConfig.ACCENT_ERROR,
-            hover_color="#330000",
-            command=lambda n=pos_name: self.delete_pos_from_list(n),
-        ).pack(side="left")
 
     def _render_pos_edit_row(self, parent, loc):
         editor = ctk.CTkFrame(parent, fg_color="transparent")
