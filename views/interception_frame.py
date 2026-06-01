@@ -1690,13 +1690,13 @@ class InterceptionFrame(ctk.CTkFrame):
         self.output.insert("end", "+" + "-" * 66 + "+\n")
         op = f"| SNARE DISTANCE: {fd(distance_m)}"
         self.output.insert("end", op.ljust(68) + " |\n")
-        zs = f"| ZONE START    : {fd(zone_start)}  (approche cible)"
+        zs = f"| ZONE START    : {fd(zone_start)}  (target approach)"
         self.output.insert("end", zs.ljust(68) + " |\n")
-        ze = f"| ZONE END      : {fd(zone_end)}  (sortie cible)"
+        ze = f"| ZONE END      : {fd(zone_end)}  (target exit)"
         self.output.insert("end", ze.ljust(68) + " |\n")
-        rng = f"| QED RANGE     : {fd(radius_m)} (portée perpendiculaire)"
+        rng = f"| QED RANGE     : {fd(radius_m)} (perpendicular reach)"
         self.output.insert("end", rng.ljust(68) + " |\n")
-        gd = f"| GUIDANCE      : Positionner le Mantis à {fd(distance_m)} de {dest}"
+        gd = f"| GUIDANCE      : Position Mantis at {fd(distance_m)} from {dest}"
         self.output.insert("end", gd.ljust(68) + " |\n")
         self.output.insert("end", "+" + "-" * 66 + "+\n")
 
