@@ -258,9 +258,14 @@ class TestOrgRepository:
 # ===========================================================================
 
 class TestLocationRepository:
-    def test_get_all_names_vide_au_depart(self):
+    def test_get_all_names_pre_rempli_au_depart(self):
         repo = LocationRepository(make_db())
-        assert repo.get_all_names() == []
+        names = repo.get_all_names()
+        # Les migrations pré-remplissent 16 lieux (4 planètes + 12 lunes)
+        assert len(names) == 16
+        assert "HURSTON" in names
+        assert "ABERDEEN" in names
+        assert "CLIO" in names
 
     def test_upsert_insere_un_lieu(self):
         db = make_db()
