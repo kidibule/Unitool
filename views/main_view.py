@@ -75,6 +75,7 @@ class MainView(ctk.CTkFrame):
             ("InterceptionFrame", "INTERCEPTION"),
             ("ShipFrame", "SHIP LOADOUT"),
             ("MiningFrame", "MINING"),
+            ("OrgFrame", "ORGANISATIONS"),
         ]
 
         # Remplacement par des boutons typés Drake
@@ -108,6 +109,7 @@ class MainView(ctk.CTkFrame):
             "InterceptionFrame": {"module": "views.interception_frame", "class": "InterceptionFrame", "kwargs": {}},
             "ShipFrame": {"module": "views.ship_frame", "class": "ShipFrame", "kwargs": {"mode": "loadout_only"}},
             "MiningFrame": {"module": "views.mining_frame", "class": "MiningFrame", "kwargs": {}},
+            "OrgFrame": {"module": "views.org_frame", "class": "OrgFrame", "kwargs": {}},
         }
 
         # --- BATTLE INTEL PANEL (HUD DROITE) ---
