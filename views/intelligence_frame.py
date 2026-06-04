@@ -478,9 +478,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     time.sleep(5)
 
-                    self.bot_driver.execute_script("window.scrollTo(0, 1000);")
-
-                    time.sleep(2)
+                    self.scroll_org_members_page()
 
                     members = self.bot_driver.find_elements(
                         By.CSS_SELECTOR, "li.m-member, .member-item"
@@ -554,6 +552,54 @@ class IntelligenceFrame(ctk.CTkFrame):
                 self.update_bot_status("IDLE")
             except Exception:
                 pass
+
+    def scroll_org_members_page(self):
+        """Scroll la page des membres jusqu'a stabilisation du contenu charge."""
+        if not self.bot_driver:
+            return
+
+        stable_rounds = 0
+        previous_height = 0
+        previous_count = 0
+
+        # Plusieurs passages pour couvrir lazy-loading et pagination infinie.
+        for _ in range(20):
+            current_height = int(
+                self.bot_driver.execute_script("return document.body.scrollHeight") or 0
+            )
+
+            # Scroll progressif pour declencher le chargement de tous les blocs.
+            step = 700
+            pos = 0
+            while pos < current_height:
+                self.bot_driver.execute_script(f"window.scrollTo(0, {pos});")
+                time.sleep(0.25)
+                pos += step
+
+            self.bot_driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(0.8)
+
+            new_height = int(
+                self.bot_driver.execute_script("return document.body.scrollHeight") or 0
+            )
+            new_count = len(
+                self.bot_driver.find_elements(By.CSS_SELECTOR, "li.m-member, .member-item")
+            )
+
+            if new_height == previous_height and new_count == previous_count:
+                stable_rounds += 1
+            else:
+                stable_rounds = 0
+
+            previous_height = new_height
+            previous_count = new_count
+
+            # Deux tours stables consecutifs => plus de nouveaux membres charges.
+            if stable_rounds >= 2:
+                break
+
+        # Revenir en haut pour un comportement visuel plus propre si non-headless.
+        self.bot_driver.execute_script("window.scrollTo(0, 0);")
 
     def quick_jump_to_org(self, event):
         """Action au double-clic sur le nom d'orga"""
