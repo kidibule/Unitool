@@ -31,6 +31,13 @@ class OrgController:
             return Organization.from_db_row(row[0])
         return None
 
+    # Colonnes autorisées pour éviter toute injection SQL via noms de colonnes dynamiques
+    _ALLOWED_ORG_COLUMNS = frozenset({
+        "name", "tag", "description", "member_count", "visible_members",
+        "redacted_members", "ranks", "org_type", "specialization",
+        "allies", "enemies", "neutrals", "updated_at", "alignment",
+    })
+
     def update_org(self, sid: str, **kwargs) -> None:
         """Met à jour les informations d'une organisation avec protection des types."""
         
@@ -39,6 +46,8 @@ class OrgController:
         
         cleaned_kwargs = {}
         for key, value in kwargs.items():
+            if key not in self._ALLOWED_ORG_COLUMNS:
+                continue
             if key in numeric_fields:
                 try:
                     cleaned_kwargs[key] = int(value)

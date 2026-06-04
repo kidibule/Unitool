@@ -798,11 +798,24 @@ class ShipController:
                 self.app.log(f"LOADOUT ERROR: {str(e)}", source="ERROR")
             return False
 
+    _ALLOWED_SHIP_COLUMNS = frozenset({
+        "name", "brand", "role", "career", "size", "crew_size",
+        "scm_speed", "scm_boost_forward", "scm_boost_backward",
+        "nav_max_speed", "pitch", "yaw", "roll",
+        "boosted_pitch", "boosted_yaw", "boosted_roll",
+        "power_consumption", "cm_decoy_noise", "hp", "cargo",
+        "dimensions", "mass", "hydrogen_capacity", "qt_fuel_capacity",
+        "expedition_fee", "claim_time", "expedite_time",
+    })
+
     def update_ship_specs(self, ship_name, data):
         if not data:
             return
-        set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
-        values = list(data.values())
+        safe_data = {k: v for k, v in data.items() if k in self._ALLOWED_SHIP_COLUMNS}
+        if not safe_data:
+            return
+        set_clause = ", ".join([f"{key} = ?" for key in safe_data.keys()])
+        values = list(safe_data.values())
         values.append(ship_name.upper())
         sql = f"UPDATE ships SET {set_clause} WHERE name = ?"
         self.app.commit(sql, tuple(values))
