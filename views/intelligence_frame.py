@@ -58,6 +58,35 @@ class IntelligenceFrame(ctk.CTkFrame):
         except Exception:
             pass
 
+    def _ui(self, callback):
+        """Exécute une mise à jour UI sur le thread principal Tk."""
+        try:
+            self.after(0, callback)
+        except Exception:
+            pass
+
+    def _player_exists(self, handle: str) -> bool:
+        """Retourne True si un joueur existe déjà en base locale."""
+        try:
+            rows = self.controller.query(
+                "SELECT 1 FROM players WHERE pseudo = ? LIMIT 1",
+                (str(handle or "").strip().upper(),),
+            )
+            return bool(rows)
+        except Exception:
+            return False
+
+    def _org_exists(self, sid: str) -> bool:
+        """Retourne True si une organisation existe déjà en base locale."""
+        try:
+            rows = self.controller.query(
+                "SELECT 1 FROM organizations WHERE sid = ? LIMIT 1",
+                (str(sid or "").strip().upper(),),
+            )
+            return bool(rows)
+        except Exception:
+            return False
+
     def update_bot_status(self, status: str):
         """Update the visible bot status label in the player tab."""
         try:
@@ -294,9 +323,7 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         # Reset du bouton de sauvegarde
 
-        self.btn_save_db.configure(
-            state="disabled", fg_color="#333", text="SAVE CONTACT"
-        )
+        self.btn_save_db.configure(state="disabled", fg_color="#333", text="SAVE CONTACT")
 
         self.last_scanned_data = None
 
@@ -309,11 +336,11 @@ class IntelligenceFrame(ctk.CTkFrame):
 
         self.details_box.delete("1.0", "end")
 
+        self.btn_save_org_db.configure(state="disabled", fg_color="#333", text="SAVE ORGANIZATION")
+
         self._log("ORGANIZATION DATA PURGED")
 
     def run_bot(self, mode, target):
-
-        self._log(f"uplink initiated: {target}")
         try:
             self.update_bot_status(f"RUNNING: {target}")
         except Exception:
@@ -328,6 +355,8 @@ class IntelligenceFrame(ctk.CTkFrame):
                     # --- NETTOYAGE DES INFOS PRÉCÉDENTES ---
 
                     self.clean_player_info()
+
+                    self._log(f"uplink initiated: {target}")
 
                     # Initialisation du dictionnaire de données
 
@@ -460,8 +489,13 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     self.last_scanned_data = d
 
+                    existing_player = self._player_exists(target)
+                    save_label = "UPDATE CONTACT" if existing_player else "SAVE CONTACT"
+
                     self.btn_save_db.configure(
-                        state="normal", fg_color=DrakeConfig.ACCENT_PRIMARY
+                        state="normal",
+                        fg_color=DrakeConfig.ACCENT_PRIMARY,
+                        text=save_label,
                     )
 
                     self._log(f"intel acquired: {target}")
@@ -469,6 +503,8 @@ class IntelligenceFrame(ctk.CTkFrame):
                 elif mode == "org":
 
                     self.clean_org_info()
+
+                    self._log(f"uplink initiated: {target}")
 
                     sid = target.strip().upper()
 
@@ -482,6 +518,10 @@ class IntelligenceFrame(ctk.CTkFrame):
 
                     members = self.bot_driver.find_elements(
                         By.CSS_SELECTOR, "li.m-member, .member-item"
+                    )
+
+                    self._log(
+                        f"roster loaded after full scroll: {len(members)} entries detected"
                     )
 
                     if members:
@@ -537,8 +577,17 @@ class IntelligenceFrame(ctk.CTkFrame):
                             f"{'-'*50}\nTOTAL: {v_count+r_count} | VISIBLE: {v_count} | REDACTED: {r_count}\n",
                         )
 
+                        existing_org = self._org_exists(sid)
+                        org_save_label = (
+                            "UPDATE ORGANIZATION" if existing_org else "SAVE ORGANIZATION"
+                        )
+
                         self._log(f"mapping complete: {sid}")
-                        self.btn_save_org_db.configure(state="normal", fg_color=DrakeConfig.ACCENT_PRIMARY)
+                        self.btn_save_org_db.configure(
+                            state="normal",
+                            fg_color=DrakeConfig.ACCENT_PRIMARY,
+                            text=org_save_label,
+                        )
 
                     else:
 
@@ -704,27 +753,6 @@ class IntelligenceFrame(ctk.CTkFrame):
                         self.btn_save_db.configure(state="disabled", fg_color="#333", text="ENREGISTRER CONTACT")
                     except Exception:
                         pass
-                    return
-
-                # Build a human-readable diff of changes
-                diffs = []
-                if (str(row[0] or "")).upper() != scanned_org.upper():
-                    diffs.append(f"ORGANIZATION: {row[0] or 'None'}  ->  {scanned_org}")
-                if (str(row[1] or "")).upper() != scanned_sid.upper():
-                    diffs.append(f"SID: {row[1] or 'None'}  ->  {scanned_sid}")
-                if (str(row[2] or "")).upper() != scanned_rank.upper():
-                    diffs.append(f"RANK: {row[2] or 'None'}  ->  {scanned_rank}")
-                if (str(row[3] or "")).upper() != scanned_date.upper():
-                    diffs.append(f"ENLISTED: {row[3] or 'None'}  ->  {scanned_date}")
-                if (str(row[4] or "")).upper() != scanned_lang.upper():
-                    diffs.append(f"LANGUAGE: {row[4] or 'None'}  ->  {scanned_lang}")
-                if (str(row[5] or "")).upper() != scanned_aff.upper():
-                    diffs.append(f"AFFILIATES: {row[5] or 'None'}  ->  {scanned_aff}")
-
-                diff_text = "\n".join(diffs)
-                prompt = f"File {handle} already exists. Detected changes:\n\n{diff_text}\n\nUpdate with these new values?"
-                confirm = DrakePopup.yesno("CHANGES DETECTED", prompt, parent=self)
-                if not confirm:
                     return
 
             # Proceed to upsert
