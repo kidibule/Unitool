@@ -21,6 +21,7 @@ def _ensure_tesseract_ready() -> None:
         common_paths = [
             r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
             r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Programs\Tesseract-OCR\tesseract.exe"),
         ]
         if not os.path.exists(getattr(pytesseract.pytesseract, "tesseract_cmd", "")):
             for path in common_paths:
