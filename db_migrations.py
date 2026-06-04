@@ -670,6 +670,37 @@ def _m014_fix_cellin_coordinates(cursor):
     )
 
 
+def _m015_app_settings(cursor):
+    """Crée la table app_settings pour les préférences utilisateur (ex: org principale)."""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+
+
+def _m016_org_events(cursor):
+    """Crée la table org_events pour l'agenda de l'organisation."""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS org_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            date        TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            created_at  TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+
+def _m017_org_events_time(cursor):
+    """Ajoute la colonne time à org_events."""
+    try:
+        cursor.execute("ALTER TABLE org_events ADD COLUMN time TEXT DEFAULT ''")
+    except Exception:
+        pass  # colonne déjà présente
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -685,6 +716,9 @@ MIGRATIONS = [
     (12, _m012_locations_add_physics_grid),
     (13, _m013_fix_moon_coordinates),
     (14, _m014_fix_cellin_coordinates),
+    (15, _m015_app_settings),
+    (16, _m016_org_events),
+    (17, _m017_org_events_time),
 ]
 
 

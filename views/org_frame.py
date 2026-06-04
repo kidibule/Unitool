@@ -6,7 +6,9 @@ enregistrées dans la base de données Unitool.
 
 import csv
 import json
+import calendar
 import webbrowser
+from datetime import date, datetime
 from tkinter import filedialog
 
 import customtkinter as ctk
@@ -17,7 +19,6 @@ from drake_ui.engine import (
     DrakeComboBox,
     DrakeEntry,
     DrakePopup,
-    DrakeTerminal,
     DrakeTitle1,
 )
 
@@ -32,221 +33,817 @@ class OrgFrame(ctk.CTkFrame):
         # --- HEADER ---
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
-        DrakeTitle1(header, text="ORGANISATIONS").pack(side="left")
+        DrakeTitle1(header, text="ORGANISATIONS").pack(anchor="center", expand=True)
 
-        # --- TOOLBAR ---
-        toolbar = ctk.CTkFrame(self, fg_color="transparent")
-        toolbar.pack(fill="x", padx=20, pady=(0, 5))
+        # --- TABVIEW PRINCIPAL ---
+        self.tabview = DrakeConfig.create_tabview(self)
+
+        self.tab_agenda = self.tabview.add("AGENDA")
+        self.tab_membres = self.tabview.add("MEMBRES")
+        self.tab_flotte = self.tabview.add("FLOTTE")
+
+        self._setup_agenda_tab()
+        self._setup_membres_tab()
+        self._setup_flotte_tab()
+
+    # ------------------------------------------------------------------
+    # Onglet AGENDA
+    # ------------------------------------------------------------------
+
+    def _setup_agenda_tab(self):
+        """Onglet Agenda — calendrier mensuel + gestion des événements."""
+        today = date.today()
+        self._cal_year  = today.year
+        self._cal_month = today.month
+        self._cal_selected = today
+
+        # Layout principal : gauche = calendrier, droite = événements
+        agenda_main = ctk.CTkFrame(self.tab_agenda, fg_color="transparent")
+        agenda_main.pack(fill="both", expand=True, padx=10, pady=8)
+        agenda_main.grid_columnconfigure(0, weight=0, minsize=320)
+        agenda_main.grid_columnconfigure(1, weight=1)
+        agenda_main.grid_rowconfigure(0, weight=1)
+
+        # ── Panneau gauche : calendrier ──
+        self._cal_panel = ctk.CTkFrame(
+            agenda_main,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._cal_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+
+        # ── Panneau droit : événements ──
+        self._evt_panel = ctk.CTkFrame(
+            agenda_main,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_panel.grid(row=0, column=1, sticky="nsew")
+
+        self._render_calendar()
+        self._render_events()
+
+    # ── Calendrier ─────────────────────────────────────────────────────
+
+    def _render_calendar(self):
+        """Reconstruit la grille du calendrier pour le mois courant."""
+        for w in self._cal_panel.winfo_children():
+            w.destroy()
+
+        today = date.today()
+        DAYS_FR = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"]
+        MONTHS_FR = [
+            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
+            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+        ]
+
+        # ── Navigation mois ──
+        nav = ctk.CTkFrame(self._cal_panel, fg_color="transparent")
+        nav.pack(fill="x", padx=10, pady=(10, 6))
 
         DrakeButton(
-            toolbar,
-            text="IMPORT CSV",
-            width=150,
-            command=self.import_orgs_csv,
-        ).pack(side="left", padx=(0, 8))
-
-        DrakeButton(
-            toolbar,
-            text="EXPORT CSV",
-            width=150,
-            command=self.export_orgs_csv,
+            nav, text="◀", width=36, height=30,
+            fg_color="transparent",
+            border_width=1, border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_MAIN,
+            hover_color=DrakeConfig.BG_MAIN,
+            command=self._cal_prev_month,
         ).pack(side="left")
 
-        # --- SEARCH BAR ---
-        self.search_entry = DrakeEntry(
-            self,
-            placeholder_text="SEARCH AN ORG (NAME, SID OR TAG)...",
-            height=40,
+        ctk.CTkLabel(
+            nav,
+            text=f"{MONTHS_FR[self._cal_month]}  {self._cal_year}",
+            font=("Orbitron", 12, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(side="left", expand=True)
+
+        DrakeButton(
+            nav, text="▶", width=36, height=30,
+            fg_color="transparent",
+            border_width=1, border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_MAIN,
+            hover_color=DrakeConfig.BG_MAIN,
+            command=self._cal_next_month,
+        ).pack(side="right")
+
+        # ── Grille jours ──
+        grid = ctk.CTkFrame(self._cal_panel, fg_color="transparent")
+        grid.pack(fill="x", padx=8, pady=(0, 10))
+        for col in range(7):
+            grid.grid_columnconfigure(col, weight=1)
+
+        # En-têtes de colonnes
+        for col, day_name in enumerate(DAYS_FR):
+            color = "#ff5555" if col >= 5 else DrakeConfig.TEXT_SECONDARY
+            ctk.CTkLabel(
+                grid,
+                text=day_name,
+                font=("Consolas", 9, "bold"),
+                text_color=color,
+                width=38,
+                height=22,
+            ).grid(row=0, column=col, padx=2, pady=(2, 4))
+
+        # Récupère les jours qui ont des événements ce mois
+        month_str = f"{self._cal_year}-{self._cal_month:02d}"
+        try:
+            evt_rows = self.controller.query(
+                "SELECT DISTINCT date FROM org_events WHERE date LIKE ?",
+                (f"{month_str}%",),
+            )
+            days_with_events = {r[0] for r in evt_rows}
+        except Exception:
+            days_with_events = set()
+
+        # Remplissage des jours
+        cal_matrix = calendar.monthcalendar(self._cal_year, self._cal_month)
+        for row_i, week in enumerate(cal_matrix, start=1):
+            for col_i, day_num in enumerate(week):
+                if day_num == 0:
+                    ctk.CTkLabel(grid, text="", width=38, height=34).grid(
+                        row=row_i, column=col_i, padx=2, pady=2
+                    )
+                    continue
+
+                day_date = date(self._cal_year, self._cal_month, day_num)
+                date_str  = day_date.strftime("%Y-%m-%d")
+                is_today  = day_date == today
+                is_sel    = day_date == self._cal_selected
+                has_evt   = date_str in days_with_events
+
+                if is_sel:
+                    bg     = DrakeConfig.ACCENT_PRIMARY
+                    fg     = DrakeConfig.BG_MAIN
+                    border = DrakeConfig.ACCENT_PRIMARY
+                elif is_today:
+                    bg     = "transparent"
+                    fg     = "#00cc55"
+                    border = "#00cc55"
+                else:
+                    bg     = "transparent"
+                    fg     = DrakeConfig.TEXT_MAIN
+                    border = DrakeConfig.BORDER_COLOR
+
+                # Bordure orange si le jour a des événements (sauf sélectionné ou aujourd'hui)
+                if has_evt and not is_sel and not is_today:
+                    border = "#ff8800"
+
+                btn = ctk.CTkButton(
+                    grid,
+                    text=str(day_num),
+                    width=38,
+                    height=34,
+                    font=("Consolas", 10, "bold" if is_today or is_sel else "normal"),
+                    fg_color=bg,
+                    text_color=fg,
+                    hover_color=DrakeConfig.ACCENT_HOVER,
+                    border_width=2 if has_evt and not is_sel else 1,
+                    border_color=border,
+                    corner_radius=2,
+                    command=lambda d=day_date: self._cal_select_day(d),
+                )
+                btn.grid(row=row_i, column=col_i, padx=2, pady=2)
+
+    def _cal_prev_month(self):
+        if self._cal_month == 1:
+            self._cal_month = 12
+            self._cal_year -= 1
+        else:
+            self._cal_month -= 1
+        self._render_calendar()
+
+    def _cal_next_month(self):
+        if self._cal_month == 12:
+            self._cal_month = 1
+            self._cal_year += 1
+        else:
+            self._cal_month += 1
+        self._render_calendar()
+
+    def _cal_select_day(self, day: date):
+        self._cal_selected = day
+        self._render_calendar()
+        self._render_events()
+
+    # ── Événements ─────────────────────────────────────────────────────
+
+    def _render_events(self):
+        """Reconstruit le panneau — tous les événements + formulaire pour le jour sélectionné."""
+        for w in self._evt_panel.winfo_children():
+            w.destroy()
+
+        MONTHS_FR = [
+            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
+            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+        ]
+        d = self._cal_selected
+        date_str   = d.strftime("%Y-%m-%d")
+        date_label = f"{d.day:02d}  {MONTHS_FR[d.month]}  {d.year}"
+
+        # ── Titre ──
+        ctk.CTkLabel(
+            self._evt_panel,
+            text="TOUS LES ÉVÉNEMENTS",
+            font=("Orbitron", 11, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+
+        ctk.CTkFrame(
+            self._evt_panel, height=1,
+            fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0,
+        ).pack(fill="x", padx=12, pady=(0, 6))
+
+        # ── Liste scrollable : TOUS les événements ──
+        self._evt_list_frame = ctk.CTkScrollableFrame(
+            self._evt_panel,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        self._reload_event_list()
+
+        # ── Séparateur formulaire ──
+        ctk.CTkFrame(
+            self._evt_panel, height=1,
+            fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0,
+        ).pack(fill="x", padx=12, pady=(0, 0))
+
+        # ── Formulaire ajout pour le jour sélectionné ──
+        add_frame = ctk.CTkFrame(
+            self._evt_panel,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        add_frame.pack(fill="x", padx=12, pady=(0, 12))
+
+        ctk.CTkLabel(
+            add_frame,
+            text=f"AJOUTER POUR LE  {date_label}",
+            font=("Consolas", 9, "bold"),
+            text_color="#ff8800",
+        ).pack(anchor="w", padx=10, pady=(8, 4))
+
+        # Ligne titre + heure
+        row_th = ctk.CTkFrame(add_frame, fg_color="transparent")
+        row_th.pack(fill="x", padx=10, pady=(0, 4))
+
+        self._evt_title_entry = DrakeEntry(
+            row_th,
+            placeholder_text="Titre de l'événement...",
+            height=34,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_title_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        # Champs Heure et Minute séparés
+        self._evt_hour_entry = DrakeEntry(
+            row_th,
+            placeholder_text="HH",
+            width=46,
+            height=34,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_hour_entry.pack(side="left", padx=(0, 2))
+        vcmd_h = self._evt_hour_entry.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        self._evt_hour_entry.configure(validate="key", validatecommand=(vcmd_h, "%P"))
+
+        ctk.CTkLabel(
+            row_th, text=":",
+            font=("Segoe UI", 14, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            width=8,
+        ).pack(side="left")
+
+        self._evt_min_entry = DrakeEntry(
+            row_th,
+            placeholder_text="MM",
+            width=46,
+            height=34,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_min_entry.pack(side="left", padx=(2, 0))
+        vcmd_m = self._evt_min_entry.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        self._evt_min_entry.configure(validate="key", validatecommand=(vcmd_m, "%P"))
+
+        self._evt_desc_entry = DrakeEntry(
+            add_frame,
+            placeholder_text="Description (optionnel)...",
+            height=30,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self._evt_desc_entry.pack(fill="x", padx=10, pady=(0, 6))
+
+        DrakeButton(
+            add_frame,
+            text="+ AJOUTER",
+            height=32,
+            command=lambda ds=date_str: self._add_event(ds),
+        ).pack(fill="x", padx=10, pady=(0, 8))
+
+        self._evt_title_entry.bind("<Return>", lambda e, ds=date_str: self._add_event(ds))
+
+    def _reload_event_list(self):
+        """Vide et recharge la liste de TOUS les événements triés par date/heure."""
+        for w in self._evt_list_frame.winfo_children():
+            w.destroy()
+
+        MONTHS_FR = [
+            "", "Jan", "Fév", "Mar", "Avr", "Mai", "Juin",
+            "Juil", "Août", "Sep", "Oct", "Nov", "Déc",
+        ]
+
+        try:
+            rows = self.controller.query(
+                "SELECT id, date, time, title, description FROM org_events ORDER BY date, time, id",
+                (),
+            )
+        except Exception:
+            rows = []
+
+        if not rows:
+            ctk.CTkLabel(
+                self._evt_list_frame,
+                text="Aucun événement enregistré.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=16)
+            return
+
+        current_date_header = None
+        for evt_id, evt_date, evt_time, title, desc in rows:
+            # ── Séparateur de date ──
+            if evt_date != current_date_header:
+                current_date_header = evt_date
+                try:
+                    d = date.fromisoformat(evt_date)
+                    date_label = f"── {d.day:02d}  {MONTHS_FR[d.month]}  {d.year} ──"
+                except Exception:
+                    date_label = f"── {evt_date} ──"
+
+                ctk.CTkLabel(
+                    self._evt_list_frame,
+                    text=date_label,
+                    font=("Consolas", 9, "bold"),
+                    text_color="#ff8800",
+                    anchor="w",
+                ).pack(anchor="w", padx=8, pady=(10, 2))
+
+            # ── Carte événement (style positions) ──
+            row = ctk.CTkFrame(
+                self._evt_list_frame,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.BORDER_COLOR,
+            )
+            row.pack(fill="x", padx=4, pady=2)
+
+            # Boutons — EN PREMIER pour être visibles à droite
+            btn_frame = ctk.CTkFrame(row, fg_color="transparent")
+            btn_frame.pack(side="right", padx=8, pady=4)
+
+            ctk.CTkButton(
+                btn_frame,
+                text="EDIT",
+                width=52,
+                height=26,
+                fg_color=DrakeConfig.ACCENT_PRIMARY,
+                hover_color=DrakeConfig.ACCENT_HOVER,
+                text_color=DrakeConfig.BG_MAIN,
+                corner_radius=2,
+                font=("Segoe UI", 10, "bold"),
+                border_width=0,
+                command=lambda eid=evt_id, et=evt_time, et2=title, ed=desc: self._edit_event_popup(eid, et, et2, ed),
+            ).pack(side="left", padx=(0, 4))
+
+            ctk.CTkButton(
+                btn_frame,
+                text="DELETE",
+                width=60,
+                height=26,
+                fg_color="transparent",
+                hover_color="#330000",
+                text_color="#ff4444",
+                border_width=1,
+                border_color="#ff4444",
+                corner_radius=2,
+                font=("Segoe UI", 10, "bold"),
+                command=lambda eid=evt_id: self._delete_event(eid),
+            ).pack(side="left")
+
+            # Badge heure à gauche
+            time_label = evt_time if evt_time else "--:--"
+            ctk.CTkLabel(
+                row,
+                text=time_label,
+                font=("Orbitron", 9, "bold"),
+                text_color="#ff8800",
+                width=48,
+                anchor="center",
+            ).pack(side="left", padx=(8, 0), pady=4)
+
+            # Séparateur vertical
+            ctk.CTkFrame(row, width=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(
+                side="left", fill="y", padx=6, pady=3
+            )
+
+            # Infos textuelles
+            info = ctk.CTkFrame(row, fg_color="transparent")
+            info.pack(side="left", fill="x", expand=True, pady=4)
+
+            ctk.CTkLabel(
+                info,
+                text=title,
+                font=("Segoe UI", 11, "bold"),
+                text_color=DrakeConfig.TEXT_MAIN,
+                anchor="w",
+            ).pack(anchor="w")
+
+            if desc:
+                ctk.CTkLabel(
+                    info,
+                    text=desc,
+                    font=DrakeConfig.FONT_LOGS,
+                    text_color=DrakeConfig.TEXT_SECONDARY,
+                    anchor="w",
+                ).pack(anchor="w")
+
+    def _add_event(self, date_str: str):
+        title = self._evt_title_entry.get().strip()
+        if not title:
+            return
+        desc = self._evt_desc_entry.get().strip()
+        h = self._evt_hour_entry.get().strip()
+        m = self._evt_min_entry.get().strip()
+        time_val = f"{h.zfill(2)}:{m.zfill(2)}" if (h or m) else ""
+        try:
+            self.controller.commit(
+                "INSERT INTO org_events (date, time, title, description) VALUES (?, ?, ?, ?)",
+                (date_str, time_val, title, desc),
+            )
+        except Exception as e:
+            self._log(f"Erreur ajout événement : {e}")
+            return
+        self._evt_title_entry.delete(0, "end")
+        self._evt_hour_entry.delete(0, "end")
+        self._evt_min_entry.delete(0, "end")
+        self._evt_desc_entry.delete(0, "end")
+        self._reload_event_list()
+        self._render_calendar()
+
+    def _delete_event(self, evt_id: int):
+        try:
+            self.controller.commit("DELETE FROM org_events WHERE id=?", (evt_id,))
+        except Exception as e:
+            self._log(f"Erreur suppression événement : {e}")
+            return
+        self._reload_event_list()
+        self._render_calendar()
+
+    def _edit_event_popup(self, evt_id: int, current_time: str, current_title: str, current_desc: str):
+        """Petit popup d'édition inline pour un événement."""
+        top = ctk.CTkToplevel(self)
+        top.title("MODIFIER L'ÉVÉNEMENT")
+        top.geometry("420x240")
+        top.resizable(False, False)
+        top.configure(fg_color=DrakeConfig.BG_MAIN)
+        top.grab_set()
+        top.focus_set()
+
+        ctk.CTkLabel(
+            top,
+            text="MODIFIER L'ÉVÉNEMENT",
+            font=("Orbitron", 11, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(anchor="w", padx=16, pady=(14, 8))
+
+        # Titre + heure
+        row_th = ctk.CTkFrame(top, fg_color="transparent")
+        row_th.pack(fill="x", padx=16, pady=(0, 6))
+
+        e_title = DrakeEntry(row_th, placeholder_text="Titre", height=34,
+                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_title.insert(0, current_title or "")
+        e_title.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        # Heure et minutes séparés dans le popup d'édition
+        t_parts = (current_time or "").split(":")
+        t_h = t_parts[0] if len(t_parts) >= 2 else ""
+        t_m = t_parts[1] if len(t_parts) >= 2 else ""
+
+        e_hour = DrakeEntry(row_th, placeholder_text="HH", width=46, height=34,
+                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_hour.insert(0, t_h)
+        e_hour.pack(side="left", padx=(0, 2))
+        vcmd_h = e_hour.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        e_hour.configure(validate="key", validatecommand=(vcmd_h, "%P"))
+
+        ctk.CTkLabel(
+            row_th, text=":",
+            font=("Segoe UI", 14, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            width=8,
+        ).pack(side="left")
+
+        e_min = DrakeEntry(row_th, placeholder_text="MM", width=46, height=34,
+                           fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_min.insert(0, t_m)
+        e_min.pack(side="left", padx=(2, 0))
+        vcmd_m = e_min.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
+
+        # Description
+        e_desc = DrakeEntry(top, placeholder_text="Description (optionnel)", height=32,
+                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_desc.insert(0, current_desc or "")
+        e_desc.pack(fill="x", padx=16, pady=(0, 10))
+
+        # Boutons
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=16)
+
+        def _save():
+            new_title = e_title.get().strip()
+            if not new_title:
+                return
+            nh = e_hour.get().strip()
+            nm = e_min.get().strip()
+            new_time = f"{nh.zfill(2)}:{nm.zfill(2)}" if (nh or nm) else ""
+            try:
+                self.controller.commit(
+                    "UPDATE org_events SET title=?, time=?, description=? WHERE id=?",
+                    (new_title, new_time, e_desc.get().strip(), evt_id),
+                )
+            except Exception as ex:
+                self._log(f"Erreur édition événement : {ex}")
+                return
+            top.destroy()
+            self._reload_event_list()
+            self._render_calendar()
+
+        DrakeButton(btns, text="ENREGISTRER", height=32, command=_save).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        DrakeButton(
+            btns, text="ANNULER", height=32,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR, text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            command=top.destroy,
+        ).pack(side="left", fill="x", expand=True)
+
+        e_title.bind("<Return>", lambda e: _save())
+
+    # ------------------------------------------------------------------
+    # Onglet MEMBRES
+    # ------------------------------------------------------------------
+
+    def _setup_membres_tab(self):
+        """Onglet Membres — membres de l'organisation de l'utilisateur."""
+        # ── Bandeau de configuration : sélection de son org ──
+        config_bar = ctk.CTkFrame(
+            self.tab_membres,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        config_bar.pack(fill="x", padx=10, pady=(8, 6))
+
+        ctk.CTkLabel(
+            config_bar,
+            text="MON ORG (SID) :",
+            font=DrakeConfig.FONT_UI,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(side="left", padx=(12, 8))
+
+        self.my_org_entry = DrakeEntry(
+            config_bar,
+            placeholder_text="EX: SCRP",
+            width=120,
             fg_color=DrakeConfig.BG_TERMINAL,
             border_color=DrakeConfig.ACCENT_PRIMARY,
         )
-        self.search_entry.pack(pady=(0, 5), padx=20, fill="x")
-        self.search_entry.bind("<KeyRelease>", self._on_search)
+        # Pré-remplir avec le SID mémorisé
+        saved_sid = self.controller.get_setting("my_org_sid", "")
+        if saved_sid:
+            self.my_org_entry.insert(0, saved_sid)
+        self.my_org_entry.pack(side="left", padx=(0, 8))
 
-        # --- RESULTS TERMINAL ---
-        self.results = DrakeTerminal(self)
-        self.results.pack(pady=5, padx=20, fill="both", expand=True)
+        DrakeButton(
+            config_bar,
+            text="DÉFINIR",
+            width=90,
+            height=30,
+            command=self._save_my_org,
+        ).pack(side="left", padx=(0, 12))
 
-        self._setup_tags()
-
-    # ------------------------------------------------------------------
-    # Tag configuration
-    # ------------------------------------------------------------------
-
-    def _setup_tags(self):
-        self.results.tag_config("ACCENT", foreground=DrakeConfig.ACCENT_PRIMARY)
-        self.results.tag_config("link_org", foreground=DrakeConfig.TEXT_SECONDARY, underline=True)
-        self.results.tag_config("NEUTRAL", foreground=DrakeConfig.TEXT_MAIN)
-        self.results.tag_config("ENEMY", foreground="#ff4444")
-        self.results.tag_config("ALLY", foreground="#00FF00")
-        self.results.tag_config("separator", foreground=DrakeConfig.BORDER_COLOR)
-        self.results.tag_config("notes_label", foreground=DrakeConfig.ACCENT_PRIMARY, font=("Segoe UI", 10, "bold"))
-        self.results.tag_config("notes_text", foreground=DrakeConfig.TEXT_MAIN, font=("Segoe UI", 10))
-        self.results.tag_config("small_info", foreground=DrakeConfig.TEXT_SECONDARY, font=("Segoe UI", 9))
-        self.results.tag_config("info_label", foreground="#00aaff", font=("Segoe UI", 10, "bold"))
-        self.results.tag_config("warning_label", foreground="#ff4444", font=("Segoe UI", 10, "bold"))
-        self.results.tag_config("bold", font=("Segoe UI", 10, "bold"))
-
-        self.results.tag_bind(
-            "link_org",
-            "<Enter>",
-            lambda e: self.results.configure(cursor="hand2"),
+        # Label d'info de l'org courante
+        self.my_org_label = ctk.CTkLabel(
+            config_bar,
+            text="",
+            font=("Consolas", 10),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
         )
-        self.results.tag_bind(
-            "link_org",
-            "<Leave>",
-            lambda e: self.results.configure(cursor="arrow"),
+        self.my_org_label.pack(side="left", padx=4)
+
+        # Barre de recherche membre
+        self.member_search_entry = DrakeEntry(
+            self.tab_membres,
+            placeholder_text="FILTRER PAR HANDLE OU GRADE...",
+            height=36,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
         )
+        self.member_search_entry.pack(pady=(0, 4), padx=10, fill="x")
+        self.member_search_entry.bind("<KeyRelease>", lambda e: self._render_members())
 
-    # ------------------------------------------------------------------
-    # Search
-    # ------------------------------------------------------------------
+        # Liste scrollable des membres
+        self.member_list_scroll = ctk.CTkScrollableFrame(
+            self.tab_membres,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.member_list_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 8))
 
-    def _on_search(self, _event=None):
-        q = self.search_entry.get().strip().upper()
-        self.results.delete("0.0", "end")
+        self._render_members()
 
-        if len(q) < 2:
+    def _save_my_org(self):
+        """Enregistre le SID de l'org principale et rafraîchit la liste."""
+        sid = self.my_org_entry.get().strip().upper()
+        if not sid:
+            return
+        self.controller.set_setting("my_org_sid", sid)
+        self._render_members()
+
+    def _render_members(self):
+        """Reconstruit la liste des membres de l'org principale."""
+        import json
+
+        for w in self.member_list_scroll.winfo_children():
+            w.destroy()
+
+        sid = self.controller.get_setting("my_org_sid", "")
+        if not sid:
+            ctk.CTkLabel(
+                self.member_list_scroll,
+                text="⚙  Configurez d'abord le SID de votre organisation ci-dessus.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=16, pady=24)
             return
 
-        orgs = self.controller.org.search_orgs(q)
-        orgs = [o for o in orgs if o[0] and len(str(o[0])) > 2]
-
-        if not orgs:
-            self.results.insert("end", "  NO MATCHING ORGANISATION FOUND.\n", "small_info")
+        org = self.controller.org.get_org_model(sid)
+        if not org:
+            ctk.CTkLabel(
+                self.member_list_scroll,
+                text=f"Organisation « {sid} » introuvable dans la base.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color="#ff4444",
+            ).pack(anchor="w", padx=16, pady=24)
             return
 
-        for o in orgs:
-            sid, name, tag, count, o_type, spec, alignment, updated_at = o
-            tag_edit = f"edit_{sid}"
-            tag_link = f"rsi_{sid}"
-            tag_notes = f"notes_{sid}"
+        # Mise à jour du label d'info
+        self.my_org_label.configure(
+            text=f"— {org.name or sid}  [{org.member_count or 0} membres]"
+        )
 
-            org_model = self.controller.org.get_org_model(sid)
+        # Chargement des membres visibles
+        try:
+            members = json.loads(org.visible_members or "[]")
+        except Exception:
+            members = []
 
-            # --- [IDENTITÉ] ---
-            self.results.insert("end", " ■ ", alignment)
-            self.results.insert("end", f"{name} ", (tag_edit, "NEUTRAL"))
-            self.results.insert("end", "[")
-            self.results.insert("end", f"{sid}", (tag_link, "link_org"))
-            self.results.insert("end", "]\n")
+        # Filtre par la barre de recherche
+        q = self.member_search_entry.get().strip().upper()
+        if q:
+            members = [
+                m for m in members
+                if q in str(m.get("h", "")).upper() or q in str(m.get("r", "")).upper()
+            ]
 
-            self.results.insert(
-                "end",
-                f"   TYPE: {o_type} | SPEC: {spec} | TAG: {tag or 'N/A'}\n",
+        if not members:
+            ctk.CTkLabel(
+                self.member_list_scroll,
+                text="Aucun membre visible enregistré pour cette organisation.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=16, pady=24)
+            return
+
+        # En-tête de colonne
+        header = ctk.CTkFrame(
+            self.member_list_scroll,
+            fg_color="transparent",
+            corner_radius=0,
+        )
+        header.pack(fill="x", padx=6, pady=(6, 2))
+        ctk.CTkLabel(
+            header,
+            text="HANDLE",
+            font=("Orbitron", 10, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            width=220,
+            anchor="w",
+        ).pack(side="left", padx=8)
+        ctk.CTkLabel(
+            header,
+            text="GRADE / RANG",
+            font=("Orbitron", 10, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            anchor="w",
+        ).pack(side="left")
+
+        # Séparateur
+        ctk.CTkFrame(
+            self.member_list_scroll, height=1,
+            fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0,
+        ).pack(fill="x", padx=6, pady=(0, 4))
+
+        # Cartes membres
+        for m in members:
+            handle = str(m.get("h", "???")).upper()
+            rank   = str(m.get("r", "—"))
+
+            card = ctk.CTkFrame(
+                self.member_list_scroll,
+                fg_color=DrakeConfig.BG_PANEL,
+                corner_radius=0,
+                border_width=1,
+                border_color=DrakeConfig.BORDER_COLOR,
             )
-            self.results.insert(
-                "end",
-                f"   LAST UPDATE: {org_model.updated_at if org_model else 'UNKNOWN'}\n",
-            )
+            card.pack(fill="x", padx=6, pady=2)
 
-            # --- [ROSTER] ---
-            self.results.insert("end", "   " + "-" * 45 + "\n", "separator")
+            ctk.CTkLabel(
+                card,
+                text=handle,
+                font=("Segoe UI", 12, "bold"),
+                text_color=DrakeConfig.TEXT_MAIN,
+                width=220,
+                anchor="w",
+            ).pack(side="left", padx=12, pady=7)
 
-            if org_model and org_model.visible_members:
-                try:
-                    members = json.loads(org_model.visible_members)
-                    if members:
-                        self.results.insert(
-                            "end",
-                            f"   {'HANDLE':<25} | {'RANK':<20}\n",
-                            "ACCENT",
-                        )
-                        self.results.insert("end", f"   {'-'*48}\n", "ACCENT")
-                        for m in members[:15]:
-                            h = str(m.get("h", "???")).upper()
-                            r = str(m.get("r", "???")).upper()
-                            self.results.insert(
-                                "end", f"   {h:<25} | {r:<20}\n", "ACCENT"
-                            )
-                        self.results.insert("end", "   " + "-" * 45 + "\n", "separator")
+            ctk.CTkLabel(
+                card,
+                text=rank,
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                anchor="w",
+            ).pack(side="left", pady=7)
 
-                        r_val = 0
-                        if org_model.redacted_members:
-                            try:
-                                if ":" in str(org_model.redacted_members):
-                                    r_val = str(org_model.redacted_members).split(":")[-1].strip()
-                                else:
-                                    r_val = int(org_model.redacted_members)
-                            except Exception:
-                                r_val = "???"
+            DrakeButton(
+                card,
+                text="PROFIL",
+                width=65,
+                height=26,
+                fg_color="transparent",
+                border_width=1,
+                border_color=DrakeConfig.BORDER_COLOR,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                hover_color=DrakeConfig.BG_MAIN,
+                command=lambda h=handle: self._open_rsi_player(h),
+            ).pack(side="right", padx=8, pady=6)
 
-                        summary = f"\n   TOTAL: {count:<4} | VISIBLE: {len(members):<4} | REDACTED: {r_val}\n"
-                        self.results.insert("end", summary, "bold")
-                except Exception as e:
-                    self.results.insert("end", f"   [!] Roster error: {e}\n", "warning_label")
+    # ------------------------------------------------------------------
+    # Onglet FLOTTE
+    # ------------------------------------------------------------------
 
-            # --- [DESCRIPTION] ---
-            self.results.insert("end", "   " + "-" * 45 + "\n", "separator")
-            if org_model and org_model.description and org_model.description.strip():
-                desc = (
-                    org_model.description[:200] + "..."
-                    if len(org_model.description) > 200
-                    else org_model.description
-                )
-                self.results.insert("end", "   DESCRIPTION / MANIFEST:\n", "notes_label")
-                self.results.insert("end", f"   {desc}\n", "notes_text")
-            else:
-                self.results.insert("end", "   DESCRIPTION / MANIFEST: No data.\n", "small_info")
+    def _setup_flotte_tab(self):
+        """Onglet Flotte — gestion de la flotte de l'organisation."""
+        ctk.CTkLabel(
+            self.tab_flotte,
+            text="FLOTTE",
+            font=DrakeConfig.FONT_UI,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(30, 10))
 
-            # --- [DIPLOMATIE & NOTES] ---
-            self.results.insert("end", "   " + "-" * 45 + "\n", "separator")
-            if org_model:
-                self.results.insert("end", "   ALLIES: ", "info_label")
-                self.results.insert("end", f"{org_model.allies or 'NONE'}\n")
+        ctk.CTkLabel(
+            self.tab_flotte,
+            text="[ MODULE EN COURS DE DÉVELOPPEMENT ]",
+            font=("Consolas", 11),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(pady=6)
 
-                self.results.insert("end", "   ENEMIES: ", "warning_label")
-                self.results.insert("end", f"{org_model.enemies or 'NONE'}\n")
-
-                notes = self.controller.org.get_org_notes(sid, limit=3)
-                if notes:
-                    self.results.insert("end", "\n   JOURNAL NOTES:\n", ("notes_label", tag_notes))
-                    for note_id, note_text, created_at in notes:
-                        compact = (
-                            note_text[:120] + "..." if len(note_text) > 120 else note_text
-                        )
-                        self.results.insert(
-                            "end",
-                            f"   - #{note_id} {created_at}: {compact}\n",
-                            ("notes_text", tag_notes),
-                        )
-                else:
-                    self.results.insert(
-                        "end", "\n   JOURNAL NOTES: No data.\n", ("small_info", tag_notes)
-                    )
-
-            self.results.insert("end", "   " + "-" * 45 + "\n", "separator")
-            self.results.insert("end", f"{'='*60}\n\n")
-
-            # --- BINDINGS ---
-            self.results.tag_bind(
-                tag_edit, "<Button-1>", lambda e, s=sid: self.edit_org_window(s)
-            )
-            self.results.tag_bind(
-                tag_edit, "<Enter>", lambda e: self.results.configure(cursor="hand2")
-            )
-            self.results.tag_bind(
-                tag_edit, "<Leave>", lambda e: self.results.configure(cursor="arrow")
-            )
-            self.results.tag_bind(
-                tag_link, "<Button-1>", lambda e, s=sid: self._open_rsi(s)
-            )
-            self.results.tag_bind(
-                tag_notes, "<Button-1>", lambda e, s=sid: self.open_org_notes_manager(s)
-            )
-            self.results.tag_bind(
-                tag_notes, "<Enter>", lambda e: self.results.configure(cursor="hand2")
-            )
-            self.results.tag_bind(
-                tag_notes, "<Leave>", lambda e: self.results.configure(cursor="arrow")
-            )
-
+    # ------------------------------------------------------------------
     def refresh(self):
-        """Rafraîchit les résultats selon la recherche courante."""
-        self._on_search()
+        """Rafraîchit la liste des membres."""
+        self._render_members()
 
     # ------------------------------------------------------------------
-    # RSI link
+    # RSI links
     # ------------------------------------------------------------------
 
     def _open_rsi(self, sid):
@@ -254,6 +851,11 @@ class OrgFrame(ctk.CTkFrame):
             clean_sid = str(sid).strip().replace("[", "").replace("]", "")
             webbrowser.open(f"https://robertsspaceindustries.com/orgs/{clean_sid}")
             self._log(f"Opening RSI org: {clean_sid}")
+
+    def _open_rsi_player(self, handle):
+        if handle:
+            webbrowser.open(f"https://robertsspaceindustries.com/citizens/{handle}")
+            self._log(f"Opening RSI profile: {handle}")
 
     # ------------------------------------------------------------------
     # CSV Import / Export
@@ -269,7 +871,7 @@ class OrgFrame(ctk.CTkFrame):
                 reader = csv.DictReader(f, delimiter=";")
                 rows = list(reader)
             self.controller.logger.import_organizations_csv(rows)
-            self._on_search()
+            self._render_members()
             DrakePopup.info("SYSTEMS", "ORGANIZATIONS IMPORT COMPLETED", parent=main_win)
             self._log(f"Organizations imported from {filename}")
         except Exception as e:

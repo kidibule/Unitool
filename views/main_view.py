@@ -5,7 +5,7 @@ Contient la sidebar, le container central et le panneau intel droit.
 
 import customtkinter as ctk
 from importlib import import_module
-from drake_ui.engine import DrakeConfig, DrakeButton
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeEntry
 from datetime import datetime
 
 
@@ -268,8 +268,162 @@ class MainView(ctk.CTkFrame):
             except Exception:
                 pass
 
+    def _prompt_org_setup(self):
+        """Popup de configuration de l'organisation principale."""
+        top = ctk.CTkToplevel(self)
+        top.title("CONFIGURATION ORGANISATION")
+        top.geometry("480x400")
+        top.resizable(False, False)
+        top.configure(fg_color=DrakeConfig.BG_MAIN)
+        top.grab_set()
+        top.focus_set()
+
+        # ── Titre ──
+        ctk.CTkLabel(
+            top,
+            text="⚙  ORGANISATION PRINCIPALE",
+            font=("Orbitron", 14, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(24, 4))
+
+        ctk.CTkLabel(
+            top,
+            text="Définissez votre organisation avant d'accéder à cette section.",
+            font=("Consolas", 10),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            wraplength=420,
+        ).pack(pady=(0, 18))
+
+        # ── Séparateur ──
+        ctk.CTkFrame(top, height=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(fill="x", padx=20)
+
+        # ── Saisie manuelle ──
+        ctk.CTkLabel(
+            top,
+            text="ENTRER LE SID MANUELLEMENT",
+            font=("Consolas", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(anchor="w", padx=24, pady=(14, 2))
+
+        entry_frame = ctk.CTkFrame(top, fg_color="transparent")
+        entry_frame.pack(fill="x", padx=24)
+
+        sid_entry = DrakeEntry(
+            entry_frame,
+            placeholder_text="EX: SCRP",
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.ACCENT_PRIMARY,
+            height=36,
+        )
+        sid_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        def _confirm_manual():
+            sid = sid_entry.get().strip().upper()
+            if not sid:
+                return
+            self.controller.set_setting("my_org_sid", sid)
+            top.destroy()
+            self.show_page("OrgFrame")
+
+        DrakeButton(
+            entry_frame,
+            text="VALIDER",
+            width=90,
+            height=36,
+            command=_confirm_manual,
+        ).pack(side="left")
+
+        sid_entry.bind("<Return>", lambda e: _confirm_manual())
+
+        # ── Séparateur ──
+        ctk.CTkFrame(top, height=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(fill="x", padx=20, pady=(16, 0))
+
+        # ── Sélection parmi les orgs enregistrées ──
+        ctk.CTkLabel(
+            top,
+            text="OU SÉLECTIONNER PARMI LES ORGANISATIONS ENREGISTRÉES",
+            font=("Consolas", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(anchor="w", padx=24, pady=(12, 2))
+
+        # Charge les orgs disponibles
+        try:
+            rows = self.controller.query(
+                "SELECT sid, name FROM organizations ORDER BY name", ()
+            )
+            org_options = [f"{r[1] or r[0]}  [{r[0]}]" for r in rows if r[0]]
+        except Exception:
+            org_options = []
+
+        select_frame = ctk.CTkFrame(top, fg_color="transparent")
+        select_frame.pack(fill="x", padx=24)
+
+        if org_options:
+            combo_var = ctk.StringVar(value=org_options[0])
+            combo = ctk.CTkComboBox(
+                select_frame,
+                values=org_options,
+                variable=combo_var,
+                state="readonly",
+                fg_color=DrakeConfig.BG_TERMINAL,
+                border_color=DrakeConfig.BORDER_COLOR,
+                button_color=DrakeConfig.ACCENT_PRIMARY,
+                dropdown_fg_color=DrakeConfig.BG_PANEL,
+                text_color=DrakeConfig.TEXT_MAIN,
+                height=36,
+            )
+            combo.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+            def _confirm_select():
+                val = combo_var.get()
+                # Extrait le SID entre crochets
+                import re
+                m = re.search(r"\[([^\]]+)\]", val)
+                sid = m.group(1).strip().upper() if m else val.strip().upper()
+                if not sid:
+                    return
+                self.controller.set_setting("my_org_sid", sid)
+                top.destroy()
+                self.show_page("OrgFrame")
+
+            DrakeButton(
+                select_frame,
+                text="CHOISIR",
+                width=90,
+                height=36,
+                command=_confirm_select,
+            ).pack(side="left")
+        else:
+            ctk.CTkLabel(
+                select_frame,
+                text="Aucune organisation dans la base de données.",
+                font=("Consolas", 10),
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", pady=6)
+
+        # ── Bouton annuler ──
+        DrakeButton(
+            top,
+            text="ANNULER",
+            width=120,
+            height=34,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            command=top.destroy,
+        ).pack(pady=(20, 10))
+
     def show_page(self, page_name):
         """Affiche la frame sélectionnée et rafraîchit ses données"""
+        # Vérifie si l'org principale est configurée avant d'ouvrir la section organisations
+        if page_name == "OrgFrame":
+            sid = self.controller.get_setting("my_org_sid", "")
+            if not sid:
+                self._prompt_org_setup()
+                return
+
         previous_page = getattr(self, "_current_page_name", None)
         # Evite les refresh inutiles si l'utilisateur reclique sur le menu deja actif.
         if previous_page == page_name:

@@ -197,3 +197,22 @@ class AppController:
             }
         except Exception:
             return {"players": 0, "active_contracts": 0, "organizations": 0}
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        """Retourne la valeur d'un paramètre applicatif."""
+        try:
+            rows = self.query("SELECT value FROM app_settings WHERE key=?", (key,))
+            return rows[0][0] if rows else default
+        except Exception:
+            return default
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Enregistre ou met à jour un paramètre applicatif."""
+        try:
+            self.commit(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+        except Exception:
+            pass
