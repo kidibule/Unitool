@@ -203,8 +203,8 @@ class ScannerFrame(ctk.CTkFrame):
                             self.org_results.insert("end", f"   {'HANDLE':<25} | {'RANK':<20}\n", "ACCENT")
                             self.org_results.insert("end", f"   {'-'*48}\n", "ACCENT")
                             
-                            # On affiche les 15 premiers membres
-                            for m in members[:15]:
+                            # On affiche tous les membres
+                            for m in members:
                                 h = str(m.get('h', '???')).upper()
                                 r = str(m.get('r', '???')).upper()
                                 self.org_results.insert("end", f"   {h:<25} | {r:<20}\n", "ACCENT")
