@@ -19,6 +19,7 @@ from drake_ui.engine import (
     DrakeComboBox,
     DrakeEntry,
     DrakePopup,
+    DrakeSuggestionManager,
     DrakeTitle1,
 )
 
@@ -29,6 +30,7 @@ class OrgFrame(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        self._suggestion_manager = DrakeSuggestionManager(self)
 
         # --- HEADER ---
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -371,15 +373,24 @@ class OrgFrame(ctk.CTkFrame):
 
         top = ctk.CTkToplevel(self)
         top.title("NOUVEL ÉVÉNEMENT")
-        top.geometry("460x360")
-        top.resizable(False, False)
+        top.geometry("520x620")
+        top.minsize(460, 520)
+        top.resizable(True, True)
         top.configure(fg_color=DrakeConfig.BG_MAIN)
         top.grab_set()
         top.focus_set()
 
+        # Corps scrollable pour éviter de masquer les champs sur petits écrans/scaling élevé
+        body = ctk.CTkScrollableFrame(top, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True, padx=0, pady=0)
+
+        # Barre d'actions fixe en bas (toujours visible)
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(side="bottom", fill="x", padx=16, pady=(8, 14))
+
         # En-tête
         ctk.CTkLabel(
-            top,
+            body,
             text=f"NOUVEL ÉVÉNEMENT  —  {date_label}",
             font=("Orbitron", 11, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
@@ -394,14 +405,14 @@ class OrgFrame(ctk.CTkFrame):
             ).pack(anchor="w", padx=16, pady=(4, 1))
 
         # Titre
-        lbl(top, "TITRE *")
-        e_title = DrakeEntry(top, placeholder_text="Titre de l'événement...", height=34,
+        lbl(body, "TITRE *")
+        e_title = DrakeEntry(body, placeholder_text="Titre de l'événement...", height=34,
                              fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_title.pack(fill="x", padx=16, pady=(0, 2))
 
         # Heure
-        lbl(top, "HEURE")
-        row_t = ctk.CTkFrame(top, fg_color="transparent")
+        lbl(body, "HEURE")
+        row_t = ctk.CTkFrame(body, fg_color="transparent")
         row_t.pack(anchor="w", padx=16, pady=(0, 2))
         e_hour = DrakeEntry(row_t, placeholder_text="HH", width=52, height=32,
                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
@@ -417,26 +428,115 @@ class OrgFrame(ctk.CTkFrame):
         e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
 
         # Lieu
-        lbl(top, "LIEU")
-        e_location = DrakeEntry(top, placeholder_text="Ex : Discord, Pyro, ...", height=32,
+        lbl(body, "LIEU")
+        e_location = DrakeEntry(body, placeholder_text="Ex : Discord, Pyro, ...", height=32,
                                 fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_location.pack(fill="x", padx=16, pady=(0, 2))
 
         # Participants
-        lbl(top, "PARTICIPANTS")
-        e_participants = DrakeEntry(top, placeholder_text="Ex : Alpha1, Bravo2, ...", height=32,
+        lbl(body, "PARTICIPANTS")
+        participants = []
+
+        row_p = ctk.CTkFrame(body, fg_color="transparent")
+        row_p.pack(fill="x", padx=16, pady=(0, 2))
+
+        e_participants = DrakeEntry(row_p, placeholder_text="Ex : Alpha1, Bravo2, ...", height=32,
                                     fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
-        e_participants.pack(fill="x", padx=16, pady=(0, 2))
+        e_participants.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._suggestion_manager.attach(
+            e_participants,
+            get_items=self._participant_suggestions,
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=12,
+        )
+
+        participants_box = ctk.CTkFrame(
+            body,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        participants_box.pack(fill="x", padx=16, pady=(0, 4))
+
+        def _render_participants_list():
+            for w in participants_box.winfo_children():
+                w.destroy()
+
+            if not participants:
+                ctk.CTkLabel(
+                    participants_box,
+                    text="Aucun participant ajouté.",
+                    font=DrakeConfig.FONT_LOGS,
+                    text_color=DrakeConfig.TEXT_SECONDARY,
+                    anchor="w",
+                ).pack(anchor="w", padx=8, pady=6)
+                return
+
+            for handle in participants:
+                row = ctk.CTkFrame(participants_box, fg_color="transparent")
+                row.pack(fill="x", padx=4, pady=1)
+
+                ctk.CTkLabel(
+                    row,
+                    text=handle,
+                    font=("Segoe UI", 10, "bold"),
+                    text_color=DrakeConfig.TEXT_MAIN,
+                    anchor="w",
+                ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+                ctk.CTkButton(
+                    row,
+                    text="X",
+                    width=24,
+                    height=22,
+                    fg_color="transparent",
+                    hover_color="#330000",
+                    text_color="#ff4444",
+                    border_width=1,
+                    border_color="#ff4444",
+                    corner_radius=2,
+                    font=("Segoe UI", 10, "bold"),
+                    command=lambda h=handle: _remove_participant(h),
+                ).pack(side="right", padx=4)
+
+        def _add_participants_from_entry(_event=None):
+            raw = e_participants.get().strip()
+            if not raw:
+                return "break"
+
+            chunks = [c.strip().upper() for c in raw.split(",") if c.strip()]
+            for handle in chunks:
+                if handle not in participants:
+                    participants.append(handle)
+
+            e_participants.delete(0, "end")
+            _render_participants_list()
+            return "break"
+
+        def _remove_participant(handle):
+            try:
+                participants.remove(handle)
+            except ValueError:
+                pass
+            _render_participants_list()
+
+        DrakeButton(
+            row_p,
+            text="ADD",
+            width=62,
+            height=32,
+            command=_add_participants_from_entry,
+        ).pack(side="left")
+
+        e_participants.bind("<Return>", _add_participants_from_entry)
+        _render_participants_list()
 
         # Description
-        lbl(top, "DESCRIPTION")
-        e_desc = DrakeEntry(top, placeholder_text="Description (optionnel)...", height=32,
+        lbl(body, "DESCRIPTION")
+        e_desc = DrakeEntry(body, placeholder_text="Description (optionnel)...", height=32,
                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
-        e_desc.pack(fill="x", padx=16, pady=(0, 8))
-
-        # Boutons
-        btns = ctk.CTkFrame(top, fg_color="transparent")
-        btns.pack(fill="x", padx=16, pady=(0, 14))
+        e_desc.pack(fill="x", padx=16, pady=(0, 12))
 
         def _confirm():
             t = e_title.get().strip()
@@ -450,10 +550,10 @@ class OrgFrame(ctk.CTkFrame):
                 date_str, t, time_val,
                 e_desc.get().strip(),
                 e_location.get().strip(),
-                e_participants.get().strip(),
+                ", ".join(participants),
             )
 
-        DrakeButton(btns, text="+ AJOUTER", height=32, command=_confirm).pack(
+        DrakeButton(btns, text="VALIDER ÉVÉNEMENT", height=34, command=_confirm).pack(
             side="left", fill="x", expand=True, padx=(0, 6)
         )
         DrakeButton(
@@ -467,6 +567,36 @@ class OrgFrame(ctk.CTkFrame):
         e_title.bind("<Return>", lambda e: _confirm())
         e_title.focus_set()
 
+    def _participant_suggestions(self, value: str):
+        """Suggestions de handles depuis les membres visibles de l'org principale."""
+        q = str(value or "").strip().upper()
+        if not q:
+            return []
+
+        sid = self.controller.get_setting("my_org_sid", "")
+        if not sid:
+            return []
+
+        org = self.controller.org.get_org_model(sid)
+        if not org:
+            return []
+
+        try:
+            members = json.loads(org.visible_members or "[]")
+        except Exception:
+            return []
+
+        seen = set()
+        out = []
+        for m in members:
+            handle = str(m.get("h", "")).strip().upper()
+            if not handle or handle in seen:
+                continue
+            if q in handle:
+                seen.add(handle)
+                out.append(handle)
+        return out
+
     def _delete_event(self, evt_id: int):
         try:
             self.controller.commit("DELETE FROM org_events WHERE id=?", (evt_id,))
@@ -478,9 +608,26 @@ class OrgFrame(ctk.CTkFrame):
 
     def _render_evt_display_row(self, parent, evt_id, evt_time, title, desc, location="", participants=""):
         """Affichage normal d'une carte événement."""
+        # Ligne secondaire : lieu ● participants ● description
+        meta_parts = []
+        if location:
+            meta_parts.append(f"📍 {location}")
+        if participants:
+            meta_parts.append(f"👥 {participants}")
+        if desc:
+            meta_parts.append(desc)
+        meta_text = "  ·  ".join(meta_parts)
+        if len(meta_text) > 120:
+            meta_text = f"{meta_text[:117]}..."
+
+        # Hauteur compacte en affichage normal (l'édition inline garde sa hauteur variable).
+        row_height = 46 if meta_text else 34
+        parent.configure(height=row_height)
+        parent.pack_propagate(False)
+
         # Boutons — EN PREMIER pour être visibles à droite
         btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(side="right", padx=6, pady=0)
+        btn_frame.pack(side="right", padx=6, pady=(6 if meta_text else 4))
 
         ctk.CTkButton(
             btn_frame,
@@ -519,43 +666,35 @@ class OrgFrame(ctk.CTkFrame):
             font=("Orbitron", 9, "bold"),
             text_color="#ff8800",
             width=48,
-            height=20,
+            height=18,
             anchor="center",
-        ).pack(side="left", padx=(8, 0), pady=0)
+        ).pack(side="left", padx=(8, 0), pady=(6 if meta_text else 4))
 
         # Séparateur vertical
         ctk.CTkFrame(parent, width=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(
-            side="left", fill="y", padx=6, pady=4
+            side="left", fill="y", padx=6, pady=3
         )
 
         # Infos textuelles
         info = ctk.CTkFrame(parent, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True, pady=2)
+        info.pack(side="left", fill="x", expand=True, pady=(5 if meta_text else 3))
 
         ctk.CTkLabel(
             info,
             text=title,
             font=("Segoe UI", 11, "bold"),
             text_color=DrakeConfig.TEXT_MAIN,
-            height=18,
+            height=16,
             anchor="w",
         ).pack(anchor="w")
 
-        # Ligne secondaire : lieu ● participants ● description
-        meta_parts = []
-        if location:
-            meta_parts.append(f"📍 {location}")
-        if participants:
-            meta_parts.append(f"👥 {participants}")
-        if desc:
-            meta_parts.append(desc)
-        if meta_parts:
+        if meta_text:
             ctk.CTkLabel(
                 info,
-                text="  ·  ".join(meta_parts),
+                text=meta_text,
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
-                height=15,
+                height=14,
                 anchor="w",
             ).pack(anchor="w")
 
@@ -577,13 +716,13 @@ class OrgFrame(ctk.CTkFrame):
         row_th = ctk.CTkFrame(editor, fg_color="transparent")
         row_th.pack(fill="x", pady=(0, 2))
 
-        e_title = DrakeEntry(row_th, placeholder_text="Titre", height=28,
-                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+        e_title = DrakeEntry(row_th, placeholder_text="Titre de l'événement...", height=28,
+                     fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_title.insert(0, current_title or "")
         e_title.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
         e_hour = DrakeEntry(row_th, placeholder_text="HH", width=42, height=28,
-                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_hour.insert(0, t_h)
         e_hour.pack(side="left", padx=(0, 2))
         vcmd_h = e_hour.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
@@ -591,27 +730,127 @@ class OrgFrame(ctk.CTkFrame):
         ctk.CTkLabel(row_th, text=":", font=("Segoe UI", 13, "bold"),
                      text_color=DrakeConfig.TEXT_SECONDARY, width=8).pack(side="left")
         e_min = DrakeEntry(row_th, placeholder_text="MM", width=42, height=28,
-                           fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+                   fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_min.insert(0, t_m)
         e_min.pack(side="left", padx=(2, 0))
         vcmd_m = e_min.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
         e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
 
-        # Lieu + participants sur la même ligne
-        row_lp = ctk.CTkFrame(editor, fg_color="transparent")
-        row_lp.pack(fill="x", pady=(0, 2))
-        e_location = DrakeEntry(row_lp, placeholder_text="Lieu...", height=28,
-                                fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+        # Lieu
+        row_l = ctk.CTkFrame(editor, fg_color="transparent")
+        row_l.pack(fill="x", pady=(0, 2))
+        e_location = DrakeEntry(row_l, placeholder_text="Ex : Discord, Pyro, ...", height=28,
+                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_location.insert(0, current_location or "")
-        e_location.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        e_participants = DrakeEntry(row_lp, placeholder_text="Participants...", height=28,
-                                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
-        e_participants.insert(0, current_participants or "")
-        e_participants.pack(side="left", fill="x", expand=True)
+        e_location.pack(side="left", fill="x", expand=True)
+
+        # Participants (même mécanique que le popup)
+        participants = [p.strip().upper() for p in str(current_participants or "").split(",") if p.strip()]
+
+        row_p = ctk.CTkFrame(editor, fg_color="transparent")
+        row_p.pack(fill="x", pady=(0, 2))
+
+        e_participants = DrakeEntry(
+            row_p,
+            placeholder_text="Ex : Alpha1, Bravo2, ...",
+            height=28,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        e_participants.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._suggestion_manager.attach(
+            e_participants,
+            get_items=self._participant_suggestions,
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=12,
+        )
+
+        participants_box = ctk.CTkScrollableFrame(
+            editor,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            height=70,
+        )
+        participants_box.pack(fill="x", pady=(0, 3))
+
+        def _render_participants_list():
+            for w in participants_box.winfo_children():
+                w.destroy()
+
+            if not participants:
+                ctk.CTkLabel(
+                    participants_box,
+                    text="Aucun participant.",
+                    font=DrakeConfig.FONT_LOGS,
+                    text_color=DrakeConfig.TEXT_SECONDARY,
+                    anchor="w",
+                ).pack(anchor="w", padx=8, pady=4)
+                return
+
+            for handle in participants:
+                row = ctk.CTkFrame(participants_box, fg_color="transparent")
+                row.pack(fill="x", padx=4, pady=1)
+
+                ctk.CTkLabel(
+                    row,
+                    text=handle,
+                    font=("Segoe UI", 10, "bold"),
+                    text_color=DrakeConfig.TEXT_MAIN,
+                    anchor="w",
+                ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+                ctk.CTkButton(
+                    row,
+                    text="X",
+                    width=24,
+                    height=20,
+                    fg_color="transparent",
+                    hover_color="#330000",
+                    text_color="#ff4444",
+                    border_width=1,
+                    border_color="#ff4444",
+                    corner_radius=2,
+                    font=("Segoe UI", 10, "bold"),
+                    command=lambda h=handle: _remove_participant(h),
+                ).pack(side="right", padx=4)
+
+        def _add_participants_from_entry(_event=None):
+            raw = e_participants.get().strip()
+            if not raw:
+                return "break"
+
+            chunks = [c.strip().upper() for c in raw.split(",") if c.strip()]
+            for handle in chunks:
+                if handle not in participants:
+                    participants.append(handle)
+
+            e_participants.delete(0, "end")
+            _render_participants_list()
+            return "break"
+
+        def _remove_participant(handle):
+            try:
+                participants.remove(handle)
+            except ValueError:
+                pass
+            _render_participants_list()
+
+        DrakeButton(
+            row_p,
+            text="ADD",
+            width=56,
+            height=28,
+            command=_add_participants_from_entry,
+        ).pack(side="left")
+
+        e_participants.bind("<Return>", _add_participants_from_entry)
+        _render_participants_list()
 
         # Description
-        e_desc = DrakeEntry(editor, placeholder_text="Description (optionnel)", height=28,
-                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+        e_desc = DrakeEntry(editor, placeholder_text="Description (optionnel)...", height=28,
+                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_desc.insert(0, current_desc or "")
         e_desc.pack(fill="x", pady=(0, 4))
 
@@ -629,7 +868,7 @@ class OrgFrame(ctk.CTkFrame):
             try:
                 self.controller.commit(
                     "UPDATE org_events SET title=?, time=?, description=?, location=?, participants=? WHERE id=?",
-                    (new_title, new_time, e_desc.get().strip(), e_location.get().strip(), e_participants.get().strip(), evt_id),
+                    (new_title, new_time, e_desc.get().strip(), e_location.get().strip(), ", ".join(participants), evt_id),
                 )
             except Exception as ex:
                 self._log(f"Erreur édition événement : {ex}")
