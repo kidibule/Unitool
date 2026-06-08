@@ -1,13 +1,34 @@
 """OrgController — gère la logique métier des organisations."""
 
+import json
+from datetime import date
+from urllib import error, request
+
 from models import OrgEvent, Organization
 
 class OrgController:
     """Contrôleur pour la gestion des organisations."""
 
+    DISCORD_EVENTS_WEBHOOK_URL = (
+        "https://discord.com/api/webhooks/1513509945738399875/"
+        "cn4cdbtCQgWv1g2L0bmbkoa-zwvOFfXLON113hJ9vOrATRVc1bTRKyCZLBI7J3fG39Nv"
+    )
+
     def __init__(self, app_controller):
         """Initialise avec l'instance AppController pour l'accès DB."""
         self.app = app_controller
+
+    def get_discord_webhook_url(self) -> str:
+        """Retourne le webhook Discord configuré en settings (ou fallback)."""
+        try:
+            value = self.app.get_setting("discord_events_webhook_url", "")
+        except Exception:
+            value = ""
+        return str(value or self.DISCORD_EVENTS_WEBHOOK_URL).strip()
+
+    def set_discord_webhook_url(self, webhook_url: str) -> None:
+        """Enregistre le webhook Discord de publication d'événements."""
+        self.app.set_setting("discord_events_webhook_url", str(webhook_url or "").strip())
 
     def search_orgs(self, query: str) -> list:
         """Recherche rapide pour affichage en liste/vue."""
@@ -68,6 +89,91 @@ class OrgController:
     def delete_event(self, event_id: int) -> None:
         """Supprime un événement d'organisation."""
         self.app.db.orgs.delete_event(event_id)
+
+    def publish_event_to_discord(self, event_id: int, webhook_url: str | None = None) -> tuple[bool, str]:
+        """Publie un événement sur Discord via webhook.
+
+        Returns:
+            tuple[bool, str]: (succès, message utilisateur)
+        """
+        rows = self.app.db.orgs.get_events()
+        events = [OrgEvent.from_db_row(row) for row in rows]
+        target = next((evt for evt in events if evt.id == int(event_id)), None)
+        if target is None:
+            return False, "Événement introuvable."
+
+        hook = str(webhook_url or self.get_discord_webhook_url()).strip()
+        if not hook:
+            return False, "Webhook Discord non configuré."
+
+        try:
+            d = date.fromisoformat(str(target.date or ""))
+            date_label = d.strftime("%d/%m/%Y")
+        except Exception:
+            date_label = str(target.date or "")
+
+        desc = str(target.description or "").strip()
+        if len(desc) > 500:
+            desc = f"{desc[:497]}..."
+
+        lines = [
+            "@everyone",
+            f"📅 **{target.title or 'ÉVÉNEMENT'}**",
+            f"**Date :** {date_label}",
+            f"**Heure :** {target.time or '--:--'}",
+        ]
+        if target.location:
+            lines.append(f"**Lieu :** {target.location}")
+        if target.participants:
+            lines.append(f"**Participants :** {target.participants}")
+        if desc:
+            lines.append(f"**Détails :** {desc}")
+
+        payload = {
+            "content": "\n".join(lines),
+            "allowed_mentions": {"parse": ["everyone"]},
+        }
+
+        req = request.Request(
+            hook,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Unitool-OrgWebhook/1.0",
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(req, timeout=10) as resp:
+                if int(getattr(resp, "status", resp.getcode())) >= 400:
+                    return False, "Discord a refusé la publication."
+        except error.HTTPError as ex:
+            raw = ""
+            try:
+                raw = ex.read().decode("utf-8", errors="replace").strip()
+            except Exception:
+                raw = ""
+
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    message = str(parsed.get("message", "")).strip()
+                    code = parsed.get("code")
+                    if message and code is not None:
+                        return False, f"Erreur Discord HTTP {ex.code}: {message} (code {code})."
+                    if message:
+                        return False, f"Erreur Discord HTTP {ex.code}: {message}."
+                except Exception:
+                    return False, f"Erreur Discord HTTP {ex.code}: {raw}"
+
+            return False, f"Erreur Discord HTTP {ex.code}."
+        except error.URLError as ex:
+            return False, f"Erreur réseau Discord : {ex.reason}"
+        except Exception as ex:
+            return False, f"Publication impossible : {ex}"
+
+        return True, "Événement publié sur Discord."
 
     def get_visible_members(self, sid: str) -> list:
         """Retourne les membres visibles d'une org sous forme de liste de dicts."""

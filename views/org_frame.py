@@ -58,6 +58,17 @@ class OrgFrame(ctk.CTkFrame):
         self._cal_month = today.month
         self._cal_selected = today
 
+        top_actions = ctk.CTkFrame(self.tab_agenda, fg_color="transparent")
+        top_actions.pack(fill="x", padx=10, pady=(8, 0))
+
+        DrakeButton(
+            top_actions,
+            text="TOKEN DISCORD",
+            width=160,
+            height=30,
+            command=self._open_discord_token_popup,
+        ).pack(side="right")
+
         # Layout principal : gauche = calendrier, droite = événements
         agenda_main = ctk.CTkFrame(self.tab_agenda, fg_color="transparent")
         agenda_main.pack(fill="both", expand=True, padx=10, pady=8)
@@ -595,6 +606,81 @@ class OrgFrame(ctk.CTkFrame):
         self._reload_event_list()
         self._render_calendar()
 
+    def _publish_event(self, evt_id: int):
+        """Publie un événement sur Discord via le webhook configuré."""
+        try:
+            ok, msg = self.controller.org.publish_event_to_discord(evt_id)
+        except Exception as e:
+            self._log(f"Erreur publication Discord : {e}")
+            return
+
+        if ok:
+            self._log(msg)
+        else:
+            self._log(f"Publication Discord échouée : {msg}")
+
+    def _open_discord_token_popup(self):
+        """Popup de configuration du token/webhook Discord pour les events."""
+        top = ctk.CTkToplevel(self)
+        top.title("CONFIGURATION TOKEN DISCORD")
+        top.geometry("700x220")
+        top.minsize(620, 200)
+        top.configure(fg_color=DrakeConfig.BG_MAIN)
+        top.grab_set()
+        top.focus_set()
+
+        ctk.CTkLabel(
+            top,
+            text="WEBHOOK DISCORD (EVENTS)",
+            font=("Orbitron", 11, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(anchor="w", padx=16, pady=(14, 8))
+
+        ctk.CTkLabel(
+            top,
+            text="Colle ici l'URL complète du webhook Discord.",
+            font=("Segoe UI", 10),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        ).pack(anchor="w", padx=16, pady=(0, 6))
+
+        e_hook = DrakeEntry(
+            top,
+            placeholder_text="https://discord.com/api/webhooks/...",
+            height=34,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        e_hook.pack(fill="x", padx=16, pady=(0, 10))
+        e_hook.insert(0, self.controller.org.get_discord_webhook_url())
+
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=16, pady=(4, 12))
+
+        def _save():
+            hook = e_hook.get().strip()
+            if not hook:
+                DrakePopup.error("ERROR", "Le webhook ne peut pas être vide.", parent=top)
+                return
+            self.controller.org.set_discord_webhook_url(hook)
+            self._log("Webhook Discord events mis à jour.")
+            top.destroy()
+
+        DrakeButton(btns, text="ENREGISTRER", height=32, command=_save).pack(
+            side="left", fill="x", expand=True, padx=(0, 6)
+        )
+        DrakeButton(
+            btns,
+            text="ANNULER",
+            height=32,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            command=top.destroy,
+        ).pack(side="left", fill="x", expand=True)
+
     def _render_evt_display_row(self, parent, evt_id, evt_time, title, desc, location="", participants=""):
         """Affichage normal d'une carte événement."""
         # Ligne secondaire : lieu ● participants ● description
@@ -630,6 +716,20 @@ class OrgFrame(ctk.CTkFrame):
             font=("Segoe UI", 10, "bold"),
             border_width=0,
             command=lambda: self._start_evt_edit(evt_id),
+        ).pack(side="left", padx=(0, 4))
+
+        ctk.CTkButton(
+            btn_frame,
+            text="PUBLISH",
+            width=68,
+            height=24,
+            fg_color="#2f6fd6",
+            hover_color="#2458a9",
+            text_color="#ffffff",
+            corner_radius=2,
+            font=("Segoe UI", 9, "bold"),
+            border_width=0,
+            command=lambda: self._publish_event(evt_id),
         ).pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
