@@ -701,6 +701,12 @@ def _m017_org_events_time(cursor):
         pass  # colonne déjà présente
 
 
+def _m018_org_events_location_participants(cursor):
+    """Ajoute les colonnes location et participants à org_events."""
+    _add_column_if_missing(cursor, "org_events", "location",     "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "org_events", "participants", "TEXT DEFAULT ''")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -719,6 +725,7 @@ MIGRATIONS = [
     (15, _m015_app_settings),
     (16, _m016_org_events),
     (17, _m017_org_events_time),
+    (18, _m018_org_events_location_participants),
 ]
 
 

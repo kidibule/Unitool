@@ -270,91 +270,18 @@ class OrgFrame(ctk.CTkFrame):
 
         self._reload_event_list()
 
-        # ── Séparateur formulaire ──
+        # ── Bouton d'ajout en bas du panneau ──
         ctk.CTkFrame(
             self._evt_panel, height=1,
             fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0,
-        ).pack(fill="x", padx=12, pady=(0, 0))
-
-        # ── Formulaire ajout pour le jour sélectionné ──
-        add_frame = ctk.CTkFrame(
-            self._evt_panel,
-            fg_color=DrakeConfig.BG_PANEL,
-            corner_radius=0,
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        add_frame.pack(fill="x", padx=12, pady=(0, 12))
-
-        ctk.CTkLabel(
-            add_frame,
-            text=f"AJOUTER POUR LE  {date_label}",
-            font=("Consolas", 9, "bold"),
-            text_color="#ff8800",
-        ).pack(anchor="w", padx=10, pady=(8, 4))
-
-        # Ligne titre + heure
-        row_th = ctk.CTkFrame(add_frame, fg_color="transparent")
-        row_th.pack(fill="x", padx=10, pady=(0, 4))
-
-        self._evt_title_entry = DrakeEntry(
-            row_th,
-            placeholder_text="Titre de l'événement...",
-            height=34,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self._evt_title_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
-
-        # Champs Heure et Minute séparés
-        self._evt_hour_entry = DrakeEntry(
-            row_th,
-            placeholder_text="HH",
-            width=46,
-            height=34,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self._evt_hour_entry.pack(side="left", padx=(0, 2))
-        vcmd_h = self._evt_hour_entry.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
-        self._evt_hour_entry.configure(validate="key", validatecommand=(vcmd_h, "%P"))
-
-        ctk.CTkLabel(
-            row_th, text=":",
-            font=("Segoe UI", 14, "bold"),
-            text_color=DrakeConfig.TEXT_SECONDARY,
-            width=8,
-        ).pack(side="left")
-
-        self._evt_min_entry = DrakeEntry(
-            row_th,
-            placeholder_text="MM",
-            width=46,
-            height=34,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self._evt_min_entry.pack(side="left", padx=(2, 0))
-        vcmd_m = self._evt_min_entry.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
-        self._evt_min_entry.configure(validate="key", validatecommand=(vcmd_m, "%P"))
-
-        self._evt_desc_entry = DrakeEntry(
-            add_frame,
-            placeholder_text="Description (optionnel)...",
-            height=30,
-            fg_color=DrakeConfig.BG_TERMINAL,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self._evt_desc_entry.pack(fill="x", padx=10, pady=(0, 6))
+        ).pack(fill="x", padx=12, pady=(0, 6))
 
         DrakeButton(
-            add_frame,
-            text="+ AJOUTER",
-            height=32,
-            command=lambda ds=date_str: self._add_event(ds),
-        ).pack(fill="x", padx=10, pady=(0, 8))
-
-        self._evt_title_entry.bind("<Return>", lambda e, ds=date_str: self._add_event(ds))
+            self._evt_panel,
+            text=f"+ AJOUTER UN ÉVÉNEMENT  —  {date_label}",
+            height=34,
+            command=lambda ds=date_str: self._open_add_event_popup(ds),
+        ).pack(fill="x", padx=12, pady=(0, 12))
 
     def _reload_event_list(self):
         """Vide et recharge la liste de TOUS les événements triés par date/heure."""
@@ -368,7 +295,7 @@ class OrgFrame(ctk.CTkFrame):
 
         try:
             rows = self.controller.query(
-                "SELECT id, date, time, title, description FROM org_events ORDER BY date, time, id",
+                "SELECT id, date, time, title, description, location, participants FROM org_events ORDER BY date, time, id",
                 (),
             )
         except Exception:
@@ -384,7 +311,7 @@ class OrgFrame(ctk.CTkFrame):
             return
 
         current_date_header = None
-        for evt_id, evt_date, evt_time, title, desc in rows:
+        for evt_id, evt_date, evt_time, title, desc, location, participants in rows:
             # ── Séparateur de date ──
             if evt_date != current_date_header:
                 current_date_header = evt_date
@@ -413,32 +340,132 @@ class OrgFrame(ctk.CTkFrame):
             card.pack(fill="x", padx=4, pady=2)
 
             if self._editing_evt_id == evt_id:
-                self._render_evt_edit_row(card, evt_id, evt_time, title, desc)
+                self._render_evt_edit_row(card, evt_id, evt_time, title, desc, location, participants)
             else:
-                self._render_evt_display_row(card, evt_id, evt_time, title, desc)
+                self._render_evt_display_row(card, evt_id, evt_time, title, desc, location, participants)
 
-    def _add_event(self, date_str: str):
-        title = self._evt_title_entry.get().strip()
-        if not title:
-            return
-        desc = self._evt_desc_entry.get().strip()
-        h = self._evt_hour_entry.get().strip()
-        m = self._evt_min_entry.get().strip()
-        time_val = f"{h.zfill(2)}:{m.zfill(2)}" if (h or m) else ""
+    def _add_event(self, date_str: str, title: str, time_val: str, desc: str, location: str, participants: str):
+        """Insère un nouvel événement en base."""
         try:
             self.controller.commit(
-                "INSERT INTO org_events (date, time, title, description) VALUES (?, ?, ?, ?)",
-                (date_str, time_val, title, desc),
+                "INSERT INTO org_events (date, time, title, description, location, participants) VALUES (?, ?, ?, ?, ?, ?)",
+                (date_str, time_val, title, desc, location, participants),
             )
         except Exception as e:
             self._log(f"Erreur ajout événement : {e}")
             return
-        self._evt_title_entry.delete(0, "end")
-        self._evt_hour_entry.delete(0, "end")
-        self._evt_min_entry.delete(0, "end")
-        self._evt_desc_entry.delete(0, "end")
         self._reload_event_list()
         self._render_calendar()
+
+    def _open_add_event_popup(self, date_str: str):
+        """Popup de création d'un événement avec tous les champs."""
+        MONTHS_FR = [
+            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
+            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+        ]
+        try:
+            d = date.fromisoformat(date_str)
+            date_label = f"{d.day:02d} {MONTHS_FR[d.month]} {d.year}"
+        except Exception:
+            date_label = date_str
+
+        top = ctk.CTkToplevel(self)
+        top.title("NOUVEL ÉVÉNEMENT")
+        top.geometry("460x360")
+        top.resizable(False, False)
+        top.configure(fg_color=DrakeConfig.BG_MAIN)
+        top.grab_set()
+        top.focus_set()
+
+        # En-tête
+        ctk.CTkLabel(
+            top,
+            text=f"NOUVEL ÉVÉNEMENT  —  {date_label}",
+            font=("Orbitron", 11, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        def lbl(parent, text):
+            ctk.CTkLabel(
+                parent, text=text,
+                font=("Segoe UI", 9),
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                anchor="w",
+            ).pack(anchor="w", padx=16, pady=(4, 1))
+
+        # Titre
+        lbl(top, "TITRE *")
+        e_title = DrakeEntry(top, placeholder_text="Titre de l'événement...", height=34,
+                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_title.pack(fill="x", padx=16, pady=(0, 2))
+
+        # Heure
+        lbl(top, "HEURE")
+        row_t = ctk.CTkFrame(top, fg_color="transparent")
+        row_t.pack(anchor="w", padx=16, pady=(0, 2))
+        e_hour = DrakeEntry(row_t, placeholder_text="HH", width=52, height=32,
+                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_hour.pack(side="left", padx=(0, 2))
+        vcmd_h = e_hour.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        e_hour.configure(validate="key", validatecommand=(vcmd_h, "%P"))
+        ctk.CTkLabel(row_t, text=":", font=("Segoe UI", 14, "bold"),
+                     text_color=DrakeConfig.TEXT_SECONDARY, width=10).pack(side="left")
+        e_min = DrakeEntry(row_t, placeholder_text="MM", width=52, height=32,
+                           fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_min.pack(side="left", padx=(2, 0))
+        vcmd_m = e_min.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
+        e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
+
+        # Lieu
+        lbl(top, "LIEU")
+        e_location = DrakeEntry(top, placeholder_text="Ex : Discord, Pyro, ...", height=32,
+                                fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_location.pack(fill="x", padx=16, pady=(0, 2))
+
+        # Participants
+        lbl(top, "PARTICIPANTS")
+        e_participants = DrakeEntry(top, placeholder_text="Ex : Alpha1, Bravo2, ...", height=32,
+                                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_participants.pack(fill="x", padx=16, pady=(0, 2))
+
+        # Description
+        lbl(top, "DESCRIPTION")
+        e_desc = DrakeEntry(top, placeholder_text="Description (optionnel)...", height=32,
+                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
+        e_desc.pack(fill="x", padx=16, pady=(0, 8))
+
+        # Boutons
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=16, pady=(0, 14))
+
+        def _confirm():
+            t = e_title.get().strip()
+            if not t:
+                return
+            h = e_hour.get().strip()
+            m = e_min.get().strip()
+            time_val = f"{h.zfill(2)}:{m.zfill(2)}" if (h or m) else ""
+            top.destroy()
+            self._add_event(
+                date_str, t, time_val,
+                e_desc.get().strip(),
+                e_location.get().strip(),
+                e_participants.get().strip(),
+            )
+
+        DrakeButton(btns, text="+ AJOUTER", height=32, command=_confirm).pack(
+            side="left", fill="x", expand=True, padx=(0, 6)
+        )
+        DrakeButton(
+            btns, text="ANNULER", height=32,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR, text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            command=top.destroy,
+        ).pack(side="left", fill="x", expand=True)
+
+        e_title.bind("<Return>", lambda e: _confirm())
+        e_title.focus_set()
 
     def _delete_event(self, evt_id: int):
         try:
@@ -449,17 +476,17 @@ class OrgFrame(ctk.CTkFrame):
         self._reload_event_list()
         self._render_calendar()
 
-    def _render_evt_display_row(self, parent, evt_id, evt_time, title, desc):
+    def _render_evt_display_row(self, parent, evt_id, evt_time, title, desc, location="", participants=""):
         """Affichage normal d'une carte événement."""
         # Boutons — EN PREMIER pour être visibles à droite
         btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(side="right", padx=8, pady=4)
+        btn_frame.pack(side="right", padx=6, pady=0)
 
         ctk.CTkButton(
             btn_frame,
             text="EDIT",
             width=52,
-            height=26,
+            height=24,
             fg_color=DrakeConfig.ACCENT_PRIMARY,
             hover_color=DrakeConfig.ACCENT_HOVER,
             text_color=DrakeConfig.BG_MAIN,
@@ -472,8 +499,8 @@ class OrgFrame(ctk.CTkFrame):
         ctk.CTkButton(
             btn_frame,
             text="DELETE",
-            width=60,
-            height=26,
+            width=58,
+            height=24,
             fg_color="transparent",
             hover_color="#330000",
             text_color="#ff4444",
@@ -492,79 +519,105 @@ class OrgFrame(ctk.CTkFrame):
             font=("Orbitron", 9, "bold"),
             text_color="#ff8800",
             width=48,
+            height=20,
             anchor="center",
-        ).pack(side="left", padx=(8, 0), pady=4)
+        ).pack(side="left", padx=(8, 0), pady=0)
 
         # Séparateur vertical
         ctk.CTkFrame(parent, width=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(
-            side="left", fill="y", padx=6, pady=3
+            side="left", fill="y", padx=6, pady=4
         )
 
         # Infos textuelles
         info = ctk.CTkFrame(parent, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True, pady=4)
+        info.pack(side="left", fill="x", expand=True, pady=2)
 
         ctk.CTkLabel(
             info,
             text=title,
             font=("Segoe UI", 11, "bold"),
             text_color=DrakeConfig.TEXT_MAIN,
+            height=18,
             anchor="w",
         ).pack(anchor="w")
 
+        # Ligne secondaire : lieu ● participants ● description
+        meta_parts = []
+        if location:
+            meta_parts.append(f"📍 {location}")
+        if participants:
+            meta_parts.append(f"👥 {participants}")
         if desc:
+            meta_parts.append(desc)
+        if meta_parts:
             ctk.CTkLabel(
                 info,
-                text=desc,
+                text="  ·  ".join(meta_parts),
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
+                height=15,
                 anchor="w",
             ).pack(anchor="w")
 
-    def _render_evt_edit_row(self, parent, evt_id, current_time, current_title, current_desc):
+    def _render_evt_edit_row(self, parent, evt_id, current_time, current_title, current_desc, current_location="", current_participants=""):
         """Mode édition inline directement sur la carte."""
         editor = ctk.CTkFrame(parent, fg_color="transparent")
-        editor.pack(fill="x", padx=8, pady=6)
+        editor.pack(fill="x", padx=8, pady=4)
 
         t_parts = (current_time or "").split(":")
         t_h = t_parts[0] if len(t_parts) >= 2 else ""
         t_m = t_parts[1] if len(t_parts) >= 2 else ""
 
-        # Ligne titre + heure
-        row_th = ctk.CTkFrame(editor, fg_color="transparent")
-        row_th.pack(fill="x", pady=(0, 4))
+        def lbl(text):
+            ctk.CTkLabel(editor, text=text, font=("Segoe UI", 9),
+                         text_color=DrakeConfig.TEXT_SECONDARY, anchor="w",
+                         height=14).pack(anchor="w", pady=(2, 0))
 
-        e_title = DrakeEntry(row_th, placeholder_text="Titre", height=32,
+        # Titre + heure sur la même ligne
+        row_th = ctk.CTkFrame(editor, fg_color="transparent")
+        row_th.pack(fill="x", pady=(0, 2))
+
+        e_title = DrakeEntry(row_th, placeholder_text="Titre", height=28,
                              fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
         e_title.insert(0, current_title or "")
         e_title.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
-        e_hour = DrakeEntry(row_th, placeholder_text="HH", width=46, height=32,
+        e_hour = DrakeEntry(row_th, placeholder_text="HH", width=42, height=28,
                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
         e_hour.insert(0, t_h)
         e_hour.pack(side="left", padx=(0, 2))
         vcmd_h = e_hour.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
         e_hour.configure(validate="key", validatecommand=(vcmd_h, "%P"))
-
-        ctk.CTkLabel(row_th, text=":", font=("Segoe UI", 14, "bold"),
+        ctk.CTkLabel(row_th, text=":", font=("Segoe UI", 13, "bold"),
                      text_color=DrakeConfig.TEXT_SECONDARY, width=8).pack(side="left")
-
-        e_min = DrakeEntry(row_th, placeholder_text="MM", width=46, height=32,
+        e_min = DrakeEntry(row_th, placeholder_text="MM", width=42, height=28,
                            fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
         e_min.insert(0, t_m)
         e_min.pack(side="left", padx=(2, 0))
         vcmd_m = e_min.register(lambda v: len(v) <= 2 and v.isdigit() or v == "")
         e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
 
+        # Lieu + participants sur la même ligne
+        row_lp = ctk.CTkFrame(editor, fg_color="transparent")
+        row_lp.pack(fill="x", pady=(0, 2))
+        e_location = DrakeEntry(row_lp, placeholder_text="Lieu...", height=28,
+                                fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+        e_location.insert(0, current_location or "")
+        e_location.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        e_participants = DrakeEntry(row_lp, placeholder_text="Participants...", height=28,
+                                    fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
+        e_participants.insert(0, current_participants or "")
+        e_participants.pack(side="left", fill="x", expand=True)
+
         # Description
-        e_desc = DrakeEntry(editor, placeholder_text="Description (optionnel)", height=30,
+        e_desc = DrakeEntry(editor, placeholder_text="Description (optionnel)", height=28,
                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.ACCENT_PRIMARY)
         e_desc.insert(0, current_desc or "")
-        e_desc.pack(fill="x", pady=(0, 6))
+        e_desc.pack(fill="x", pady=(0, 4))
 
         # Boutons ENREGISTRER / ANNULER
         btns = ctk.CTkFrame(editor, fg_color="transparent")
-        btns.pack(fill="x")
+        btns.pack(fill="x", pady=(0, 2))
 
         def _save():
             new_title = e_title.get().strip()
@@ -575,8 +628,8 @@ class OrgFrame(ctk.CTkFrame):
             new_time = f"{nh.zfill(2)}:{nm.zfill(2)}" if (nh or nm) else ""
             try:
                 self.controller.commit(
-                    "UPDATE org_events SET title=?, time=?, description=? WHERE id=?",
-                    (new_title, new_time, e_desc.get().strip(), evt_id),
+                    "UPDATE org_events SET title=?, time=?, description=?, location=?, participants=? WHERE id=?",
+                    (new_title, new_time, e_desc.get().strip(), e_location.get().strip(), e_participants.get().strip(), evt_id),
                 )
             except Exception as ex:
                 self._log(f"Erreur édition événement : {ex}")
