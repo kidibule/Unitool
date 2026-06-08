@@ -13,6 +13,40 @@ class OrgRepository:
             db: instance DBConnection (conn + cursor + query/commit)
         """
         self._db = db
+        self._ensure_org_events_schema()
+
+    def _ensure_org_events_schema(self) -> None:
+        """Garantit un schéma minimal compatible pour org_events.
+
+        Ce garde-fou corrige les bases legacy/incomplètes qui peuvent empêcher
+        l'enregistrement des événements (colonnes manquantes).
+        """
+        # Table minimale si absente.
+        self._db.commit(
+            """
+            CREATE TABLE IF NOT EXISTS org_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                date        TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                created_at  TEXT DEFAULT (datetime('now'))
+            )
+            """,
+            (),
+        )
+
+        # Colonnes ajoutées par migrations plus récentes.
+        cols = {
+            str(row[1]).lower()
+            for row in self._db.query("PRAGMA table_info(org_events)", ())
+            if row and len(row) > 1
+        }
+        if "time" not in cols:
+            self._db.commit("ALTER TABLE org_events ADD COLUMN time TEXT DEFAULT ''", ())
+        if "location" not in cols:
+            self._db.commit("ALTER TABLE org_events ADD COLUMN location TEXT DEFAULT ''", ())
+        if "participants" not in cols:
+            self._db.commit("ALTER TABLE org_events ADD COLUMN participants TEXT DEFAULT ''", ())
 
     # ------------------------------------------------------------------
     # Agenda org (org_events)

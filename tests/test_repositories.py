@@ -252,6 +252,50 @@ class TestOrgRepository:
         rows = db.query("SELECT * FROM org_notes WHERE org_sid='ORG1'")
         assert len(rows) == 0
 
+    def test_add_event_insere_un_evenement(self):
+        db = make_db()
+        repo = OrgRepository(db)
+
+        repo.add_event("2026-06-08", "21:30", "Briefing", "Point tactique", "Discord", "ALPHA, BRAVO")
+
+        rows = db.query(
+            "SELECT date, time, title, description, location, participants FROM org_events"
+        )
+        assert len(rows) == 1
+        assert rows[0] == (
+            "2026-06-08",
+            "21:30",
+            "Briefing",
+            "Point tactique",
+            "Discord",
+            "ALPHA, BRAVO",
+        )
+
+    def test_update_event_modifie_les_champs(self):
+        db = make_db()
+        repo = OrgRepository(db)
+        repo.add_event("2026-06-08", "20:00", "Avant", "desc", "lieu", "P1")
+        evt_id = db.query("SELECT id FROM org_events LIMIT 1")[0][0]
+
+        repo.update_event(evt_id, "Apres", "22:45", "nouvelle desc", "Pyro", "P2, P3")
+
+        rows = db.query(
+            "SELECT title, time, description, location, participants FROM org_events WHERE id=?",
+            (evt_id,),
+        )
+        assert rows[0] == ("Apres", "22:45", "nouvelle desc", "Pyro", "P2, P3")
+
+    def test_delete_event_supprime_l_entree(self):
+        db = make_db()
+        repo = OrgRepository(db)
+        repo.add_event("2026-06-08", "", "A supprimer", "", "", "")
+        evt_id = db.query("SELECT id FROM org_events LIMIT 1")[0][0]
+
+        repo.delete_event(evt_id)
+
+        rows = db.query("SELECT id FROM org_events WHERE id=?", (evt_id,))
+        assert rows == []
+
 
 # ===========================================================================
 # LocationRepository
