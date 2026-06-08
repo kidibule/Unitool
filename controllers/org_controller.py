@@ -1,6 +1,6 @@
 """OrgController — gère la logique métier des organisations."""
 
-from models import Organization
+from models import OrgEvent, Organization
 
 class OrgController:
     """Contrôleur pour la gestion des organisations."""
@@ -21,6 +21,60 @@ class OrgController:
         WHERE sid LIKE ? OR name LIKE ? OR tag LIKE ?
         """
         return self.app.query(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
+
+    # ------------------------------------------------------------------
+    # Agenda organisation (org_events)
+    # ------------------------------------------------------------------
+
+    def get_event_dates_for_month(self, year: int, month: int) -> set[str]:
+        """Retourne les dates contenant des événements pour un mois donné."""
+        try:
+            return self.app.db.orgs.get_event_dates_for_month(year, month)
+        except Exception:
+            return set()
+
+    def get_events(self) -> list[OrgEvent]:
+        """Retourne tous les événements triés en objets métier OrgEvent."""
+        try:
+            rows = self.app.db.orgs.get_events()
+            return [OrgEvent.from_db_row(row) for row in rows]
+        except Exception:
+            return []
+
+    def add_event(
+        self,
+        date_str: str,
+        time_str: str,
+        title: str,
+        description: str = "",
+        location: str = "",
+        participants: str = "",
+    ) -> None:
+        """Ajoute un événement d'organisation."""
+        self.app.db.orgs.add_event(date_str, time_str, title, description, location, participants)
+
+    def update_event(
+        self,
+        event_id: int,
+        title: str,
+        time_str: str,
+        description: str = "",
+        location: str = "",
+        participants: str = "",
+    ) -> None:
+        """Met à jour un événement d'organisation."""
+        self.app.db.orgs.update_event(event_id, title, time_str, description, location, participants)
+
+    def delete_event(self, event_id: int) -> None:
+        """Supprime un événement d'organisation."""
+        self.app.db.orgs.delete_event(event_id)
+
+    def get_visible_members(self, sid: str) -> list:
+        """Retourne les membres visibles d'une org sous forme de liste de dicts."""
+        try:
+            return self.app.db.orgs.get_visible_members(sid)
+        except Exception:
+            return []
 
     def get_org_model(self, sid: str) -> Organization:
         """Récupère une organisation et retourne un objet Organization."""

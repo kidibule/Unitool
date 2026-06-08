@@ -5,7 +5,6 @@ enregistrées dans la base de données Unitool.
 """
 
 import csv
-import json
 import calendar
 import webbrowser
 from datetime import date, datetime
@@ -152,15 +151,9 @@ class OrgFrame(ctk.CTkFrame):
             ).grid(row=0, column=col, padx=2, pady=(2, 4))
 
         # Récupère les jours qui ont des événements ce mois
-        month_str = f"{self._cal_year}-{self._cal_month:02d}"
-        try:
-            evt_rows = self.controller.query(
-                "SELECT DISTINCT date FROM org_events WHERE date LIKE ?",
-                (f"{month_str}%",),
-            )
-            days_with_events = {r[0] for r in evt_rows}
-        except Exception:
-            days_with_events = set()
+        days_with_events = self.controller.org.get_event_dates_for_month(
+            self._cal_year, self._cal_month
+        )
 
         # Remplissage des jours
         cal_matrix = calendar.monthcalendar(self._cal_year, self._cal_month)
@@ -295,15 +288,9 @@ class OrgFrame(ctk.CTkFrame):
             "Juil", "Août", "Sep", "Oct", "Nov", "Déc",
         ]
 
-        try:
-            rows = self.controller.query(
-                "SELECT id, date, time, title, description, location, participants FROM org_events ORDER BY date, time, id",
-                (),
-            )
-        except Exception:
-            rows = []
+        events = self.controller.org.get_events()
 
-        if not rows:
+        if not events:
             ctk.CTkLabel(
                 self._evt_list_frame,
                 text="Aucun événement enregistré.",
@@ -313,7 +300,15 @@ class OrgFrame(ctk.CTkFrame):
             return
 
         current_date_header = None
-        for evt_id, evt_date, evt_time, title, desc, location, participants in rows:
+        for evt in events:
+            evt_id = evt.id
+            evt_date = evt.date
+            evt_time = evt.time
+            title = evt.title
+            desc = evt.description
+            location = evt.location
+            participants = evt.participants
+
             # ── Séparateur de date ──
             if evt_date != current_date_header:
                 current_date_header = evt_date
@@ -349,10 +344,7 @@ class OrgFrame(ctk.CTkFrame):
     def _add_event(self, date_str: str, title: str, time_val: str, desc: str, location: str, participants: str):
         """Insère un nouvel événement en base."""
         try:
-            self.controller.commit(
-                "INSERT INTO org_events (date, time, title, description, location, participants) VALUES (?, ?, ?, ?, ?, ?)",
-                (date_str, time_val, title, desc, location, participants),
-            )
+            self.controller.org.add_event(date_str, time_val, title, desc, location, participants)
         except Exception as e:
             self._log(f"Erreur ajout événement : {e}")
             return
@@ -581,10 +573,7 @@ class OrgFrame(ctk.CTkFrame):
         if not org:
             return []
 
-        try:
-            members = json.loads(org.visible_members or "[]")
-        except Exception:
-            return []
+        members = self.controller.org.get_visible_members(sid)
 
         seen = set()
         out = []
@@ -599,7 +588,7 @@ class OrgFrame(ctk.CTkFrame):
 
     def _delete_event(self, evt_id: int):
         try:
-            self.controller.commit("DELETE FROM org_events WHERE id=?", (evt_id,))
+            self.controller.org.delete_event(evt_id)
         except Exception as e:
             self._log(f"Erreur suppression événement : {e}")
             return
@@ -866,9 +855,13 @@ class OrgFrame(ctk.CTkFrame):
             nm = e_min.get().strip()
             new_time = f"{nh.zfill(2)}:{nm.zfill(2)}" if (nh or nm) else ""
             try:
-                self.controller.commit(
-                    "UPDATE org_events SET title=?, time=?, description=?, location=?, participants=? WHERE id=?",
-                    (new_title, new_time, e_desc.get().strip(), e_location.get().strip(), ", ".join(participants), evt_id),
+                self.controller.org.update_event(
+                    evt_id,
+                    new_title,
+                    new_time,
+                    e_desc.get().strip(),
+                    e_location.get().strip(),
+                    ", ".join(participants),
                 )
             except Exception as ex:
                 self._log(f"Erreur édition événement : {ex}")
@@ -983,8 +976,6 @@ class OrgFrame(ctk.CTkFrame):
 
     def _render_members(self):
         """Reconstruit la liste des membres de l'org principale."""
-        import json
-
         for w in self.member_list_scroll.winfo_children():
             w.destroy()
 
@@ -1014,10 +1005,7 @@ class OrgFrame(ctk.CTkFrame):
         )
 
         # Chargement des membres visibles
-        try:
-            members = json.loads(org.visible_members or "[]")
-        except Exception:
-            members = []
+        members = self.controller.org.get_visible_members(sid)
 
         # Filtre par la barre de recherche
         q = self.member_search_entry.get().strip().upper()
