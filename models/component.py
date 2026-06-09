@@ -49,6 +49,18 @@ class Component(BaseModel):
         "stat_qt_fuel_usage",       # consommation carburant QT
         # ── Radar ───────────────────────────────────────────────────────────
         "stat_detection_range",     # portée détection (m)
+        # ── Bouclier étendu ─────────────────────────────────────────────────
+        "stat_shield_downed_delay", # délai de régén après destruction totale (s)
+        "stat_shield_decay_ratio",  # ratio de décroissance des HP (0–1)
+        "stat_absorption_phys",     # absorption max dégâts physiques (0–1)
+        "stat_resistance_phys",     # résistance max dégâts physiques (0–1)
+        "stat_resistance_dist",     # résistance max distorsion (0–1)
+        # ── Armes — détail dégâts ───────────────────────────────────────────
+        "stat_dmg_phys",            # dégâts physiques par tir
+        "stat_dmg_energy",          # dégâts énergie par tir
+        "stat_dmg_distortion",      # dégâts distorsion par tir
+        "stat_projectile_speed",    # vitesse projectile (m/s)
+        "stat_fire_mode",           # mode de tir (Single/Burst/Charge)
     ]
 
     def __init__(
@@ -86,6 +98,18 @@ class Component(BaseModel):
         stat_qt_fuel_usage: float = 0.0,
         # Radar
         stat_detection_range: float = 0.0,
+        # Bouclier étendu
+        stat_shield_downed_delay: float = 0.0,
+        stat_shield_decay_ratio: float = 0.0,
+        stat_absorption_phys: float = 0.0,
+        stat_resistance_phys: float = 0.0,
+        stat_resistance_dist: float = 0.0,
+        # Armes — détail dégâts
+        stat_dmg_phys: float = 0.0,
+        stat_dmg_energy: float = 0.0,
+        stat_dmg_distortion: float = 0.0,
+        stat_projectile_speed: float = 0.0,
+        stat_fire_mode: str = "",
         # Compat legacy (ignoré)
         stats=None,
     ):
@@ -122,6 +146,18 @@ class Component(BaseModel):
         self.stat_qt_fuel_usage = float(stat_qt_fuel_usage or 0)
         # Radar
         self.stat_detection_range = float(stat_detection_range or 0)
+        # Bouclier étendu
+        self.stat_shield_downed_delay = float(stat_shield_downed_delay or 0)
+        self.stat_shield_decay_ratio  = float(stat_shield_decay_ratio or 0)
+        self.stat_absorption_phys     = float(stat_absorption_phys or 0)
+        self.stat_resistance_phys     = float(stat_resistance_phys or 0)
+        self.stat_resistance_dist     = float(stat_resistance_dist or 0)
+        # Armes — détail dégâts
+        self.stat_dmg_phys         = float(stat_dmg_phys or 0)
+        self.stat_dmg_energy       = float(stat_dmg_energy or 0)
+        self.stat_dmg_distortion   = float(stat_dmg_distortion or 0)
+        self.stat_projectile_speed = float(stat_projectile_speed or 0)
+        self.stat_fire_mode        = str(stat_fire_mode or "")
 
     # -----------------------------------------------------------------------
     # Sérialisation DB
@@ -136,6 +172,182 @@ class Component(BaseModel):
 
     def to_db_tuple(self) -> tuple:
         return tuple(getattr(self, col) for col in self.COLUMNS)
+
+    # -----------------------------------------------------------------------
+    # Import SC data miner (fichier JSON individual item)
+    # -----------------------------------------------------------------------
+    @classmethod
+    def from_sc_item_json(cls, data: dict) -> "Component | None":
+        """Construit un Component depuis un fichier JSON SC data miner (item individuel).
+
+        Compatible avec le format exporté par le data miner SC :
+            { "Item": { "name": ..., "type": ..., "stdItem": { "Shield": {...}, ... } } }
+        """
+        item = data.get("Item", {})
+        if not item:
+            return None
+
+        std = item.get("stdItem", {})
+
+        name = (item.get("name") or "").strip().upper()
+        if not name or "PLACEHOLDER" in name:
+            return None
+
+        manufacturer_code = (item.get("manufacturer") or "UNKNOWN").strip().upper()
+        size = int(item.get("size") or std.get("Size") or 1)
+        grade_num = int(item.get("grade") or std.get("Grade") or 3)
+        grade = {1: "A", 2: "B", 3: "C", 4: "D"}.get(grade_num, "C")
+        sc_type = (item.get("type") or "").strip()
+
+        # Mapping SC type → (category DB, type_name DB)
+        _SC_TYPE_MAP = {
+            "Shield":           ("SYSTEMS",    "SHIELD"),
+            "PowerPlant":       ("SYSTEMS",    "POWER PLANT"),
+            "Cooler":           ("SYSTEMS",    "COOLER"),
+            "Radar":            ("SYSTEMS",    "RADAR"),
+            "FlightController": ("SYSTEMS",    "FLIGHT BLADE"),
+            "QuantumDrive":     ("PROPULSION", "QUANTUM DRIVE"),
+            "WeaponGun":        ("WEAPON",     "GUN"),
+            "Turret":           ("WEAPON",     "GUN"),
+            "MissileLauncher":  ("WEAPON",     "MISSILE RACK"),
+            "WeaponMining":     ("MODULE",     "MINING LASER"),
+        }
+        category, type_name = _SC_TYPE_MAP.get(sc_type, ("SYSTEMS", sc_type.upper() or "UNDEFINED"))
+
+        # ── Stats universels ─────────────────────────────────────────────
+        power_draw = 0.0
+        em_gen = 0.0
+        rn = std.get("ResourceNetwork", {})
+        for state in (rn.get("States") or []):
+            for delta in (state.get("Deltas") or []):
+                if delta.get("Resource") == "Power":
+                    power_draw = float(delta.get("Rate") or 0)
+                    break
+        emission = std.get("Emission", {})
+        em_gen = float((emission.get("Em") or {}).get("Maximum") or 0)
+
+        # ── Bouclier ─────────────────────────────────────────────────────
+        shield_hp = shield_regen = regen_delay = downed_delay = 0.0
+        decay_ratio = absorption_phys = resistance_phys = resistance_dist = 0.0
+        sh = std.get("Shield", {})
+        if sh:
+            shield_hp       = float(sh.get("MaxShieldHealth") or 0)
+            shield_regen    = float(sh.get("MaxShieldRegen") or 0)
+            regen_delay     = float(sh.get("DamagedDelay") or 0)
+            downed_delay    = float(sh.get("DownedDelay") or 0)
+            decay_ratio     = float(sh.get("DecayRatio") or 0)
+            absorption_phys = float((sh.get("Absorption") or {}).get("Physical", {}).get("Maximum") or 0)
+            resistance_phys = float((sh.get("Resistance") or {}).get("Physical", {}).get("Maximum") or 0)
+            resistance_dist = float((sh.get("Resistance") or {}).get("Distortion", {}).get("Maximum") or 0)
+
+        # ── Énergie ──────────────────────────────────────────────────────
+        power_output = 0.0
+        pp = std.get("PowerPlant", {})
+        if pp:
+            power_output = float(pp.get("Output") or 0)
+        if not power_output:
+            # JSON SC data miner : sortie dans ResourceNetwork.Generation.Power
+            power_output = float((rn.get("Generation") or {}).get("Power") or 0)
+
+        # ── Refroidisseur ────────────────────────────────────────────────
+        cooling_rate = 0.0
+        co = std.get("Cooler", {})
+        if co:
+            cooling_rate = float(co.get("CoolingRate") or 0)
+        if not cooling_rate:
+            # JSON SC data miner : taux dans ResourceNetwork.Generation.Coolant
+            rn_gen = rn.get("Generation", {})
+            if rn_gen.get("Coolant"):
+                cooling_rate = float(rn_gen["Coolant"])
+            else:
+                # Fallback : chercher dans les Deltas (GeneratedResource == "Coolant")
+                for state in (rn.get("States") or []):
+                    for delta in (state.get("Deltas") or []):
+                        if delta.get("GeneratedResource") == "Coolant":
+                            cooling_rate = float(delta.get("GeneratedRate") or 0)
+                            break
+
+        # ── Quantum Drive ────────────────────────────────────────────────
+        qt_range = qt_speed = qt_spool = qt_fuel = 0.0
+        qd = std.get("QuantumDrive", {})
+        if qd:
+            sj = qd.get("StandardJump") or {}
+            qt_speed  = float(sj.get("DriveSpeed") or qd.get("Speed") or 0)
+            qt_spool  = float(sj.get("SpoolUpTime") or qd.get("SpoolTime") or 0)
+            # Efficiency en Gm/SCU (ou FuelEfficiencyGMPerSCU si présent)
+            qt_range  = float(qd.get("FuelEfficiencyGMPerSCU") or qd.get("Range") or 0)
+            # Consommation en SCU/Gm
+            qt_fuel   = float(qd.get("FuelConsumptionSCUPerGM") or qd.get("FuelRate") or 0)
+
+        # ── Armes ────────────────────────────────────────────────────────
+        dps = alpha = fire_rate = weapon_range = ammo_count = 0.0
+        wep = std.get("Weapon", {})
+        dmg_phys = dmg_energy = dmg_dist = proj_speed = 0.0
+        fire_mode = ""
+        if wep:
+            weapon_range = float(wep.get("EffectiveRange") or 0)
+            fire_rate    = float(wep.get("RateOfFire") or 0)
+            fire_mode    = (wep.get("FireMode") or "").strip()
+            dmg          = wep.get("Damage") or {}
+            alpha        = float(dmg.get("AlphaTotal") or 0)
+            dps          = float(dmg.get("DpsTotal") or dmg.get("Burst") or dmg.get("Sustained") or 0)
+            alpha_detail = dmg.get("Alpha") or {}
+            dmg_phys     = float(alpha_detail.get("Physical") or 0)
+            dmg_energy   = float(alpha_detail.get("Energy") or 0)
+            dmg_dist     = float(alpha_detail.get("Distortion") or 0)
+            capacity     = wep.get("Capacity") or 0
+            ammo_count   = float(capacity) if capacity else 0.0
+            # vitesse projectile depuis Ammunition
+            ammo_data    = std.get("Ammunition") or {}
+            proj_speed   = float(ammo_data.get("Speed") or 0)
+
+        # ── Radar ────────────────────────────────────────────────────────
+        detection_range = 0.0
+        rd = std.get("Radar", {}) or std.get("Sensor", {})
+        if rd:
+            # Portée explicite si présente, sinon sensibilité EM (0-1) * 10000 comme proxy
+            detection_range = float(
+                rd.get("Range")
+                or rd.get("DetectionRange")
+                or (rd.get("Sensitivity") or {}).get("EM", 0) * 10000
+                or 0
+            )
+
+        return cls(
+            name=name,
+            brand=manufacturer_code,
+            type_name=type_name,
+            category=category,
+            size=size,
+            grade=grade,
+            stat_power_draw=power_draw,
+            stat_em_gen=em_gen,
+            stat_dps=dps,
+            stat_alpha=alpha,
+            stat_range=weapon_range,
+            stat_fire_rate=fire_rate,
+            stat_ammo_count=int(ammo_count),
+            stat_shield_hp=int(shield_hp),
+            stat_shield_regen=shield_regen,
+            stat_regen_delay=regen_delay,
+            stat_shield_downed_delay=downed_delay,
+            stat_shield_decay_ratio=decay_ratio,
+            stat_absorption_phys=absorption_phys,
+            stat_resistance_phys=resistance_phys,
+            stat_resistance_dist=resistance_dist,
+            stat_power_output=power_output,
+            stat_cooling_rate=cooling_rate,
+            stat_qt_range=qt_range,
+            stat_qt_speed=qt_speed,
+            stat_qt_spool=qt_spool,
+            stat_qt_fuel_usage=qt_fuel,
+            stat_detection_range=detection_range,
+            stat_dmg_phys=dmg_phys,
+            stat_dmg_energy=dmg_energy,
+            stat_dmg_distortion=dmg_dist,
+            stat_projectile_speed=proj_speed,
+            stat_fire_mode=fire_mode,
+        )
 
     # -----------------------------------------------------------------------
     # Compat legacy (ancienne API)

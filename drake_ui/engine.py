@@ -84,8 +84,14 @@ class DrakeConfig:
         geometry: str = "500x220",
         fg_color: Optional[str] = None,
         resizable: bool = False,
+        #grab: bool = True,
     ):
-        """Crée une fenêtre modale toujours au premier plan de la fenêtre principale."""
+        """Crée une fenêtre modale toujours au premier plan de la fenêtre principale.
+
+        grab=True  : capture tous les événements Tk (dialogs bloquants yes/no, info…)
+        grab=False : fenêtre persistante sans capture — évite le jitter au drag
+                     car grab_set() crée de la contention avec WM_MOVING sur Windows.
+        """
         def _is_valid_widget(widget) -> bool:
             try:
                 return widget is not None and bool(widget.winfo_exists())
@@ -103,6 +109,20 @@ class DrakeConfig:
 
         master = owner if _is_valid_widget(owner) else (parent if _is_valid_widget(parent) else None)
         popup = ctk.CTkToplevel(master) if master is not None else ctk.CTkToplevel()
+
+        # Sur Windows, CTkToplevel programme ses propres callbacks internes via
+        # after(0, ...) qui repositionnent / redimensionnent la fenêtre. Si on
+        # appelle geometry() avant qu'ils s'exécutent, le gestionnaire de fenêtres
+        # Windows gagne et la fenêtre flash à (0,0) ou saute.
+        #
+        # Recette :
+        # 1. withdraw() → fenêtre cachée pendant l'init
+        # 2. update()   → force l'exécution de tous les after() internes de CTkToplevel
+        # 3. geometry() → appliqué APRÈS les callbacks internes, Windows l'accepte
+        # 4. deiconify() → affichage propre, sans flash ni double positionnement
+        popup.withdraw()
+        popup.update()
+
         popup.title(title)
         popup.geometry(geometry)
         popup.configure(fg_color=fg_color or DrakeConfig.BG_MAIN)
@@ -114,10 +134,7 @@ class DrakeConfig:
             except Exception:
                 pass
 
-        try:
-            popup.attributes("-topmost", True)
-        except Exception:
-            pass
+        popup.deiconify()
 
         try:
             popup.lift()
@@ -125,10 +142,11 @@ class DrakeConfig:
         except Exception:
             pass
 
-        try:
-            popup.grab_set()
-        except Exception:
-            pass
+        if grab:
+            try:
+                popup.grab_set()
+            except Exception:
+                pass
 
         return popup
 

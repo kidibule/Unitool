@@ -298,6 +298,12 @@ def _m001_schema_initial(cursor):
             stat_qt_fuel_usage    REAL DEFAULT 0,
             -- Radar
             stat_detection_range  REAL DEFAULT 0,
+            -- Bouclier étendu
+            stat_shield_downed_delay REAL DEFAULT 0,
+            stat_shield_decay_ratio  REAL DEFAULT 0,
+            stat_absorption_phys     REAL DEFAULT 0,
+            stat_resistance_phys     REAL DEFAULT 0,
+            stat_resistance_dist     REAL DEFAULT 0,
             FOREIGN KEY (type_name) REFERENCES component_types(name)
         )
     """)
@@ -879,6 +885,34 @@ def _m021_components_typed_stats(cursor):
     logger.info("  components: typed stat columns added.")
 
 
+def _m023_components_weapon_detail_stats(cursor):
+    """Ajoute les colonnes de détail des dégâts armes et vitesse projectile."""
+    new_cols = [
+        ("stat_dmg_phys",         "REAL DEFAULT 0"),
+        ("stat_dmg_energy",       "REAL DEFAULT 0"),
+        ("stat_dmg_distortion",   "REAL DEFAULT 0"),
+        ("stat_projectile_speed", "REAL DEFAULT 0"),
+        ("stat_fire_mode",        "TEXT DEFAULT ''"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "components", col_name, col_type)
+    logger.info("  components: weapon detail stat columns added.")
+
+
+def _m022_components_shield_extended_stats(cursor):
+    """Ajoute les colonnes de stats bouclier étendues (délai downed, décay, absorptions/résistances)."""
+    new_cols = [
+        ("stat_shield_downed_delay", "REAL DEFAULT 0"),
+        ("stat_shield_decay_ratio",  "REAL DEFAULT 0"),
+        ("stat_absorption_phys",     "REAL DEFAULT 0"),
+        ("stat_resistance_phys",     "REAL DEFAULT 0"),
+        ("stat_resistance_dist",     "REAL DEFAULT 0"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "components", col_name, col_type)
+    logger.info("  components: shield extended stat columns added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -901,6 +935,8 @@ MIGRATIONS = [
     (19, _m019_ships_sc_fields),
     (20, _m020_ships_armor_cooling),
     (21, _m021_components_typed_stats),
+    (22, _m022_components_shield_extended_stats),
+    (23, _m023_components_weapon_detail_stats),
 ]
 
 

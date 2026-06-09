@@ -18,7 +18,6 @@ class ShipFrame(ctk.CTkFrame):
         self.controller = controller
         mode_normalized = (mode or "all").strip().lower()
         self.mode = mode_normalized if mode_normalized in {"all", "catalog_only", "loadout_only"} else "all"
-        self.component_popup = None
         self.component_editing_name = None
         self.cfg_slot_editing_key = None
         self.lo_slot_widgets = []
@@ -78,8 +77,10 @@ class ShipFrame(ctk.CTkFrame):
 
         if self.mode in ("all", "loadout_only"):
             self.tab_loadout = self.tabview.add("LOADOUT")
+            self.tab_components = self.tabview.add("COMPONENTS")
             self.tab_config = self.tabview.add("CONFIG")
             self.setup_loadout_tab()
+            self._build_components_content(self.tab_components)
             self.setup_config_tab()
 
     def refresh(self):
@@ -151,15 +152,167 @@ class ShipFrame(ctk.CTkFrame):
             pass
 
     def _import_json_ships(self):
-        """Lance l'import d'un ou plusieurs fichiers JSON SC data miner."""
+        """Lance l'import d'un ou plusieurs fichiers JSON SC data miner (ships)."""
         self.controller.ship.import_ships_from_json()
         self.run_ship_scan()
+
+    def _import_json_components(self):
+        """Lance l'import de fichiers JSON SC data miner (composants individuels)."""
+        self.controller.ship.import_components_from_json()
+        self.run_component_scan()
+        self.update_selectors()
+        # Rafraîchit les combos du loadout si un vaisseau est sélectionné
+        ship = self.lo_ship_selector.get().strip().upper() if self._widget_exists("lo_ship_selector") else ""
+        if ship:
+            self.refresh_loadout_view(ship)
 
     # --- ONGLET COMPONENTS ---
 
     def setup_components_tab(self):
-        """Gestion de la base de données des composants."""
-        self.open_component_manager()
+        """Gestion de la base de données des composants (appelé en mode catalog_only)."""
+        self._build_components_content(getattr(self, "tab_ships", self))
+
+    def _build_components_content(self, parent):
+        """Construit l'UI du tab COMPONENTS : bouton + recherche + liste."""
+        # Barre d'actions en haut à droite
+        top_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        top_bar.pack(fill="x", padx=20, pady=(8, 2))
+        DrakeButton(
+            top_bar,
+            text="ADD COMPONENT",
+            command=self.open_add_component_popup,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=130,
+            height=20,
+            font=("Segoe UI", 9, "bold"),
+            corner_radius=0,
+        ).pack(side="right")
+
+        DrakeButton(
+            top_bar,
+            text="IMPORT JSON (SC)",
+            command=self._import_json_components,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=130,
+            height=20,
+            font=("Segoe UI", 9, "bold"),
+            corner_radius=0,
+        ).pack(side="right", padx=(0, 6))
+
+        # Recherche
+        search_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        search_bar.pack(fill="x", padx=20, pady=(4, 4))
+        self.comp_search_entry = DrakeEntry(
+            search_bar, placeholder_text="SEARCH COMPONENTS...", height=32
+        )
+        self.comp_search_entry.pack(fill="x")
+        self.comp_search_entry.bind("<KeyRelease>", lambda _e: self.run_component_scan())
+
+        # Liste (haut)
+        self.comp_list_scroll = ctk.CTkScrollableFrame(
+            parent,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        self.comp_list_scroll.pack(fill="both", expand=True, padx=20)
+
+        # Terminal stats (bas)
+        stats_panel = ctk.CTkFrame(parent, fg_color="transparent", height=300)
+        stats_panel.pack(fill="x", padx=20, pady=(8, 20))
+        stats_panel.pack_propagate(False)
+
+        DrakeTitle4(stats_panel, "COMPONENT STATS").pack(anchor="w", pady=(0, 2))
+        self.comp_stats_terminal = DrakeTerminal(stats_panel)
+        self.comp_stats_terminal.pack(fill="both", expand=True)
+        self.comp_stats_terminal.insert("end", "> Click a component to inspect.\n", "ACCENT")
+
+        self.run_component_scan()
+
+    def open_add_component_popup(self):
+        """Ouvre le popup de création / ajout de composant."""
+        if getattr(self, "_add_comp_popup", None) is not None:
+            try:
+                if self._add_comp_popup.winfo_exists():
+                    self._add_comp_popup.lift()
+                    self._add_comp_popup.focus_force()
+                    return
+            except Exception:
+                pass
+            self._add_comp_popup = None
+
+        popup = DrakeConfig.create_modal_window(
+            parent=self,
+            title="ADD COMPONENT",
+            geometry="340x480",
+            fg_color=DrakeConfig.BG_MAIN,
+            resizable=False,
+        )
+        self._add_comp_popup = popup
+        popup.protocol("WM_DELETE_WINDOW", self._close_add_component_popup)
+
+        scroll = ctk.CTkScrollableFrame(popup, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=15, pady=15)
+
+        DrakeTitle2(scroll, text="ADD COMPONENT").pack(pady=(0, 10))
+
+        categories = self._get_all_component_categories()
+
+        DrakeTitle4(scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
+        self.new_comp_category = DrakeComboBox(scroll, values=categories, command=self.on_category_change)
+        self.new_comp_category.pack(pady=5, padx=10, fill="x")
+
+        DrakeTitle4(scroll, "MODULE TYPE").pack(pady=(0, 2), padx=10)
+        self.new_comp_type = DrakeComboBox(scroll, values=[])
+        self.new_comp_type.pack(pady=5, padx=10, fill="x")
+
+        self.new_comp_name = DrakeEntry(scroll, placeholder_text="MODEL NAME (ex: FR-66)")
+        self.new_comp_name.pack(pady=5, padx=10, fill="x")
+
+        self.new_comp_brand = DrakeEntry(scroll, placeholder_text="MANUFACTURER (ex: AEGIS)")
+        self.new_comp_brand.pack(pady=5, padx=10, fill="x")
+
+        DrakeTitle4(scroll, "SIZE").pack(pady=(0, 2), padx=10)
+        self.new_comp_size = DrakeComboBox(scroll, values=["0", "1", "2", "3", "4", "5"])
+        self.new_comp_size.pack(pady=5, padx=10, fill="x")
+
+        DrakeTitle4(scroll, "GRADE").pack(pady=(0, 2), padx=10)
+        self.new_comp_grade = DrakeComboBox(scroll, values=["A", "B", "C", "D"])
+        self.new_comp_grade.set("C")
+        self.new_comp_grade.pack(pady=5, padx=10, fill="x")
+
+        DrakeButton(scroll, text="SAVE TO DATABASE", command=self.save_new_component).pack(
+            pady=(10, 4), padx=10, fill="x"
+        )
+        DrakeButton(
+            scroll, text="CLOSE",
+            command=self._close_add_component_popup,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+        ).pack(pady=(0, 4), padx=10, fill="x")
+
+        default_cat = categories[0] if categories else "SYSTEMS"
+        self.new_comp_category.set(default_cat)
+        self.on_category_change(default_cat)
+
+    def _close_add_component_popup(self):
+        if getattr(self, "_add_comp_popup", None) is not None:
+            try:
+                self._add_comp_popup.destroy()
+            except Exception:
+                pass
+            self._add_comp_popup = None
 
     def _widget_exists(self, attr_name):
         widget = getattr(self, attr_name, None)
@@ -186,140 +339,33 @@ class ShipFrame(ctk.CTkFrame):
         return merged
 
     def _close_component_manager(self):
-        if self.component_popup is not None:
-            try:
-                self.component_popup.destroy()
-            except Exception:
-                pass
-            self.component_popup = None
+        pass  # conservé pour compat (plus de popup)
 
     def open_component_manager(self):
-        """Ouvre la fenêtre d'édition des composants."""
-        if self.component_popup is not None:
-            try:
-                if self.component_popup.winfo_exists():
-                    self.component_popup.lift()
-                    self.component_popup.focus_force()
-                    return
-            except Exception:
-                self.component_popup = None
-
-        self.component_popup = DrakeConfig.create_modal_window(
-            parent=self,
-            title="FLEET - COMPONENT MANAGER",
-            geometry="980x620",
-            fg_color=DrakeConfig.BG_MAIN,
-            resizable=True,
-        )
-        self.component_popup.protocol("WM_DELETE_WINDOW", self._close_component_manager)
-
-        container = ctk.CTkFrame(self.component_popup, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=20, pady=20)
-
-        DrakeTitle2(container, text="COMPONENT DATABASE").pack(pady=(0, 10))
-
-        content = ctk.CTkFrame(container, fg_color="transparent")
-        content.pack(fill="both", expand=True)
-
-        self.add_comp_frame = ctk.CTkFrame(content, width=250, fg_color=DrakeConfig.BG_MAIN)
-        self.add_comp_frame.pack(side="left", fill="y", padx=(0, 10))
-        self.add_comp_frame.pack_propagate(False)
-
-        self.add_comp_scroll = ctk.CTkScrollableFrame(self.add_comp_frame, fg_color="transparent")
-        self.add_comp_scroll.pack(fill="both", expand=True, padx=0, pady=0)
-
-        DrakeTitle2(self.add_comp_scroll, text="ADD COMPONENT").pack(pady=15)
-
-        categories = self._get_all_component_categories()
-
-        DrakeTitle4(self.add_comp_scroll, "SLOT CATEGORY").pack(pady=(0, 2), padx=10)
-        self.new_comp_category = DrakeComboBox(
-            self.add_comp_scroll,
-            values=categories,
-            command=self.on_category_change,
-        )
-        self.new_comp_category.pack(pady=5, padx=15, fill="x")
-
-        DrakeTitle4(self.add_comp_scroll, "MODULE TYPE").pack(pady=(0, 2), padx=10)
-        self.new_comp_type = DrakeComboBox(self.add_comp_scroll, values=[])
-        self.new_comp_type.pack(pady=5, padx=15, fill="x")
-
-        self.new_comp_name = DrakeEntry(self.add_comp_scroll, placeholder_text="MODEL NAME (ex: FR-66)")
-        self.new_comp_name.pack(pady=5, padx=15, fill="x")
-
-        self.new_comp_brand = DrakeEntry(self.add_comp_scroll, placeholder_text="MANUFACTURER (ex: AEGIS)")
-        self.new_comp_brand.pack(pady=5, padx=15, fill="x")
-
-        DrakeTitle4(self.add_comp_scroll, "SIZE").pack(pady=(0, 2), padx=10)
-        self.new_comp_size = DrakeComboBox(self.add_comp_scroll, values=["0", "1", "2", "3", "4", "5"])
-        self.new_comp_size.pack(pady=5, padx=15, fill="x")
-
-        DrakeTitle4(self.add_comp_scroll, "GRADE").pack(pady=(0, 2), padx=10)
-        self.new_comp_grade = DrakeComboBox(self.add_comp_scroll, values=["A", "B", "C", "D"])
-        self.new_comp_grade.set("C")
-        self.new_comp_grade.pack(pady=5, padx=15, fill="x")
-
-        DrakeButton(
-            self.add_comp_scroll,
-            text="SAVE TO DATABASE",
-            command=self.save_new_component,
-        ).pack(pady=(0, 8), padx=15, fill="x")
-
-        self.update_selectors()
-
-        # Initialisation par défaut
-        default_cat = categories[0] if categories else "SYSTEMS"
-        self.new_comp_category.set(default_cat)
-        self.on_category_change(default_cat)
-
-        self.comp_list_scroll = ctk.CTkScrollableFrame(
-            content,
-            label_text="REGISTERED COMPONENTS",
-            fg_color=DrakeConfig.BG_TERMINAL,
-            label_text_color=DrakeConfig.TEXT_SECONDARY,
-            corner_radius=0,
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
-        )
-        self.comp_list_scroll.pack(side="right", fill="both", expand=True)
-
-        self.run_component_scan()
+        """Bascule vers l'onglet COMPONENTS."""
+        try:
+            self.tabview.set("COMPONENTS")
+        except Exception:
+            pass
 
         # --- ONGLET LOADOUT ---
 
     def setup_loadout_tab(self):
-        """Interface d'équipement avec contrôle à gauche et slots à droite."""
-        DrakeButton(
-            self.tab_loadout,
-            text="EDIT COMPONENTS",
-            command=self.open_component_manager,
-            fg_color="transparent",
-            border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
-            text_color=DrakeConfig.TEXT_SECONDARY,
-            hover_color=DrakeConfig.BG_PANEL,
-            width=100,
-            height=20,
-            font=("Segoe UI", 9, "bold"),
-            corner_radius=0,
-        ).pack(anchor="ne", padx=20, pady=(8, 2))
-
+        """Interface d'équipement : barre de contrôle en haut, slots au centre, terminal en bas."""
         self.lo_container = ctk.CTkFrame(self.tab_loadout, fg_color="transparent")
-        self.lo_container.pack(fill="both", expand=True, padx=20, pady=(4, 20))
+        self.lo_container.pack(fill="both", expand=True, padx=16, pady=(8, 12))
 
-        # --- PANNEAU DE CONTRÔLE (GAUCHE) ---
-        ctrl_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_MAIN, width=250)
-        ctrl_panel.pack(side="left", fill="y", padx=(0, 10))
-        ctrl_panel.pack_propagate(False)
+        # ── BARRE SUPÉRIEURE (ship + profil) ─────────────────────────────
+        top_bar = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_PANEL,
+                               corner_radius=6, border_width=1,
+                               border_color=DrakeConfig.BORDER_COLOR,
+                               height=46)
+        top_bar.pack(fill="x", pady=(0, 8))
+        top_bar.pack_propagate(False)
 
-        ctrl_scroll = ctk.CTkScrollableFrame(ctrl_panel, fg_color="transparent")
-        ctrl_scroll.pack(fill="both", expand=True, padx=0, pady=0)
-
-        DrakeTitle2(ctrl_scroll, text="SHIP SELECTION").pack(pady=(15, 5))
-
-        # Champ de recherche ship avec suggestions (style Contracts target/client)
-        self.lo_ship_selector = DrakeEntry(ctrl_scroll, placeholder_text="SEARCH SHIP (NAME)...")
-        self.lo_ship_selector.pack(pady=5, padx=15, fill="x")
+        # Ship search — s'étire pour prendre l'espace restant
+        self.lo_ship_selector = DrakeEntry(top_bar, placeholder_text="SEARCH SHIP...", height=30)
+        self.lo_ship_selector.pack(side="left", fill="x", expand=True, padx=(10, 2), pady=8)
         self._loadout_suggestion_manager.attach(
             self.lo_ship_selector,
             get_items=self._loadout_ship_suggestions,
@@ -332,43 +378,60 @@ class ShipFrame(ctk.CTkFrame):
         self.lo_ship_selector.bind("<KeyRelease>", self._on_loadout_ship_text_changed, add="+")
 
         self.lo_ship_cycle_indicator = ctk.CTkLabel(
-            ctrl_scroll,
-            text="",
-            font=("Consolas", 9),
-            text_color=DrakeConfig.TEXT_SECONDARY,
+            top_bar, text="", width=24,
+            font=("Consolas", 9), text_color=DrakeConfig.TEXT_SECONDARY,
         )
-        self.lo_ship_cycle_indicator.pack(pady=(0, 4), padx=15, anchor="e")
+        self.lo_ship_cycle_indicator.pack(side="left", padx=(0, 6))
 
-        DrakeTitle4(ctrl_scroll, text="LOADOUT PROFILE").pack(pady=(15, 0))
+        # Séparateur
+        ctk.CTkFrame(top_bar, fg_color=DrakeConfig.BORDER_COLOR,
+                     width=1).pack(side="left", fill="y", pady=6)
 
-        # Nouveau sélecteur de profils
+        # Profil selector — largeur fixe, ne s'étire pas
         self.lo_profile_selector = DrakeComboBox(
-            ctrl_scroll, 
-            values=["DEFAULT"], 
-            command=self.action_load_profile
+            top_bar, values=["DEFAULT"], command=self.action_load_profile, width=160,
         )
         self.lo_profile_selector.set("DEFAULT")
-        self.lo_profile_selector.pack(pady=5, padx=15, fill="x")
+        self.lo_profile_selector.pack(side="left", padx=10)
+        self.lo_profile_selector.pack_propagate(False)
 
-        self.lo_new_profile = DrakeEntry(ctrl_scroll, placeholder_text="NEW PROFILE NAME")
-        self.lo_new_profile.pack(pady=(8, 5), padx=15, fill="x")
+        # Séparateur
+        ctk.CTkFrame(top_bar, fg_color=DrakeConfig.BORDER_COLOR,
+                     width=1).pack(side="left", fill="y", pady=6)
 
-        DrakeButton(ctrl_scroll, text="CREATE PROFILE", command=self.action_create_profile).pack(pady=(0, 8), padx=15, fill="x")
+        # Bouton CREATE tout à droite
+        DrakeButton(top_bar, text="CREATE", command=self.action_create_profile,
+                    width=70, height=30).pack(side="right", padx=(0, 10))
 
-        # Terminal de résumé
-        DrakeTitle4(ctrl_scroll, text="CURRENT CONFIGURATION").pack(pady=(20, 0), padx=15)
-        self.lo_status_terminal = DrakeTerminal(ctrl_scroll, height=250)
-        self.lo_status_terminal.pack(pady=5, padx=15, fill="x")
+        # New profile entry — largeur fixe, ne s'étire pas
+        self.lo_new_profile = DrakeEntry(top_bar, placeholder_text="NEW PROFILE", width=160, height=30)
+        self.lo_new_profile.pack(side="right", padx=(0, 6))
 
-        # --- PANNEAU DES SLOTS (DROITE) ---
+        # ── ZONE CENTRALE : slots ─────────────────────────────────────────
+        center = ctk.CTkFrame(self.lo_container, fg_color="transparent")
+        center.pack(fill="both", expand=True, pady=(0, 8))
+
         self.lo_slots_frame = ctk.CTkScrollableFrame(
-            self.lo_container, 
+            center,
             fg_color=DrakeConfig.BG_TERMINAL,
             label_text="HARDPOINT CONFIGURATION",
             label_font=("Orbitron", 12),
-            label_text_color=DrakeConfig.ACCENT_PRIMARY
+            label_text_color=DrakeConfig.ACCENT_PRIMARY,
         )
-        self.lo_slots_frame.pack(side="right", fill="both", expand=True)
+        self.lo_slots_frame.pack(fill="both", expand=True)
+
+        # ── TERMINAL DE STATS (bas) ───────────────────────────────────────
+        stats_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_PANEL,
+                                   corner_radius=6, border_width=1,
+                                   border_color=DrakeConfig.BORDER_COLOR)
+        stats_panel.pack(fill="x")
+
+        ctk.CTkLabel(stats_panel, text="LOADOUT STATS",
+                     font=("Orbitron", 10, "bold"),
+                     text_color=DrakeConfig.ACCENT_PRIMARY).pack(anchor="w", padx=12, pady=(6, 2))
+
+        self.lo_status_terminal = DrakeTerminal(stats_panel, height=160)
+        self.lo_status_terminal.pack(fill="x", padx=10, pady=(0, 8))
 
         self.update_selectors()
 
@@ -861,13 +924,13 @@ class ShipFrame(ctk.CTkFrame):
         return lines
 
     def save_new_component(self):
-        """Sauvegarde un composant et rafraîchit les vues."""
+        """Sauvegarde un composant, rafraîchit la liste et ferme le popup."""
         if not self._widget_exists("new_comp_name"):
-            self.open_component_manager()
             return
 
         name = self.new_comp_name.get().strip().upper()
-        if not name: return
+        if not name:
+            return
 
         data = {
             "name": name,
@@ -876,14 +939,13 @@ class ShipFrame(ctk.CTkFrame):
             "category": self.new_comp_category.get(),
             "size": int(self.new_comp_size.get()),
             "grade": self.new_comp_grade.get(),
-            "stats": "{}"
         }
-        
+
         try:
             self.controller.ship.add_component_to_db(data)
-            self.new_comp_name.delete(0, "end")
             self.run_component_scan()
             self.update_selectors()
+            self._close_add_component_popup()
         except Exception as e:
             self.controller.log(f"Error adding component: {e}", source="FLEET")
 
@@ -913,22 +975,51 @@ class ShipFrame(ctk.CTkFrame):
                 self.refresh_loadout_view(ship)
 
     def run_component_scan(self):
-        """Affiche le catalogue de composants dans une liste scrollable."""
+        """Affiche le catalogue de composants filtré dans la liste scrollable."""
         if not self._widget_exists("comp_list_scroll"):
             return
 
         for widget in self.comp_list_scroll.winfo_children():
             widget.destroy()
 
-        rows = self.controller.ship.list_components_catalog()
+        query = ""
+        if self._widget_exists("comp_search_entry"):
+            try:
+                query = self.comp_search_entry.get().strip().upper()
+                placeholder = str(self.comp_search_entry.cget("placeholder_text") or "").strip().upper()
+                if query == placeholder:
+                    query = ""
+            except Exception:
+                query = ""
+
+        LIMIT = 50
+        all_rows = self.controller.ship.list_components_catalog()
+        if query:
+            all_rows = [
+                r for r in all_rows
+                if query in str(r[0]).upper()
+                or query in str(r[1]).upper()
+                or query in str(r[2]).upper()
+                or query in str(r[3]).upper()
+            ]
+        rows = all_rows[:LIMIT]
+
         if not rows:
             ctk.CTkLabel(
                 self.comp_list_scroll,
-                text="NO COMPONENT REGISTERED",
+                text="NO COMPONENT REGISTERED" if not query else "NO RESULTS",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=12, pady=12)
             return
+
+        if len(all_rows) > LIMIT:
+            ctk.CTkLabel(
+                self.comp_list_scroll,
+                text=f"Showing {LIMIT} / {len(all_rows)} — use search to filter",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(anchor="w", padx=12, pady=(6, 2))
 
         last_cat = None
         for r in rows:
@@ -965,8 +1056,13 @@ class ShipFrame(ctk.CTkFrame):
                 self._render_component_display_row(card, component)
 
     def _render_component_display_row(self, parent, component):
+        # Clic sur la card → afficher les stats
+        card_click = lambda e, n=component["name"]: self._show_component_stats(n)
+        parent.bind("<Button-1>", card_click)
+
         left = ctk.CTkFrame(parent, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True, padx=10, pady=8)
+        left.bind("<Button-1>", card_click)
 
         ctk.CTkLabel(
             left,
@@ -1018,6 +1114,102 @@ class ShipFrame(ctk.CTkFrame):
             hover_color="#330000",
             command=lambda name=component["name"]: self.delete_component_row(name),
         ).pack(side="left")
+
+    def _show_component_stats(self, component_name: str):
+        """Affiche les stats détaillées d'un composant dans le terminal de droite."""
+        if not self._widget_exists("comp_stats_terminal"):
+            return
+        t = self.comp_stats_terminal
+        t.delete("0.0", "end")
+
+        from models.component import Component as _Comp
+        rows = self.controller.ship.app.query(
+            "SELECT " + ", ".join(_Comp.COLUMNS) + " FROM components WHERE UPPER(name) = UPPER(?)",
+            (component_name,),
+        )
+        if not rows:
+            t.insert("end", f"> {component_name} not found.\n", "ACCENT")
+            return
+
+        c = _Comp.from_db_row(rows[0])
+
+        t.insert("end", f" {c.name}\n", "ACCENT")
+        t.insert("end", f" {c.brand}  |  {c.type_name}\n")
+        t.insert("end", f" {c.category}  S{c.size}  GR-{c.grade}\n")
+        t.insert("end", " " + "─" * 28 + "\n")
+
+        def _line(label, value, unit=""):
+            if value:
+                t.insert("end", f" {label:<22} {value}{unit}\n")
+
+        # Universels
+        _line("POWER DRAW", f"{c.stat_power_draw:.2f}", " seg")
+        _line("EM GEN", f"{c.stat_em_gen:.0f}")
+        _line("HEAT GEN", f"{c.stat_heat_gen:.0f}")
+
+        # Bouclier
+        if c.stat_shield_hp:
+            t.insert("end", " [SHIELD]\n", "ACCENT")
+            _line("HP", f"{c.stat_shield_hp:,}")
+            _line("REGEN /s", f"{c.stat_shield_regen:.0f}")
+            _line("DAMAGED DELAY", f"{c.stat_regen_delay:.2f}", " s")
+            _line("DOWNED DELAY", f"{c.stat_shield_downed_delay:.2f}", " s")
+            _line("DECAY RATIO", f"{c.stat_shield_decay_ratio:.0%}")
+            _line("ABS PHYS", f"{c.stat_absorption_phys:.0%}")
+            _line("RES PHYS", f"{c.stat_resistance_phys:.0%}")
+            _line("RES DIST", f"{c.stat_resistance_dist:.0%}")
+
+        # Armes
+        if c.stat_dps:
+            t.insert("end", " [WEAPON]\n", "ACCENT")
+            if c.stat_fire_mode:
+                _line("MODE", c.stat_fire_mode)
+            _line("DPS", f"{c.stat_dps:.1f}")
+            _line("ALPHA", f"{c.stat_alpha:.1f}")
+            if c.stat_dmg_phys:
+                _line("  PHYS", f"{c.stat_dmg_phys:.1f}")
+            if c.stat_dmg_energy:
+                _line("  ENERGY", f"{c.stat_dmg_energy:.1f}")
+            if c.stat_dmg_distortion:
+                _line("  DISTORT", f"{c.stat_dmg_distortion:.1f}")
+            _line("RANGE", f"{c.stat_range:.0f}", " m")
+            _line("FIRE RATE", f"{c.stat_fire_rate:.0f}", " rpm")
+            if c.stat_projectile_speed:
+                _line("PROJ SPEED", f"{c.stat_projectile_speed:.0f}", " m/s")
+            if c.stat_ammo_count:
+                _line("AMMO", f"{c.stat_ammo_count}")
+
+        # Missiles
+        if c.stat_dmg:
+            t.insert("end", " [MISSILE]\n", "ACCENT")
+            _line("DAMAGE", f"{c.stat_dmg:.0f}")
+
+        # Énergie
+        if c.stat_power_output:
+            t.insert("end", " [POWER PLANT]\n", "ACCENT")
+            _line("OUTPUT", f"{c.stat_power_output:.2f}", " seg")
+
+        # Refroidisseur
+        if c.stat_cooling_rate:
+            t.insert("end", " [COOLER]\n", "ACCENT")
+            _line("COOLING RATE", f"{c.stat_cooling_rate:.2f}", " seg/s")
+
+        # QT Drive
+        if c.stat_qt_speed:
+            t.insert("end", " [QUANTUM DRIVE]\n", "ACCENT")
+            _line("SPEED", f"{c.stat_qt_speed/1e6:.0f}", " Mm/s")
+            _line("SPOOL", f"{c.stat_qt_spool:.1f}", " s")
+            _line("EFFICIENCY", f"{c.stat_qt_range:.2f}", " Gm/SCU")
+            _line("FUEL USE", f"{c.stat_qt_fuel_usage:.4f}", " SCU/Gm")
+
+        # Radar
+        if c.stat_detection_range:
+            t.insert("end", " [RADAR]\n", "ACCENT")
+            # Si >= 1000 c'est une sensibilité proxy (×10000), on affiche en %
+            if c.stat_detection_range >= 1000:
+                _line("EM SENSITIVITY", f"{c.stat_detection_range/10000:.0%}")
+            else:
+                _line("DETECT RANGE", f"{c.stat_detection_range:.0f}", " m")
 
     def _render_component_edit_row(self, parent, component):
         editor = ctk.CTkFrame(parent, fg_color="transparent")
@@ -1151,7 +1343,7 @@ class ShipFrame(ctk.CTkFrame):
         name = (component_name or "").strip().upper()
         if not name:
             return
-        if not DrakePopup.yesno("SYSTEM", f"DELETE COMPONENT {name} ?", parent=self.component_popup):
+        if not DrakePopup.yesno("SYSTEM", f"DELETE COMPONENT {name} ?", parent=self):
             return
         try:
             self.controller.ship.delete_component_from_db(name)
@@ -1532,7 +1724,7 @@ class ShipFrame(ctk.CTkFrame):
         self._render_loadout_global_actions()
 
     def _refresh_loadout_status_terminal_from_widgets(self, ship_name=None):
-        """Rafraîchit le résumé avec les valeurs actuellement visibles dans les combos."""
+        """Calcule et affiche les stats agrégées du loadout dans le terminal."""
         if not self._widget_exists("lo_status_terminal"):
             return
 
@@ -1540,19 +1732,150 @@ class ShipFrame(ctk.CTkFrame):
             ship_name = self.lo_ship_selector.get().strip().upper()
         profile_name = self._get_active_profile()
 
-        self.lo_status_terminal.delete("0.0", "end")
-        self.lo_status_terminal.insert("end", f"> ANALYZING {ship_name} [{profile_name}]...\n", "ACCENT")
+        t = self.lo_status_terminal
 
-        for category, subtype_name, slot_index, combo in self.lo_slot_widgets:
-            subtype_label = subtype_name if subtype_name != "GENERIC" else "ALL TYPES"
+        if not getattr(self, "_lo_terminal_tags_ready", False):
+            t.tag_config("HDR",  foreground=DrakeConfig.ACCENT_PRIMARY)
+            t.tag_config("VAL",  foreground=DrakeConfig.TEXT_MAIN)
+            t.tag_config("DIM",  foreground=DrakeConfig.TEXT_SECONDARY)
+            t.tag_config("WARN", foreground="#ff6600")
+            t.tag_config("OK",   foreground="#44cc44")
+            t.tag_config("MUTED",foreground="#505050")
+            self._lo_terminal_tags_ready = True
+
+        t.delete("0.0", "end")
+
+        # ── Collecte les noms montés ─────────────────────────────────────
+        mounted_names = []
+        for _cat, _sub, _idx, combo in self.lo_slot_widgets:
             try:
-                selection = (combo.get() or "EMPTY").strip().upper() or "EMPTY"
+                sel = (combo.get() or "EMPTY").strip().upper()
             except Exception:
-                selection = "EMPTY"
-            self.lo_status_terminal.insert(
-                "end",
-                f"[{category}::{subtype_label}] SLT{slot_index + 1}: {selection}\n",
-            )
+                sel = "EMPTY"
+            if sel and sel != "EMPTY":
+                mounted_names.append(sel)
+
+        t.insert("end", f" {ship_name}", "HDR")
+        t.insert("end", f"  ·  {profile_name}\n", "DIM")
+        t.insert("end", " " + "─" * 48 + "\n", "MUTED")
+
+        if not mounted_names:
+            t.insert("end", " NO COMPONENTS MOUNTED\n", "MUTED")
+            return
+
+        # ── Charge depuis DB ─────────────────────────────────────────────
+        from models.component import Component as _Comp
+        cols_sql = ", ".join(_Comp.COLUMNS)
+        ph = ", ".join(["?"] * len(mounted_names))
+        rows = self.controller.ship.app.query(
+            f"SELECT {cols_sql} FROM components WHERE UPPER(name) IN ({ph})",
+            [n.upper() for n in mounted_names],
+        )
+        comps = [_Comp.from_db_row(r) for r in rows]
+
+        # ── helpers ──────────────────────────────────────────────────────
+        COL = 26  # largeur colonne gauche
+
+        def _hdr(title):
+            t.insert("end", f"\n {title}\n", "HDR")
+
+        def _row(l1, v1, l2="", v2="", u1="", u2="", tag1="VAL", tag2="VAL"):
+            """Deux colonnes sur une ligne."""
+            left  = f"  {l1:<{COL}} {v1}{u1}"
+            if l2:
+                right = f"   {l2:<{COL}} {v2}{u2}"
+                t.insert("end", left, tag1)
+                t.insert("end", right + "\n", tag2)
+            else:
+                t.insert("end", left + "\n", tag1)
+
+        def _sep():
+            t.insert("end", "  " + "·" * 46 + "\n", "MUTED")
+
+        # ── ARMES ────────────────────────────────────────────────────────
+        weapons = [c for c in comps if (c.category or "").upper() == "WEAPON" and c.stat_dps > 0]
+        if weapons:
+            total_dps    = sum(c.stat_dps    for c in weapons)
+            total_alpha  = sum(c.stat_alpha  for c in weapons)
+            total_phys   = sum(c.stat_dmg_phys        for c in weapons)
+            total_energy = sum(c.stat_dmg_energy      for c in weapons)
+            total_dist   = sum(c.stat_dmg_distortion  for c in weapons)
+            _hdr(f"[WEAPONS ×{len(weapons)}]")
+            _row("DPS TOTAL",   f"{total_dps:.0f}", "ALPHA TOTAL",  f"{total_alpha:.0f}", " dps", " dmg")
+            if total_phys   > 0: _row("  PHYS DMG",  f"{total_phys:.0f}")
+            if total_energy > 0: _row("  ENERGY DMG",f"{total_energy:.0f}", "  DISTORT DMG", f"{total_dist:.0f}" if total_dist else "—")
+            _sep()
+            for w in weapons:
+                modes = f"  {w.stat_fire_mode}" if w.stat_fire_mode else ""
+                t.insert("end", f"  + {w.name:<35} S{w.size}  {w.stat_dps:>6.0f} dps{modes}\n", "DIM")
+
+        # ── BOUCLIERS ────────────────────────────────────────────────────
+        shields = [c for c in comps if (c.type_name or "").upper() == "SHIELD" and c.stat_shield_hp > 0]
+        if shields:
+            total_hp        = sum(c.stat_shield_hp    for c in shields)
+            total_regen     = sum(c.stat_shield_regen for c in shields)
+            avg_delay       = sum(c.stat_regen_delay  for c in shields) / len(shields)
+            avg_downed      = sum(c.stat_shield_downed_delay for c in shields) / len(shields)
+            avg_abs_phys    = sum(c.stat_absorption_phys   for c in shields) / len(shields)
+            avg_res_phys    = sum(c.stat_resistance_phys   for c in shields) / len(shields)
+            avg_res_dist    = sum(c.stat_resistance_dist   for c in shields) / len(shields)
+            _hdr(f"[SHIELDS ×{len(shields)}]")
+            _row("HP TOTAL",       f"{total_hp:.0f}",   "REGEN TOTAL",  f"{total_regen:.1f}", " hp", " hp/s")
+            _row("REGEN DELAY",    f"{avg_delay:.1f}",  "DOWNED DELAY", f"{avg_downed:.1f}", " s", " s")
+            if avg_abs_phys  > 0: _row("ABS PHYS",  f"{avg_abs_phys:.0%}",  "RES PHYS", f"{avg_res_phys:.0%}")
+            if avg_res_dist  > 0: _row("RES DISTORT", f"{avg_res_dist:.0%}")
+
+        # ── ÉNERGIE / COOLING ────────────────────────────────────────────
+        powerplants = [c for c in comps if (c.type_name or "").upper() == "POWER PLANT" and c.stat_power_output > 0]
+        coolers     = [c for c in comps if (c.type_name or "").upper() == "COOLER"      and c.stat_cooling_rate > 0]
+        total_power   = sum(c.stat_power_output for c in powerplants)
+        total_cooling = sum(c.stat_cooling_rate for c in coolers)
+        total_draw    = sum(c.stat_power_draw for c in comps)
+        total_heat    = sum(c.stat_heat_gen   for c in comps)
+        if powerplants or coolers:
+            _hdr("[SYSTEMS]")
+            ptag = "WARN" if total_draw > total_power   else "OK"
+            ctag = "WARN" if total_heat > total_cooling else "OK"
+            _row("POWER  avail/draw",
+                 f"{total_power:.1f} / {total_draw:.1f}", tag1=ptag)
+            _row("COOLING avail/heat",
+                 f"{total_cooling:.1f} / {total_heat:.1f}", tag1=ctag)
+            for pp in powerplants:
+                t.insert("end", f"  + {pp.name:<35} {pp.stat_power_output:.1f} seg\n", "DIM")
+            for cl in coolers:
+                t.insert("end", f"  + {cl.name:<35} {cl.stat_cooling_rate:.1f} seg/s\n", "DIM")
+
+        # ── QUANTUM DRIVE ────────────────────────────────────────────────
+        qt_drives = [c for c in comps if (c.type_name or "").upper() == "QUANTUM DRIVE" and c.stat_qt_speed > 0]
+        if qt_drives:
+            q = qt_drives[0]
+            _hdr("[QUANTUM DRIVE]")
+            _row("SPEED",     f"{q.stat_qt_speed:.0f}",
+                 "SPOOL",     f"{q.stat_qt_spool:.1f}",    " Mm/s", " s")
+            _row("FUEL/GM",   f"{q.stat_qt_fuel_usage:.4f}" if q.stat_qt_fuel_usage else "—",
+                 "RANGE",     f"{q.stat_qt_range:.0f}"     if q.stat_qt_range       else "—",
+                 "", " GM/SCU")
+            # Calcul voyage : Stanton ~40 Gm ; Pyro ~60 Gm
+            if q.stat_qt_speed > 0:
+                _sep()
+                for dest, dist_mm in [("STANTON cross", 40_000), ("PYRO cross", 60_000)]:
+                    secs = dist_mm / q.stat_qt_speed + q.stat_qt_spool
+                    mins = int(secs // 60); s = int(secs % 60)
+                    t.insert("end", f"  {dest:<24} ~{mins}m{s:02d}s\n", "DIM")
+
+        # ── RADAR / DÉTECTION ────────────────────────────────────────────
+        radars = [c for c in comps if (c.type_name or "").upper() == "RADAR" and c.stat_detection_range > 0]
+        total_em  = sum(c.stat_em_gen   for c in comps if c.stat_em_gen   > 0)
+        total_ir  = sum(c.stat_heat_gen for c in comps if c.stat_heat_gen > 0)
+        if radars or total_em or total_ir:
+            _hdr("[DETECTION & SIGNATURE]")
+            if radars:
+                det = max(c.stat_detection_range for c in radars)
+                _row("RADAR RANGE",  f"{det:.0f}", tag1="VAL")
+            if total_em > 0:
+                _row("EM SIGNATURE", f"{total_em:.0f}", "IR SIGNATURE", f"{total_ir:.0f}" if total_ir else "—")
+
+        t.insert("end", "\n", "MUTED")
 
     def _render_loadout_global_actions(self):
         """Affiche les actions globales à la fin de la liste des slots (zone droite)."""

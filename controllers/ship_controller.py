@@ -86,11 +86,16 @@ class ShipController:
         except (ValueError, TypeError):
             return default
 
+    @staticmethod
+    def _strip_size_suffix(subtype_name: str) -> str:
+        """Strip trailing size label: 'GUN S3' → 'GUN', 'SHIELD S1' → 'SHIELD'."""
+        import re
+        return re.sub(r'\s+S\d+$', '', (subtype_name or '').strip().upper())
+
     def _is_generic_subtype(self, category: str, subtype_name: str) -> bool:
-        """WEAPON subgroups (S1/S3/etc.) are logical slot groups, not component type filters."""
-        cat = (category or "").strip().upper()
-        subtype = (subtype_name or "GENERIC").strip().upper()
-        return subtype == "GENERIC" or cat == "WEAPON"
+        """True when the subtype carries no type_name filtering (show all of category)."""
+        stripped = self._strip_size_suffix(subtype_name)
+        return not stripped or stripped == "GENERIC"
 
     def save_ship(self, data_dict: dict) -> None:
         ship = Ship(**{
@@ -420,22 +425,99 @@ class ShipController:
         else:
             messagebox.showinfo("UNITOOL — IMPORT JSON", msg)
 
-    def add_component_to_db(self, data: dict):
-        sql = """
-            INSERT OR REPLACE INTO components
-            (name, brand, type_name, category, size, grade, stats)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """
-        params = (
-            data["name"].upper(),
-            data["brand"].upper(),
-            data["type_name"].upper(),
-            data.get("category", "SYSTEMS").upper(),
-            self._safe_int(data["size"]),
-            data["grade"].upper(),
-            data.get("stats", "{}"),
+    def import_components_from_json(self) -> None:
+        """Importe un ou plusieurs fichiers JSON SC data miner (items individuels)."""
+        choice = messagebox.askquestion(
+            "IMPORT COMPONENTS JSON",
+            "Importer depuis un dossier ?\n\nOui = choisir un dossier\nNon = choisir des fichiers",
+            icon="question",
         )
-        self.app.commit(sql, params)
+        if choice == "yes":
+            folder = filedialog.askdirectory(title="IMPORT SC COMPONENTS — Choisir un dossier")
+            if not folder:
+                return
+            file_paths = [
+                os.path.join(root, fname)
+                for root, _dirs, files in os.walk(folder)
+                for fname in files
+                if fname.lower().endswith(".json")
+            ]
+            if not file_paths:
+                messagebox.showinfo("UNITOOL — IMPORT JSON", "Aucun fichier .json trouvé dans ce dossier.")
+                return
+        else:
+            file_paths = filedialog.askopenfilenames(
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="IMPORT SC COMPONENT DATA (JSON)",
+            )
+            if not file_paths:
+                return
+
+        imported, skipped, errors = 0, 0, []
+        for path in file_paths:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                comp = Component.from_sc_item_json(data)
+                if not comp:
+                    skipped += 1
+                    continue
+
+                # Upsert catégorie et type
+                self.app.commit(
+                    "INSERT OR IGNORE INTO component_categories (name) VALUES (?)",
+                    (comp.category,),
+                )
+                self.app.commit(
+                    "INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)",
+                    (comp.type_name, comp.category),
+                )
+
+                # Upsert composant avec toutes ses stats
+                cols = ", ".join(Component.COLUMNS)
+                placeholders = ", ".join(["?"] * len(Component.COLUMNS))
+                updates = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({placeholders}) "
+                    f"ON CONFLICT(name) DO UPDATE SET {updates}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+                if hasattr(self.app, "log"):
+                    self.app.log(
+                        f"COMPONENT IMPORT: {comp.name} [{comp.category}/{comp.type_name}] S{comp.size}{comp.grade}",
+                        source="FLEET",
+                    )
+            except json.JSONDecodeError as e:
+                errors.append(f"{os.path.basename(path)}: JSON error — {e}")
+            except Exception as e:
+                errors.append(f"{os.path.basename(path)}: {e}")
+
+        msg = f"Importé {imported} composant(s). Ignoré {skipped} fichier(s) non reconnus."
+        if errors:
+            msg += f"\n\nErreurs ({len(errors)}):\n" + "\n".join(errors)
+            messagebox.showwarning("UNITOOL — IMPORT COMPONENTS", msg)
+        else:
+            messagebox.showinfo("UNITOOL — IMPORT COMPONENTS", msg)
+
+    def add_component_to_db(self, data: dict):
+        comp = Component(
+            name=str(data.get("name") or "").strip().upper(),
+            brand=str(data.get("brand") or "UNKNOWN").strip().upper(),
+            type_name=str(data.get("type_name") or "UNDEFINED").strip().upper(),
+            category=str(data.get("category") or "SYSTEMS").strip().upper(),
+            size=self._safe_int(data.get("size") or 1),
+            grade=str(data.get("grade") or "C").strip().upper(),
+        )
+        cols = ", ".join(Component.COLUMNS)
+        placeholders = ", ".join(["?"] * len(Component.COLUMNS))
+        updates = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+        self.app.commit(
+            f"INSERT INTO components ({cols}) VALUES ({placeholders}) "
+            f"ON CONFLICT(name) DO UPDATE SET {updates}",
+            comp.to_db_tuple(),
+        )
 
     def update_component_in_db(self, original_name: str, data: dict) -> None:
         old_name = (original_name or "").strip().upper()
@@ -443,24 +525,21 @@ class ShipController:
         if not old_name or not new_name:
             raise ValueError("Invalid component name.")
 
-        params = (
-            new_name,
-            (data.get("brand") or "UNKNOWN").strip().upper(),
-            (data.get("type_name") or "GENERIC").strip().upper(),
-            (data.get("category") or "SYSTEMS").strip().upper(),
-            self._safe_int(data.get("size")),
-            (data.get("grade") or "C").strip().upper(),
-            data.get("stats", "{}"),
-            old_name,
-        )
-
         self.app.commit(
             """
             UPDATE components
-            SET name = ?, brand = ?, type_name = ?, category = ?, size = ?, grade = ?, stats = ?
+            SET name = ?, brand = ?, type_name = ?, category = ?, size = ?, grade = ?
             WHERE UPPER(name) = UPPER(?)
             """,
-            params,
+            (
+                new_name,
+                (data.get("brand") or "UNKNOWN").strip().upper(),
+                (data.get("type_name") or "GENERIC").strip().upper(),
+                (data.get("category") or "SYSTEMS").strip().upper(),
+                self._safe_int(data.get("size")),
+                (data.get("grade") or "C").strip().upper(),
+                old_name,
+            ),
         )
 
         if old_name != new_name:
@@ -682,10 +761,11 @@ class ShipController:
     def get_slot_data(self, ship_name, profile_name, category, subtype_name, max_size, slot_index):
         profile = self._normalize_profile(profile_name)
         subtype = (subtype_name or "GENERIC").strip().upper()
-        if self._is_generic_subtype(category, subtype):
+        base_type = self._strip_size_suffix(subtype)
+        if self._is_generic_subtype(category, base_type):
             available = self.get_compatible_components(category, max_size)
         else:
-            available = self.get_compatible_components_by_subtype(category, subtype, max_size)
+            available = self.get_compatible_components_by_subtype(category, base_type, max_size)
         sql = """
             SELECT component_name FROM ship_loadout
             WHERE ship_name = ? AND profile_name = ? AND category = ? AND subtype_name = ? AND slot_number = ?
@@ -697,6 +777,7 @@ class ShipController:
     def mount_component(self, ship_name, category, subtype_name, slot_index, component_name, profile_name="DEFAULT"):
         profile = self._normalize_profile(profile_name)
         subtype = (subtype_name or "GENERIC").strip().upper()
+        base_type = self._strip_size_suffix(subtype)
         ship = ship_name.upper()
         category_up = category.upper()
         try:
@@ -721,7 +802,7 @@ class ShipController:
                 comp_cat, comp_type, comp_size = comp_rows[0]
                 if (comp_cat or "").upper() != category_up:
                     return False
-                if (not self._is_generic_subtype(category_up, subtype)) and (comp_type or "").upper() != subtype:
+                if (not self._is_generic_subtype(category_up, base_type)) and (comp_type or "").upper() != base_type:
                     return False
 
                 spec_rows = self.app.query(
@@ -890,7 +971,7 @@ class ShipController:
                 if spec["category"] == new_comp.category.upper()
                 and (
                     self._is_generic_subtype(spec["category"], spec["subtype_name"])
-                    or spec["subtype_name"] == new_comp.type_name.upper()
+                    or self._strip_size_suffix(spec["subtype_name"]) == new_comp.type_name.upper()
                 )
                 and int(new_comp.size) <= int(spec["max_size"])
             ]
