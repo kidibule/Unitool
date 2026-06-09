@@ -271,7 +271,33 @@ def _m001_schema_initial(cursor):
             category  TEXT,
             size      INTEGER,
             grade     TEXT,
-            stats     TEXT,
+            -- Stats universels
+            stat_power_draw       REAL DEFAULT 0,
+            stat_em_gen           REAL DEFAULT 0,
+            stat_heat_gen         REAL DEFAULT 0,
+            -- Armes (gun / turret)
+            stat_dps              REAL DEFAULT 0,
+            stat_alpha            REAL DEFAULT 0,
+            stat_range            REAL DEFAULT 0,
+            stat_fire_rate        REAL DEFAULT 0,
+            stat_ammo_count       INTEGER DEFAULT 0,
+            -- Missiles / racks
+            stat_dmg              REAL DEFAULT 0,
+            -- Boucliers
+            stat_shield_hp        INTEGER DEFAULT 0,
+            stat_shield_regen     REAL DEFAULT 0,
+            stat_regen_delay      REAL DEFAULT 0,
+            -- Générateur d'énergie
+            stat_power_output     REAL DEFAULT 0,
+            -- Refroidisseur
+            stat_cooling_rate     REAL DEFAULT 0,
+            -- Quantum Drive
+            stat_qt_range         REAL DEFAULT 0,
+            stat_qt_speed         REAL DEFAULT 0,
+            stat_qt_spool         REAL DEFAULT 0,
+            stat_qt_fuel_usage    REAL DEFAULT 0,
+            -- Radar
+            stat_detection_range  REAL DEFAULT 0,
             FOREIGN KEY (type_name) REFERENCES component_types(name)
         )
     """)
@@ -814,6 +840,45 @@ def _m020_ships_armor_cooling(cursor):
     logger.info("  ships: armor & cooling columns added.")
 
 
+def _m021_components_typed_stats(cursor):
+    """Remplace le blob stats TEXT par des colonnes typées dans components.
+
+    Les stats sont désormais séparées par domaine :
+      - stats universels  (power_draw, em_gen, heat_gen)
+      - armes gun/turret  (dps, alpha, range, fire_rate, ammo_count)
+      - missiles          (dmg)
+      - boucliers         (shield_hp, shield_regen, regen_delay)
+      - énergie           (power_output)
+      - refroidisseur     (cooling_rate)
+      - quantum drive     (qt_range, qt_speed, qt_spool, qt_fuel_usage)
+      - radar             (detection_range)
+    """
+    new_cols = [
+        ("stat_power_draw",      "REAL DEFAULT 0"),
+        ("stat_em_gen",          "REAL DEFAULT 0"),
+        ("stat_heat_gen",        "REAL DEFAULT 0"),
+        ("stat_dps",             "REAL DEFAULT 0"),
+        ("stat_alpha",           "REAL DEFAULT 0"),
+        ("stat_range",           "REAL DEFAULT 0"),
+        ("stat_fire_rate",       "REAL DEFAULT 0"),
+        ("stat_ammo_count",      "INTEGER DEFAULT 0"),
+        ("stat_dmg",             "REAL DEFAULT 0"),
+        ("stat_shield_hp",       "INTEGER DEFAULT 0"),
+        ("stat_shield_regen",    "REAL DEFAULT 0"),
+        ("stat_regen_delay",     "REAL DEFAULT 0"),
+        ("stat_power_output",    "REAL DEFAULT 0"),
+        ("stat_cooling_rate",    "REAL DEFAULT 0"),
+        ("stat_qt_range",        "REAL DEFAULT 0"),
+        ("stat_qt_speed",        "REAL DEFAULT 0"),
+        ("stat_qt_spool",        "REAL DEFAULT 0"),
+        ("stat_qt_fuel_usage",   "REAL DEFAULT 0"),
+        ("stat_detection_range", "REAL DEFAULT 0"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "components", col_name, col_type)
+    logger.info("  components: typed stat columns added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -835,6 +900,7 @@ MIGRATIONS = [
     (18, _m018_org_events_location_participants),
     (19, _m019_ships_sc_fields),
     (20, _m020_ships_armor_cooling),
+    (21, _m021_components_typed_stats),
 ]
 
 

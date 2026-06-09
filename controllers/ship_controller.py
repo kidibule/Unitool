@@ -344,8 +344,8 @@ class ShipController:
                     self.app.commit(
                         """
                         INSERT OR IGNORE INTO components
-                            (name, brand, type_name, category, size, grade, stats)
-                        VALUES (?, ?, ?, ?, ?, ?, '{}')
+                            (name, brand, type_name, category, size, grade)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
                             comp_name,
@@ -468,7 +468,8 @@ class ShipController:
         )
 
     def list_components_catalog(self) -> list[tuple]:
-        sql = "SELECT name, brand, type_name, category, size, grade FROM components ORDER BY category, name"
+        cols = ", ".join(Component.COLUMNS)
+        sql = f"SELECT {cols} FROM components ORDER BY category, name"
         return self.app.query(sql)
 
     def list_component_categories(self) -> list[str]:
@@ -851,21 +852,14 @@ class ShipController:
             if not ship:
                 raise Exception("Vaisseau introuvable.")
 
+            cols = ", ".join(Component.COLUMNS)
             comp_data = self.app.query(
-                "SELECT * FROM components WHERE name=?", (component_name.upper(),)
+                f"SELECT {cols} FROM components WHERE name=?", (component_name.upper(),)
             )
             if not comp_data:
                 raise Exception("Composant introuvable dans le catalogue.")
 
-            row = comp_data[0]
-            new_comp = Component(
-                name=row[1],
-                brand=row[2],
-                type_name=row[3],
-                category=row[4],
-                size=row[5],
-                grade=row[6],
-            )
+            new_comp = Component.from_db_row(comp_data[0])
 
             allowed, message = ship.can_add_component(new_comp)
             if not allowed:

@@ -19,26 +19,28 @@ class TestComponent:
         assert comp.name == "UNKNOWN"
         assert comp.brand == "UNKNOWN"
         assert comp.type_name == "UNKNOWN"
-        assert comp.category == "SYSTEM"
+        assert comp.category == "SYSTEMS"
         assert comp.grade == "C"
 
     def test_stats_par_defaut_vide(self):
         comp = Component(name="X", brand="Y", type_name="T", category="CAT", size=1, grade="B")
-        assert comp.stats == {}
+        # Les stats typées existent et valent 0 par défaut
+        assert comp.stat_dps == 0.0
+        assert comp.stat_shield_hp == 0
+        assert comp.stat_power_output == 0.0
 
     def test_stats_personnalisees(self):
-        comp = Component(name="X", brand="Y", type_name="T", category="CAT", size=1, grade="B", stats={"dps": 100})
-        assert comp.stats["dps"] == 100
+        comp = Component(name="X", brand="Y", type_name="T", category="CAT", size=1, grade="B", stat_dps=100.0)
+        assert comp.stat_dps == 100.0
 
     def test_from_db_transforme_ligne(self):
-        # ordre : id, name, brand, type_name, category, size, grade, stats
-        row = (1, "LASER", "RSI", "ENERGY", "WEAPON", 2, "A", {"dps": 50})
+        # from_db (legacy) : id, name, brand, type_name, category, size, grade, stats
+        row = (1, "LASER", "RSI", "ENERGY", "WEAPON", 2, "A", "{}")
         comp = Component.from_db(row)
         assert comp.name == "LASER"
         assert comp.brand == "RSI"
         assert comp.category == "WEAPON"
         assert comp.size == 2
-        assert comp.stats == {"dps": 50}
 
     def test_from_db_retourne_none_si_row_vide(self):
         assert Component.from_db(None) is None
