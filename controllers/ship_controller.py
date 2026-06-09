@@ -823,25 +823,16 @@ class ShipController:
         for category, cap in aggregated_caps.items():
             ship.set_capability(category=category, max_qty=cap["max_qty"], max_size=cap["max_size"])
 
-        sql = """
-            SELECT c.id, c.name, c.brand, c.type_name, c.category, c.size, c.grade, c.stats
+        comp_cols = ", ".join(f"c.{col}" for col in Component.COLUMNS)
+        sql = f"""
+            SELECT {comp_cols}
             FROM components c
             JOIN ship_loadout sl ON c.name = sl.component_name
             WHERE sl.ship_name = ? AND sl.profile_name = ?
         """
         comp_rows = self.app.query(sql, (ship.name, profile))
         for row in comp_rows:
-            ship.components.append(
-                Component(
-                    name=row[1],
-                    brand=row[2],
-                    type_name=row[3],
-                    category=row[4],
-                    size=row[5],
-                    grade=row[6],
-                    stats=row[7] if len(row) > 7 else {},
-                )
-            )
+            ship.components.append(Component.from_db_row(row))
 
         return ship
 
