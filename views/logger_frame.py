@@ -4,6 +4,7 @@ import customtkinter as ctk
 import csv
 from difflib import SequenceMatcher
 from datetime import datetime
+import tkinter as tk
 from tkinter import filedialog
 from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakePopup, DrakeComboBox, DrakeEntry, DrakeDualComboBox
 from controllers.ship_controller import ShipController, SHIP_MANUFACTURER_OPTIONS
@@ -12,30 +13,142 @@ from controllers.ship_controller import ShipController, SHIP_MANUFACTURER_OPTION
 class LoggerFrame(ctk.CTkFrame):
     """Vue d'archivage : saisie, import/export et maintenance des dossiers."""
 
-    def __init__(self, parent, controller):
+    def __init__(self, parent, controller, single_tab: str | None = None, title_text: str | None = None):
         """Initialise les onglets Players/Organizations/Ships."""
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         self.ship_controller = ShipController(self.controller)
+        normalized_tab = (single_tab or "").strip().upper()
+        self.single_tab = normalized_tab if normalized_tab in {"PLAYERS", "ORGANIZATIONS", "SHIPS"} else None
 
         # --- TITRE ---
-        DrakeConfig.create_title(self, "INTEL ARCHIVE SYSTEM")
+        DrakeConfig.create_title(self, title_text or "INTEL ARCHIVE SYSTEM")
 
-        # --- SYSTÈME D'ONGLETS ---
-        self.tabview = DrakeConfig.create_tabview(self)
+        # --- SYSTÈME D'ONGLETS / MODE POPUP SIMPLE ---
+        self.tabview = None
+        self.tab_players = None
+        self.tab_orgs = None
+        self.tab_ships = None
 
-        self.tabview.add("PLAYERS")
-        self.tabview.add("ORGANIZATIONS")
-        self.tabview.add("SHIPS")
+        if self.single_tab:
+            if self.single_tab == "PLAYERS":
+                self.tab_players = self
+                self.setup_players_tab()
+            elif self.single_tab == "ORGANIZATIONS":
+                self.tab_orgs = self
+                self.setup_orgs_tab()
+            elif self.single_tab == "SHIPS":
+                self.tab_ships = self
+                self.setup_ships_tab()
+            self._add_popup_close_button()
+        else:
+            self.tabview = DrakeConfig.create_tabview(self)
 
-        self.tab_players = self.tabview.tab("PLAYERS")
-        self.tab_orgs = self.tabview.tab("ORGANIZATIONS")
-        self.tab_ships = self.tabview.tab("SHIPS")
+            self.tabview.add("PLAYERS")
+            self.tabview.add("ORGANIZATIONS")
+            self.tabview.add("SHIPS")
 
-        # Appels des setups
-        self.setup_players_tab()
-        self.setup_orgs_tab()
-        self.setup_ships_tab()
+            self.tab_players = self.tabview.tab("PLAYERS")
+            self.tab_orgs = self.tabview.tab("ORGANIZATIONS")
+            self.tab_ships = self.tabview.tab("SHIPS")
+
+            # Appels des setups
+            self.setup_players_tab()
+            self.setup_orgs_tab()
+            self.setup_ships_tab()
+
+    def show_tab(self, tab_name: str) -> None:
+        """Expose la selection d'onglet archive depuis d'autres vues."""
+        if self.tabview is None:
+            return
+        try:
+            self.tabview.set((tab_name or "").upper())
+        except Exception:
+            pass
+
+    def _get_popup_parent(self):
+        """Retourne la fenetre de plus haut niveau pour les popups/dialogs."""
+        try:
+            return self.winfo_toplevel()
+        except Exception:
+            return self
+
+    def _bring_popup_to_front(self) -> None:
+        """Remet la popup courante au premier plan avant une sous-fenetre."""
+        parent = self._get_popup_parent()
+        try:
+            parent.lift()
+            parent.focus_force()
+            parent.attributes("-topmost", True)
+            parent.after(150, lambda: parent.attributes("-topmost", True))
+        except Exception:
+            pass
+
+    def _close_single_tab_popup(self) -> None:
+        """Ferme la popup qui heberge un formulaire single-tab."""
+        parent = self._get_popup_parent()
+        try:
+            parent.destroy()
+        except Exception:
+            pass
+
+    def _feedback_parent(self):
+        """Choisit le parent le plus fiable pour les popups de feedback."""
+        return self._get_popup_parent() if self.single_tab else self
+
+    def _close_after_success_if_needed(self) -> None:
+        """Ferme automatiquement la popup d'ajout apres un succes."""
+        if not self.single_tab:
+            return
+        try:
+            self.after(0, self._close_single_tab_popup)
+        except Exception:
+            self._close_single_tab_popup()
+
+    def _notify_success(self, title: str, message: str) -> None:
+        """Affiche un succes puis ferme la popup single-tab si necessaire."""
+        DrakePopup.info(title, message, parent=self._feedback_parent())
+        self._close_after_success_if_needed()
+
+    def _open_topmost_file_dialog(self, **kwargs):
+        """Ouvre un file dialog au-dessus de la popup courante."""
+        owner = None
+        parent = self._get_popup_parent()
+        try:
+            self._bring_popup_to_front()
+            owner = tk.Toplevel(parent)
+            owner.withdraw()
+            owner.transient(parent)
+            owner.attributes("-topmost", True)
+            owner.lift()
+            owner.focus_force()
+            try:
+                owner.grab_set()
+            except Exception:
+                pass
+            return filedialog.askopenfilename(parent=owner, **kwargs)
+        finally:
+            if owner is not None:
+                try:
+                    owner.grab_release()
+                except Exception:
+                    pass
+                try:
+                    owner.destroy()
+                except Exception:
+                    pass
+            self._bring_popup_to_front()
+
+    def _add_popup_close_button(self) -> None:
+        """Ajoute un bouton de fermeture aux popups single-tab."""
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.pack(pady=(0, 20), padx=50, fill="x")
+        DrakeClearButton(
+            footer,
+            text="CLOSE",
+            command=self._close_single_tab_popup,
+            height=45,
+        ).pack(fill="x")
 
 
     def setup_orgs_tab(self):
@@ -137,7 +250,8 @@ class LoggerFrame(ctk.CTkFrame):
             self.controller.log(f"Corporate file {sid} synchronized.", source="SYSTEM")
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Org registered: {sid}", source="SYSTEM")
-            self.clear_org_fields() 
+            self.clear_org_fields()
+            self._notify_success("SYSTEMS", f"Organization {sid} synchronized.")
         except Exception as e:
             self.controller.log(f"Failed to save organization: {e}", source="SYSTEM ERROR")
 
@@ -341,7 +455,7 @@ class LoggerFrame(ctk.CTkFrame):
                     self.controller.logger.sync_ship_to_catalog(ship_val)
                 except Exception:
                     pass
-                DrakePopup.info("SYSTEMS", f"No changes found for {h}. No save performed.", parent=self)
+                DrakePopup.info("SYSTEMS", f"No changes found for {h}. No save performed.", parent=self._feedback_parent())
                 try:
                     if hasattr(self.controller, "log"):
                         self.controller.log(f"Save skipped (no change): {h}", source="SYSTEM")
@@ -349,7 +463,7 @@ class LoggerFrame(ctk.CTkFrame):
                     pass
                 return
             else:
-                confirm = DrakePopup.yesno("CONFIRMATION", f"File {h} already exists. Overwrite data?", parent=self)
+                confirm = DrakePopup.yesno("CONFIRMATION", f"File {h} already exists. Overwrite data?", parent=self._feedback_parent())
                 if not confirm:
                     return
 
@@ -369,7 +483,7 @@ class LoggerFrame(ctk.CTkFrame):
             wins=wins_val,
             losses=losses_val,
         )
-        DrakePopup.info("SYSTEMS", f"File {h} synchronized.", parent=self)
+        self._notify_success("SYSTEMS", f"File {h} synchronized.")
         try:
             if hasattr(self.controller, "log"):
                 self.controller.log(f"Synchronized file: {h}", source="SYSTEM")
@@ -704,7 +818,8 @@ class LoggerFrame(ctk.CTkFrame):
         self._set_ship_field(self.ship_expedite, parsed.get("expedite_time"))
 
     def import_ship_ocr(self):
-        image_path = filedialog.askopenfilename(
+        parent = self._get_popup_parent()
+        image_path = self._open_topmost_file_dialog(
             title="IMPORT SCREENSHOT SHIP STATS",
             filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.webp")],
         )
@@ -714,16 +829,17 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             parsed = self.ship_controller.extract_ship_stats_from_screenshot(image_path)
         except Exception as e:
-            DrakePopup.error("OCR", str(e), parent=self)
+            DrakePopup.error("OCR", str(e), parent=parent)
             return
 
         if not parsed:
-            DrakePopup.warning("OCR", "Aucune statistique reconnue dans ce screenshot.", parent=self)
+            DrakePopup.warning("OCR", "Aucune statistique reconnue dans ce screenshot.", parent=parent)
             return
 
         self._apply_ship_ocr_data(parsed)
         self.controller.log(f"OCR SHIP LOGGER: {len(parsed)} champ(s) detectes.", source="LOGGER")
-        DrakePopup.info("OCR", f"Import OCR termine: {len(parsed)} champ(s) detectes.", parent=self)
+        self._bring_popup_to_front()
+        DrakePopup.info("OCR", f"Import OCR termine: {len(parsed)} champ(s) detectes.", parent=parent)
         
     def save_ship(self):
         """Sauvegarde sécurisée : bloque l'exécution si les données sont invalides."""
@@ -788,6 +904,7 @@ class LoggerFrame(ctk.CTkFrame):
         try:
             self.ship_controller.save_ship(data)
             self.controller.log(f"SHIP {name.upper()} DATA SYNCED.", source="SYSTEM")
+            self._notify_success("SYSTEMS", f"Ship {name.upper()} synchronized.")
         except Exception as e:
             self.controller.log(f"SYNC ERROR: {str(e)}", source="SYSTEM ERROR")
 

@@ -99,6 +99,44 @@ class ScannerFrame(ctk.CTkFrame):
         except Exception:
             pass
 
+    def _open_archive_tab(self, tab_name: str) -> None:
+        """Ouvre une popup ARCHIVE sur l'onglet correspondant."""
+        try:
+            view = getattr(self.controller, "view", None)
+            if view is not None and hasattr(view, "open_archive_popup"):
+                view.open_archive_popup(tab_name)
+        except Exception as exc:
+            self._log(f"Unable to open archive tab {tab_name}: {exc}", source="ERROR")
+
+    def _build_database_toolbar(self, parent, import_command, export_command, add_label, archive_tab_name):
+        """Construit une toolbar avec import/export a gauche et ajout archive a droite."""
+        toolbar = ctk.CTkFrame(parent, fg_color="transparent")
+        toolbar.pack(fill="x", padx=20, pady=5)
+
+        left_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
+        left_actions.pack(side="left")
+
+        DrakeButton(
+            left_actions,
+            text="IMPORT CSV",
+            width=150,
+            command=import_command,
+        ).pack(side="left", padx=5)
+
+        DrakeButton(
+            left_actions,
+            text="EXPORT CSV",
+            width=150,
+            command=export_command,
+        ).pack(side="left", padx=5)
+
+        DrakeButton(
+            toolbar,
+            text=add_label,
+            width=150,
+            command=lambda: self._open_archive_tab(archive_tab_name),
+        ).pack(side="right", padx=5)
+
     def setup_players_tab(self):
         """Configure l'onglet de recherche de joueurs."""
         self.search_entry = DrakeEntry(
@@ -108,22 +146,13 @@ class ScannerFrame(ctk.CTkFrame):
         self.search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.search_entry.bind("<KeyRelease>", self.run_scan)
 
-        toolbar = ctk.CTkFrame(self.tab_players, fg_color="transparent")
-        toolbar.pack(fill="x", padx=20, pady=5)
-
-        DrakeButton(
-            toolbar,
-            text="IMPORT CSV",
-            width=150,
-            command=self.import_players_csv,
-        ).pack(side="left", padx=5)
-
-        DrakeButton(
-            toolbar,
-            text="EXPORT CSV",
-            width=150,
-            command=self.export_players_csv,
-        ).pack(side="left", padx=5)
+        self._build_database_toolbar(
+            self.tab_players,
+            self.import_players_csv,
+            self.export_players_csv,
+            "ADD PLAYER",
+            "PLAYERS",
+        )
 
         self.results = DrakeTerminal(self.tab_players)
         self.results.pack(pady=5, padx=10, fill="both", expand=True)
@@ -138,22 +167,13 @@ class ScannerFrame(ctk.CTkFrame):
         self.org_search_entry.pack(pady=(10, 5), padx=20, fill="x")
         self.org_search_entry.bind("<KeyRelease>", self.run_org_scan)
 
-        toolbar = ctk.CTkFrame(self.tab_orgs, fg_color="transparent")
-        toolbar.pack(fill="x", padx=20, pady=5)
-
-        DrakeButton(
-            toolbar,
-            text="IMPORT CSV",
-            width=150,
-            command=self.import_orgs_csv,
-        ).pack(side="left", padx=5)
-
-        DrakeButton(
-            toolbar,
-            text="EXPORT CSV",
-            width=150,
-            command=self.export_orgs_csv,
-        ).pack(side="left", padx=5)
+        self._build_database_toolbar(
+            self.tab_orgs,
+            self.import_orgs_csv,
+            self.export_orgs_csv,
+            "ADD ORGANIZATION",
+            "ORGANIZATIONS",
+        )
 
         self.org_results = DrakeTerminal(self.tab_orgs)
         self.org_results.pack(pady=5, padx=10, fill="both", expand=True)

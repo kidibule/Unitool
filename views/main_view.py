@@ -70,7 +70,6 @@ class MainView(ctk.CTkFrame):
         menu_items = [
             ("ScannerFrame", "DATABASE"),
             ("ContractFrame", "CONTRACTS"),
-            ("LoggerFrame", "ARCHIVE"),
             ("IntelligenceFrame", "INTEL"),
             ("InterceptionFrame", "INTERCEPTION"),
             ("ShipFrame", "SHIP LOADOUT"),
@@ -101,6 +100,8 @@ class MainView(ctk.CTkFrame):
 
         # Lazy loading: chaque page est créée à la demande lors du premier affichage.
         self.frames = {}
+        self.archive_popups = {}
+        self.archive_popup_frames = {}
         self.page_specs = {
             "ScannerFrame": {"module": "views.scanner_frame", "class": "ScannerFrame", "kwargs": {}},
             "ContractFrame": {"module": "views.contract_frame", "class": "ContractFrame", "kwargs": {}},
@@ -478,6 +479,75 @@ class MainView(ctk.CTkFrame):
         frame.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.frames[page_name] = frame
         return frame
+
+    def _close_archive_popup(self) -> None:
+        """Ferme la popup archive et nettoie ses references."""
+        for tab_name in list(getattr(self, "archive_popups", {}).keys()):
+            self._close_archive_popup_for_tab(tab_name)
+
+    def _close_archive_popup_for_tab(self, tab_name: str) -> None:
+        """Ferme la popup archive associee a un onglet donne."""
+        popup = self.archive_popups.pop(tab_name, None)
+        self.archive_popup_frames.pop(tab_name, None)
+        try:
+            if popup is not None and popup.winfo_exists():
+                popup.destroy()
+        except Exception:
+            pass
+
+    def open_archive_popup(self, tab_name: str) -> None:
+        """Ouvre une popup archive dediee au formulaire demande."""
+        tab_key = (tab_name or "").strip().upper()
+        popup = self.archive_popups.get(tab_key)
+        frame = self.archive_popup_frames.get(tab_key)
+
+        try:
+            if popup is not None and popup.winfo_exists() and frame is not None:
+                popup.lift()
+                popup.focus_force()
+                return
+        except Exception:
+            self.archive_popups.pop(tab_key, None)
+            self.archive_popup_frames.pop(tab_key, None)
+
+        popup_specs = {
+            "PLAYERS": {"title": "ADD PLAYER", "min_width": 760, "min_height": 700},
+            "ORGANIZATIONS": {"title": "ADD ORGANIZATION", "min_width": 760, "min_height": 630},
+            "SHIPS": {"title": "ADD SHIP", "min_width": 980, "min_height": 940},
+        }
+        spec = popup_specs.get(tab_key, {"title": f"ARCHIVE - {tab_key}", "min_width": 820, "min_height": 700})
+
+        popup = DrakeConfig.create_modal_window(
+            self,
+            title=spec["title"],
+            geometry=f"{spec['min_width']}x{spec['min_height']}",
+            resizable=True,
+        )
+        popup.protocol("WM_DELETE_WINDOW", lambda key=tab_key: self._close_archive_popup_for_tab(key))
+
+        module = import_module("views.logger_frame")
+        frame_class = getattr(module, "LoggerFrame")
+        frame = frame_class(popup, self.controller, single_tab=tab_key, title_text=spec["title"])
+        frame.pack(fill="both", expand=True)
+
+        try:
+            popup.update_idletasks()
+            frame.update_idletasks()
+            req_width = max(spec["min_width"], frame.winfo_reqwidth() + 40)
+            req_height = max(spec["min_height"], frame.winfo_reqheight() + 40)
+            max_width = max(700, int(popup.winfo_screenwidth() * 0.9))
+            max_height = max(600, int(popup.winfo_screenheight() * 0.9))
+            final_width = min(req_width, max_width)
+            final_height = min(req_height, max_height)
+            popup.geometry(f"{final_width}x{final_height}")
+            popup.minsize(min(spec["min_width"], final_width), min(spec["min_height"], final_height))
+            popup.lift()
+            popup.focus_force()
+        except Exception:
+            pass
+
+        self.archive_popups[tab_key] = popup
+        self.archive_popup_frames[tab_key] = frame
 
     def _iter_children_recursive(self, widget):
         """Parcourt récursivement l'arborescence des widgets enfants."""

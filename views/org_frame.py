@@ -291,9 +291,6 @@ class OrgFrame(ctk.CTkFrame):
         except Exception:
             pass
 
-        self._log(
-            f"Event selected: {title} ({evt_date} {evt_time or '--:--'})"
-        )
         self._render_calendar()
         self._reload_event_list()
 

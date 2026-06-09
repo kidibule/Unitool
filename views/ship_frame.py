@@ -109,16 +109,36 @@ class ShipFrame(ctk.CTkFrame):
         toolbar = ctk.CTkFrame(ships_parent, fg_color="transparent")
         toolbar.pack(fill="x", padx=20, pady=5)
 
-        DrakeButton(toolbar, text="IMPORT CSV", width=150,
+        left_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
+        left_actions.pack(side="left")
+
+        DrakeButton(left_actions, text="IMPORT CSV", width=150,
                     command=self.controller.ship.import_ships_from_csv).pack(side="left", padx=5)
         
-        DrakeButton(toolbar, text="EXPORT CSV", width=150,
+        DrakeButton(left_actions, text="EXPORT CSV", width=150,
                     command=self.controller.ship.export_ships_to_csv).pack(side="left", padx=5)
+
+        if self.mode == "catalog_only":
+            DrakeButton(
+                toolbar,
+                text="ADD SHIP",
+                width=150,
+                command=self._open_archive_ship_tab,
+            ).pack(side="right", padx=5)
 
         self.ship_results = DrakeTerminal(ships_parent)
         self.ship_results.pack(pady=5, padx=10, fill="both", expand=True)
         self.ship_results.tag_config("ACCENT", foreground=DrakeConfig.ACCENT_PRIMARY)
         self.ship_results.tag_config("ship_name_white", foreground=DrakeConfig.TEXT_MAIN)
+
+    def _open_archive_ship_tab(self):
+        """Ouvre une popup ARCHIVE sur l'onglet SHIPS depuis DATABASE."""
+        try:
+            view = getattr(self.controller, "view", None)
+            if view is not None and hasattr(view, "open_archive_popup"):
+                view.open_archive_popup("SHIPS")
+        except Exception:
+            pass
 
     # --- ONGLET COMPONENTS ---
 
