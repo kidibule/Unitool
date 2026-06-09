@@ -1,6 +1,7 @@
 """Controller pour la gestion des vaisseaux (ships)."""
 
 import json
+import os
 from models.ship import Ship
 from models.component import Component
 from services.ship_helpers import clean_number, parse_triple, parse_dimensions, clean_time, extract_header
@@ -253,12 +254,31 @@ class ShipController:
         Les slots éditables du chassis sont automatiquement déduits via
         Ship.slots_from_sc_json() et stockés dans ship_subtype_specs.
         """
-        file_paths = filedialog.askopenfilenames(
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="IMPORT SC SHIP DATA (JSON)",
+        choice = messagebox.askquestion(
+            "IMPORT JSON",
+            "Importer depuis un dossier ?\n\nOui = choisir un dossier\nNon = choisir des fichiers",
+            icon="question",
         )
-        if not file_paths:
-            return
+        if choice == "yes":
+            folder = filedialog.askdirectory(title="IMPORT SC SHIP DATA — Choisir un dossier")
+            if not folder:
+                return
+            file_paths = [
+                os.path.join(root, fname)
+                for root, _dirs, files in os.walk(folder)
+                for fname in files
+                if fname.lower().endswith(".json")
+            ]
+            if not file_paths:
+                messagebox.showinfo("UNITOOL — IMPORT JSON", "Aucun fichier .json trouvé dans ce dossier.")
+                return
+        else:
+            file_paths = filedialog.askopenfilenames(
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="IMPORT SC SHIP DATA (JSON)",
+            )
+            if not file_paths:
+                return
 
         imported = 0
         errors = []
