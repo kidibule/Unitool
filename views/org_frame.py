@@ -1,8 +1,4 @@
-"""Frame Organisation — gestion dédiée des organisations.
-
-Vue principale pour rechercher, consulter et éditer les organisations
-enregistrées dans la base de données Unitool.
-"""
+"""Organization frame for browsing and managing organizations."""
 
 import csv
 import calendar
@@ -24,7 +20,7 @@ from drake_ui.engine import (
 
 
 class OrgFrame(ctk.CTkFrame):
-    """Vue dédiée à la gestion des organisations."""
+    """Dedicated view for organization management."""
 
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
@@ -34,14 +30,14 @@ class OrgFrame(ctk.CTkFrame):
         # --- HEADER ---
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(pady=(5, 10), fill="x", padx=20)
-        DrakeTitle1(header, text="ORGANISATIONS").pack(anchor="center", expand=True)
+        DrakeTitle1(header, text="ORGANIZATIONS").pack(anchor="center", expand=True)
 
         # --- TABVIEW PRINCIPAL ---
         self.tabview = DrakeConfig.create_tabview(self)
 
         self.tab_agenda = self.tabview.add("AGENDA")
-        self.tab_membres = self.tabview.add("MEMBRES")
-        self.tab_flotte = self.tabview.add("FLOTTE")
+        self.tab_membres = self.tabview.add("MEMBERS")
+        self.tab_flotte = self.tabview.add("FLEET")
 
         self._setup_agenda_tab()
         self._setup_membres_tab()
@@ -97,6 +93,8 @@ class OrgFrame(ctk.CTkFrame):
         self._evt_panel.grid(row=0, column=1, sticky="nsew")
 
         self._editing_evt_id = None
+        self._selected_evt_id = None
+        self._selected_evt_summary = None
         self._render_calendar()
         self._render_events()
 
@@ -108,10 +106,10 @@ class OrgFrame(ctk.CTkFrame):
             w.destroy()
 
         today = date.today()
-        DAYS_FR = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"]
+        DAYS_FR = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
         MONTHS_FR = [
-            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
-            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+            "", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+            "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
         ]
 
         # ── Navigation mois ──
@@ -215,6 +213,90 @@ class OrgFrame(ctk.CTkFrame):
                 )
                 btn.grid(row=row_i, column=col_i, padx=2, pady=2)
 
+        self._render_selected_event_summary()
+
+    def _render_selected_event_summary(self):
+        """Affiche le résumé de l'événement sélectionné sous le calendrier."""
+        ctk.CTkFrame(
+            self._cal_panel,
+            height=1,
+            fg_color=DrakeConfig.BORDER_COLOR,
+            corner_radius=0,
+        ).pack(fill="x", padx=10, pady=(0, 6))
+
+        box = ctk.CTkFrame(
+            self._cal_panel,
+            fg_color=DrakeConfig.BG_TERMINAL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        box.pack(fill="x", padx=10, pady=(0, 10))
+
+        ctk.CTkLabel(
+            box,
+            text="SELECTED EVENT SUMMARY",
+            font=("Orbitron", 9, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            anchor="w",
+        ).pack(fill="x", padx=8, pady=(6, 4))
+
+        evt = self._selected_evt_summary
+        if not evt:
+            ctk.CTkLabel(
+                box,
+                text="No event selected. Click an event in the list.",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                anchor="w",
+                justify="left",
+            ).pack(fill="x", padx=8, pady=(0, 8))
+            return
+
+        lines = [
+            f"Title: {evt.get('title', '')}",
+            f"Date: {evt.get('date', '')}",
+            f"Time: {evt.get('time', '') or '--:--'}",
+            f"Location: {evt.get('location', '') or '-'}",
+            f"Participants: {evt.get('participants', '') or '-'}",
+            f"Description: {evt.get('description', '') or '-'}",
+        ]
+        ctk.CTkLabel(
+            box,
+            text="\n".join(lines),
+            font=DrakeConfig.FONT_LOGS,
+            text_color=DrakeConfig.TEXT_MAIN,
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=8, pady=(0, 8))
+
+    def _select_event(self, evt_id, evt_date, evt_time, title, desc, location, participants):
+        """Sélectionne un événement et met à jour le résumé sous calendrier."""
+        self._selected_evt_id = int(evt_id)
+        self._selected_evt_summary = {
+            "id": int(evt_id),
+            "date": str(evt_date or ""),
+            "time": str(evt_time or ""),
+            "title": str(title or ""),
+            "description": str(desc or ""),
+            "location": str(location or ""),
+            "participants": str(participants or ""),
+        }
+
+        try:
+            d = date.fromisoformat(str(evt_date))
+            self._cal_year = d.year
+            self._cal_month = d.month
+            self._cal_selected = d
+        except Exception:
+            pass
+
+        self._log(
+            f"Event selected: {title} ({evt_date} {evt_time or '--:--'})"
+        )
+        self._render_calendar()
+        self._reload_event_list()
+
     def _cal_prev_month(self):
         if self._cal_month == 1:
             self._cal_month = 12
@@ -244,8 +326,8 @@ class OrgFrame(ctk.CTkFrame):
             w.destroy()
 
         MONTHS_FR = [
-            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
-            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+            "", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+            "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
         ]
         d = self._cal_selected
         date_str   = d.strftime("%Y-%m-%d")
@@ -254,7 +336,7 @@ class OrgFrame(ctk.CTkFrame):
         # ── Titre ──
         ctk.CTkLabel(
             self._evt_panel,
-            text="TOUS LES ÉVÉNEMENTS",
+            text="ALL EVENTS",
             font=("Orbitron", 11, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(anchor="w", padx=16, pady=(14, 4))
@@ -284,7 +366,7 @@ class OrgFrame(ctk.CTkFrame):
 
         DrakeButton(
             self._evt_panel,
-            text=f"+ AJOUTER UN ÉVÉNEMENT  —  {date_label}",
+            text=f"+ ADD EVENT  —  {date_label}",
             height=34,
             command=lambda ds=date_str: self._open_add_event_popup(ds),
         ).pack(fill="x", padx=12, pady=(0, 12))
@@ -295,8 +377,8 @@ class OrgFrame(ctk.CTkFrame):
             w.destroy()
 
         MONTHS_FR = [
-            "", "Jan", "Fév", "Mar", "Avr", "Mai", "Juin",
-            "Juil", "Août", "Sep", "Oct", "Nov", "Déc",
+            "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
         ]
 
         events = self.controller.org.get_events()
@@ -304,7 +386,7 @@ class OrgFrame(ctk.CTkFrame):
         if not events:
             ctk.CTkLabel(
                 self._evt_list_frame,
-                text="Aucun événement enregistré.",
+                text="No events saved.",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=12, pady=16)
@@ -338,35 +420,48 @@ class OrgFrame(ctk.CTkFrame):
                 ).pack(anchor="w", padx=8, pady=(10, 2))
 
             # ── Carte événement ──
-            card = ctk.CTkFrame(
-                self._evt_list_frame,
-                fg_color=DrakeConfig.BG_PANEL,
-                corner_radius=0,
-                border_width=1,
-                border_color=DrakeConfig.ACCENT_PRIMARY if self._editing_evt_id == evt_id else DrakeConfig.BORDER_COLOR,
-            )
-            card.pack(fill="x", padx=4, pady=2)
+            try:
+                card = ctk.CTkFrame(
+                    self._evt_list_frame,
+                    fg_color=DrakeConfig.BG_PANEL,
+                    corner_radius=0,
+                    border_width=1,
+                    border_color=(
+                        DrakeConfig.ACCENT_PRIMARY
+                        if self._editing_evt_id == evt_id
+                        else (DrakeConfig.ACCENT_PRIMARY if self._selected_evt_id == evt_id else DrakeConfig.BORDER_COLOR)
+                    ),
+                )
+                card.pack(fill="x", padx=4, pady=2)
 
-            if self._editing_evt_id == evt_id:
-                self._render_evt_edit_row(card, evt_id, evt_time, title, desc, location, participants)
-            else:
-                self._render_evt_display_row(card, evt_id, evt_time, title, desc, location, participants)
+                if self._editing_evt_id == evt_id:
+                    self._render_evt_edit_row(card, evt_id, evt_time, title, desc, location, participants)
+                else:
+                    self._render_evt_display_row(card, evt_id, evt_date, evt_time, title, desc, location, participants)
+            except Exception as e:
+                self._log(f"Event render error #{evt_id}: {e}")
 
     def _add_event(self, date_str: str, title: str, time_val: str, desc: str, location: str, participants: str):
         """Insère un nouvel événement en base."""
         try:
             self.controller.org.add_event(date_str, time_val, title, desc, location, participants)
         except Exception as e:
-            self._log(f"Erreur ajout événement : {e}")
+            self._log(f"Event creation error: {e}")
             return
-        self._reload_event_list()
-        self._render_calendar()
+        self._log(
+            f"Event created: {title} | {date_str} {time_val or '--:--'} | location={location or '-'}"
+        )
+        try:
+            self._reload_event_list()
+            self._render_calendar()
+        except Exception as e:
+            self._log(f"Event created but UI refresh failed: {e}")
 
     def _open_add_event_popup(self, date_str: str):
         """Popup de création d'un événement avec tous les champs."""
         MONTHS_FR = [
-            "", "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
-            "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+            "", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+            "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
         ]
         try:
             d = date.fromisoformat(date_str)
@@ -375,7 +470,7 @@ class OrgFrame(ctk.CTkFrame):
             date_label = date_str
 
         top = ctk.CTkToplevel(self)
-        top.title("NOUVEL ÉVÉNEMENT")
+        top.title("NEW EVENT")
         top.geometry("520x620")
         top.minsize(460, 520)
         top.resizable(True, True)
@@ -394,7 +489,7 @@ class OrgFrame(ctk.CTkFrame):
         # En-tête
         ctk.CTkLabel(
             body,
-            text=f"NOUVEL ÉVÉNEMENT  —  {date_label}",
+            text=f"NEW EVENT  —  {date_label}",
             font=("Orbitron", 11, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(anchor="w", padx=16, pady=(14, 10))
@@ -408,13 +503,13 @@ class OrgFrame(ctk.CTkFrame):
             ).pack(anchor="w", padx=16, pady=(4, 1))
 
         # Titre
-        lbl(body, "TITRE *")
-        e_title = DrakeEntry(body, placeholder_text="Titre de l'événement...", height=34,
+        lbl(body, "TITLE *")
+        e_title = DrakeEntry(body, placeholder_text="Event title...", height=34,
                              fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_title.pack(fill="x", padx=16, pady=(0, 2))
 
         # Heure
-        lbl(body, "HEURE")
+        lbl(body, "TIME")
         row_t = ctk.CTkFrame(body, fg_color="transparent")
         row_t.pack(anchor="w", padx=16, pady=(0, 2))
         e_hour = DrakeEntry(row_t, placeholder_text="HH", width=52, height=32,
@@ -431,8 +526,8 @@ class OrgFrame(ctk.CTkFrame):
         e_min.configure(validate="key", validatecommand=(vcmd_m, "%P"))
 
         # Lieu
-        lbl(body, "LIEU")
-        e_location = DrakeEntry(body, placeholder_text="Ex : Discord, Pyro, ...", height=32,
+        lbl(body, "LOCATION")
+        e_location = DrakeEntry(body, placeholder_text="Ex: Discord, Pyro, ...", height=32,
                                 fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_location.pack(fill="x", padx=16, pady=(0, 2))
 
@@ -443,7 +538,7 @@ class OrgFrame(ctk.CTkFrame):
         row_p = ctk.CTkFrame(body, fg_color="transparent")
         row_p.pack(fill="x", padx=16, pady=(0, 2))
 
-        e_participants = DrakeEntry(row_p, placeholder_text="Ex : Alpha1, Bravo2, ...", height=32,
+        e_participants = DrakeEntry(row_p, placeholder_text="Ex: Alpha1, Bravo2, ...", height=32,
                                     fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_participants.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self._suggestion_manager.attach(
@@ -469,7 +564,7 @@ class OrgFrame(ctk.CTkFrame):
             if not participants:
                 ctk.CTkLabel(
                     participants_box,
-                    text="Aucun participant ajouté.",
+                    text="No participant added.",
                     font=DrakeConfig.FONT_LOGS,
                     text_color=DrakeConfig.TEXT_SECONDARY,
                     anchor="w",
@@ -537,30 +632,49 @@ class OrgFrame(ctk.CTkFrame):
 
         # Description
         lbl(body, "DESCRIPTION")
-        e_desc = DrakeEntry(body, placeholder_text="Description (optionnel)...", height=32,
+        e_desc = DrakeEntry(body, placeholder_text="Description (optional)...", height=32,
                             fg_color=DrakeConfig.BG_TERMINAL, border_color=DrakeConfig.BORDER_COLOR)
         e_desc.pack(fill="x", padx=16, pady=(0, 12))
 
         def _confirm():
-            t = e_title.get().strip()
-            if not t:
-                return
-            h = e_hour.get().strip()
-            m = e_min.get().strip()
-            time_val = f"{h.zfill(2)}:{m.zfill(2)}" if (h or m) else ""
-            top.destroy()
-            self._add_event(
-                date_str, t, time_val,
-                e_desc.get().strip(),
-                e_location.get().strip(),
-                ", ".join(participants),
-            )
+            try:
+                t = e_title.get().strip()
+                if not t:
+                    DrakePopup.error("ERROR", "Title is required.", parent=top)
+                    self._log("Event creation canceled: empty title.")
+                    return
 
-        DrakeButton(btns, text="VALIDER ÉVÉNEMENT", height=34, command=_confirm).pack(
+                h = e_hour.get().strip()
+                m = e_min.get().strip()
+                time_val = f"{h.zfill(2)}:{m.zfill(2)}" if (h or m) else ""
+
+                # Lire les valeurs avant de fermer la popup pour éviter
+                # les erreurs Tk sur widgets détruits.
+                desc_val = e_desc.get().strip()
+                location_val = e_location.get().strip()
+                participants_val = ", ".join(participants)
+
+                top.destroy()
+                self._add_event(
+                    date_str,
+                    t,
+                    time_val,
+                    desc_val,
+                    location_val,
+                    participants_val,
+                )
+            except Exception as e:
+                self._log(f"Event validation error: {e}")
+                try:
+                    DrakePopup.error("ERROR", f"Could not create event: {e}", parent=top)
+                except Exception:
+                    pass
+
+        DrakeButton(btns, text="CREATE EVENT", height=34, command=_confirm).pack(
             side="left", fill="x", expand=True, padx=(0, 6)
         )
         DrakeButton(
-            btns, text="ANNULER", height=32,
+            btns, text="CANCEL", height=32,
             fg_color="transparent", border_width=1,
             border_color=DrakeConfig.BORDER_COLOR, text_color=DrakeConfig.TEXT_SECONDARY,
             hover_color=DrakeConfig.BG_PANEL,
@@ -601,28 +715,32 @@ class OrgFrame(ctk.CTkFrame):
         try:
             self.controller.org.delete_event(evt_id)
         except Exception as e:
-            self._log(f"Erreur suppression événement : {e}")
+            self._log(f"Event deletion error: {e}")
             return
+        if self._selected_evt_id == int(evt_id):
+            self._selected_evt_id = None
+            self._selected_evt_summary = None
+        self._log(f"Event deleted: id={evt_id}")
         self._reload_event_list()
         self._render_calendar()
 
     def _publish_event(self, evt_id: int):
         """Publie un événement sur Discord via le webhook configuré."""
+        self._log(f"Publication Discord demandée pour event id={evt_id}")
         try:
             ok, msg = self.controller.org.publish_event_to_discord(evt_id)
         except Exception as e:
-            self._log(f"Erreur publication Discord : {e}")
+            self._log(f"Discord publish error: {e}")
             return
 
         if ok:
             self._log(msg)
         else:
-            self._log(f"Publication Discord échouée : {msg}")
+            self._log(f"Discord publish failed: {msg}")
 
     def _open_discord_token_popup(self):
-        """Popup de configuration du token/webhook Discord pour les events."""
         top = ctk.CTkToplevel(self)
-        top.title("CONFIGURATION TOKEN DISCORD")
+        top.title("DISCORD TOKEN SETUP")
         top.geometry("700x220")
         top.minsize(620, 200)
         top.configure(fg_color=DrakeConfig.BG_MAIN)
@@ -638,7 +756,7 @@ class OrgFrame(ctk.CTkFrame):
 
         ctk.CTkLabel(
             top,
-            text="Colle ici l'URL complète du webhook Discord.",
+            text="Paste the full Discord webhook URL here.",
             font=("Segoe UI", 10),
             text_color=DrakeConfig.TEXT_SECONDARY,
             anchor="w",
@@ -660,18 +778,18 @@ class OrgFrame(ctk.CTkFrame):
         def _save():
             hook = e_hook.get().strip()
             if not hook:
-                DrakePopup.error("ERROR", "Le webhook ne peut pas être vide.", parent=top)
+                DrakePopup.error("ERROR", "Webhook cannot be empty.", parent=top)
                 return
             self.controller.org.set_discord_webhook_url(hook)
-            self._log("Webhook Discord events mis à jour.")
+            self._log("Discord events webhook updated.")
             top.destroy()
 
-        DrakeButton(btns, text="ENREGISTRER", height=32, command=_save).pack(
+        DrakeButton(btns, text="SAVE", height=32, command=_save).pack(
             side="left", fill="x", expand=True, padx=(0, 6)
         )
         DrakeButton(
             btns,
-            text="ANNULER",
+            text="CANCEL",
             height=32,
             fg_color="transparent",
             border_width=1,
@@ -681,28 +799,16 @@ class OrgFrame(ctk.CTkFrame):
             command=top.destroy,
         ).pack(side="left", fill="x", expand=True)
 
-    def _render_evt_display_row(self, parent, evt_id, evt_time, title, desc, location="", participants=""):
+    def _render_evt_display_row(self, parent, evt_id, evt_date, evt_time, title, desc, location="", participants=""):
         """Affichage normal d'une carte événement."""
-        # Ligne secondaire : lieu ● participants ● description
-        meta_parts = []
-        if location:
-            meta_parts.append(f"📍 {location}")
-        if participants:
-            meta_parts.append(f"👥 {participants}")
-        if desc:
-            meta_parts.append(desc)
-        meta_text = "  ·  ".join(meta_parts)
-        if len(meta_text) > 120:
-            meta_text = f"{meta_text[:117]}..."
-
-        # Hauteur compacte en affichage normal (l'édition inline garde sa hauteur variable).
-        row_height = 46 if meta_text else 34
+        # Carte compacte: n'affiche que l'heure et le titre.
+        row_height = 34
         parent.configure(height=row_height)
         parent.pack_propagate(False)
 
         # Boutons — EN PREMIER pour être visibles à droite
         btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(side="right", padx=6, pady=(6 if meta_text else 4))
+        btn_frame.pack(side="right", padx=6, pady=4)
 
         ctk.CTkButton(
             btn_frame,
@@ -749,7 +855,7 @@ class OrgFrame(ctk.CTkFrame):
 
         # Badge heure
         time_label = evt_time if evt_time else "--:--"
-        ctk.CTkLabel(
+        time_badge = ctk.CTkLabel(
             parent,
             text=time_label,
             font=("Orbitron", 9, "bold"),
@@ -757,35 +863,36 @@ class OrgFrame(ctk.CTkFrame):
             width=48,
             height=18,
             anchor="center",
-        ).pack(side="left", padx=(8, 0), pady=(6 if meta_text else 4))
+        )
+        time_badge.pack(side="left", padx=(8, 0), pady=4)
 
         # Séparateur vertical
-        ctk.CTkFrame(parent, width=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0).pack(
-            side="left", fill="y", padx=6, pady=3
-        )
+        sep = ctk.CTkFrame(parent, width=1, fg_color=DrakeConfig.BORDER_COLOR, corner_radius=0)
+        sep.pack(side="left", fill="y", padx=6, pady=3)
 
         # Infos textuelles
         info = ctk.CTkFrame(parent, fg_color="transparent")
-        info.pack(side="left", fill="x", expand=True, pady=(5 if meta_text else 3))
+        info.pack(side="left", fill="x", expand=True, pady=3)
 
-        ctk.CTkLabel(
+        title_lbl = ctk.CTkLabel(
             info,
             text=title,
             font=("Segoe UI", 11, "bold"),
             text_color=DrakeConfig.TEXT_MAIN,
             height=16,
             anchor="w",
-        ).pack(anchor="w")
+        )
+        title_lbl.pack(anchor="w")
 
-        if meta_text:
-            ctk.CTkLabel(
-                info,
-                text=meta_text,
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_SECONDARY,
-                height=14,
-                anchor="w",
-            ).pack(anchor="w")
+        def _on_select(_event=None):
+            self._select_event(evt_id, evt_date, evt_time, title, desc, location, participants)
+            return "break"
+
+        parent.bind("<Button-1>", _on_select)
+        time_badge.bind("<Button-1>", _on_select)
+        sep.bind("<Button-1>", _on_select)
+        info.bind("<Button-1>", _on_select)
+        title_lbl.bind("<Button-1>", _on_select)
 
     def _render_evt_edit_row(self, parent, evt_id, current_time, current_title, current_desc, current_location="", current_participants=""):
         """Mode édition inline directement sur la carte."""
@@ -966,11 +1073,12 @@ class OrgFrame(ctk.CTkFrame):
             except Exception as ex:
                 self._log(f"Erreur édition événement : {ex}")
                 return
+            self._log(f"Event modifié: id={evt_id} | titre={new_title}")
             self._editing_evt_id = None
             self._reload_event_list()
             self._render_calendar()
 
-        DrakeButton(btns, text="ENREGISTRER", height=28, command=_save).pack(side="left", padx=(0, 6))
+        DrakeButton(btns, text="SAVE", height=28, command=_save).pack(side="left", padx=(0, 6))
         DrakeButton(
             btns, text="ANNULER", height=28,
             fg_color="transparent", border_width=1,
@@ -995,7 +1103,7 @@ class OrgFrame(ctk.CTkFrame):
     # ------------------------------------------------------------------
 
     def _setup_membres_tab(self):
-        """Onglet Membres — membres de l'organisation de l'utilisateur."""
+        """Members tab for the user's main organization."""
         # ── Bandeau de configuration : sélection de son org ──
         config_bar = ctk.CTkFrame(
             self.tab_membres,
@@ -1008,7 +1116,7 @@ class OrgFrame(ctk.CTkFrame):
 
         ctk.CTkLabel(
             config_bar,
-            text="MON ORG (SID) :",
+            text="MY ORG (SID):",
             font=DrakeConfig.FONT_UI,
             text_color=DrakeConfig.TEXT_SECONDARY,
         ).pack(side="left", padx=(12, 8))
@@ -1028,7 +1136,7 @@ class OrgFrame(ctk.CTkFrame):
 
         DrakeButton(
             config_bar,
-            text="DÉFINIR",
+            text="SET",
             width=90,
             height=30,
             command=self._save_my_org,
@@ -1046,7 +1154,7 @@ class OrgFrame(ctk.CTkFrame):
         # Barre de recherche membre
         self.member_search_entry = DrakeEntry(
             self.tab_membres,
-            placeholder_text="FILTRER PAR HANDLE OU GRADE...",
+            placeholder_text="FILTER BY HANDLE OR RANK...",
             height=36,
             fg_color=DrakeConfig.BG_TERMINAL,
             border_color=DrakeConfig.BORDER_COLOR,
@@ -1083,7 +1191,7 @@ class OrgFrame(ctk.CTkFrame):
         if not sid:
             ctk.CTkLabel(
                 self.member_list_scroll,
-                text="⚙  Configurez d'abord le SID de votre organisation ci-dessus.",
+                text="⚙  Set your organization SID above first.",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=16, pady=24)
@@ -1093,7 +1201,7 @@ class OrgFrame(ctk.CTkFrame):
         if not org:
             ctk.CTkLabel(
                 self.member_list_scroll,
-                text=f"Organisation « {sid} » introuvable dans la base.",
+                text=f"Organization '{sid}' was not found in the database.",
                 font=DrakeConfig.FONT_LOGS,
                 text_color="#ff4444",
             ).pack(anchor="w", padx=16, pady=24)
@@ -1101,7 +1209,7 @@ class OrgFrame(ctk.CTkFrame):
 
         # Mise à jour du label d'info
         self.my_org_label.configure(
-            text=f"— {org.name or sid}  [{org.member_count or 0} membres]"
+            text=f"— {org.name or sid}  [{org.member_count or 0} members]"
         )
 
         # Chargement des membres visibles
@@ -1118,7 +1226,7 @@ class OrgFrame(ctk.CTkFrame):
         if not members:
             ctk.CTkLabel(
                 self.member_list_scroll,
-                text="Aucun membre visible enregistré pour cette organisation.",
+                text="No visible members saved for this organization.",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=16, pady=24)
@@ -1141,7 +1249,7 @@ class OrgFrame(ctk.CTkFrame):
         ).pack(side="left", padx=8)
         ctk.CTkLabel(
             header,
-            text="GRADE / RANG",
+            text="RANK",
             font=("Orbitron", 10, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
             anchor="w",
@@ -1202,17 +1310,17 @@ class OrgFrame(ctk.CTkFrame):
     # ------------------------------------------------------------------
 
     def _setup_flotte_tab(self):
-        """Onglet Flotte — gestion de la flotte de l'organisation."""
+        """Fleet tab for organization fleet management."""
         ctk.CTkLabel(
             self.tab_flotte,
-            text="FLOTTE",
+            text="FLEET",
             font=DrakeConfig.FONT_UI,
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(pady=(30, 10))
 
         ctk.CTkLabel(
             self.tab_flotte,
-            text="[ MODULE EN COURS DE DÉVELOPPEMENT ]",
+            text="[ MODULE IN DEVELOPMENT ]",
             font=("Consolas", 11),
             text_color=DrakeConfig.TEXT_SECONDARY,
         ).pack(pady=6)

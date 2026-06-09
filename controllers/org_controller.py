@@ -100,11 +100,11 @@ class OrgController:
         events = [OrgEvent.from_db_row(row) for row in rows]
         target = next((evt for evt in events if evt.id == int(event_id)), None)
         if target is None:
-            return False, "Événement introuvable."
+            return False, "Event not found."
 
         hook = str(webhook_url or self.get_discord_webhook_url()).strip()
         if not hook:
-            return False, "Webhook Discord non configuré."
+            return False, "Discord webhook is not configured."
 
         try:
             d = date.fromisoformat(str(target.date or ""))
@@ -118,16 +118,16 @@ class OrgController:
 
         lines = [
             "@everyone",
-            f"📅 **{target.title or 'ÉVÉNEMENT'}**",
-            f"**Date :** {date_label}",
-            f"**Heure :** {target.time or '--:--'}",
+            f"📅 **{target.title or 'EVENT'}**",
+            f"**Date:** {date_label}",
+            f"**Time:** {target.time or '--:--'}",
         ]
         if target.location:
-            lines.append(f"**Lieu :** {target.location}")
+            lines.append(f"**Location:** {target.location}")
         if target.participants:
-            lines.append(f"**Participants :** {target.participants}")
+            lines.append(f"**Participants:** {target.participants}")
         if desc:
-            lines.append(f"**Détails :** {desc}")
+            lines.append(f"**Details:** {desc}")
 
         payload = {
             "content": "\n".join(lines),
@@ -147,7 +147,7 @@ class OrgController:
         try:
             with request.urlopen(req, timeout=10) as resp:
                 if int(getattr(resp, "status", resp.getcode())) >= 400:
-                    return False, "Discord a refusé la publication."
+                    return False, "Discord rejected the publish request."
         except error.HTTPError as ex:
             raw = ""
             try:
@@ -161,19 +161,19 @@ class OrgController:
                     message = str(parsed.get("message", "")).strip()
                     code = parsed.get("code")
                     if message and code is not None:
-                        return False, f"Erreur Discord HTTP {ex.code}: {message} (code {code})."
+                        return False, f"Discord HTTP error {ex.code}: {message} (code {code})."
                     if message:
-                        return False, f"Erreur Discord HTTP {ex.code}: {message}."
+                        return False, f"Discord HTTP error {ex.code}: {message}."
                 except Exception:
-                    return False, f"Erreur Discord HTTP {ex.code}: {raw}"
+                    return False, f"Discord HTTP error {ex.code}: {raw}"
 
-            return False, f"Erreur Discord HTTP {ex.code}."
+            return False, f"Discord HTTP error {ex.code}."
         except error.URLError as ex:
-            return False, f"Erreur réseau Discord : {ex.reason}"
+            return False, f"Discord network error: {ex.reason}"
         except Exception as ex:
-            return False, f"Publication impossible : {ex}"
+            return False, f"Publish failed: {ex}"
 
-        return True, "Événement publié sur Discord."
+        return True, "Event published to Discord."
 
     def get_visible_members(self, sid: str) -> list:
         """Retourne les membres visibles d'une org sous forme de liste de dicts."""

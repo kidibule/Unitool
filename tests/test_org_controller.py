@@ -19,7 +19,7 @@ class TestPublishEventToDiscord:
         ok, msg = ctrl.publish_event_to_discord(999)
 
         assert ok is False
-        assert "introuvable" in msg.lower()
+        assert "not found" in msg.lower()
 
     def test_publie_evenement_sur_webhook(self):
         ctrl = make_controller_with_events(

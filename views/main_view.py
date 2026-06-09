@@ -271,7 +271,7 @@ class MainView(ctk.CTkFrame):
     def _prompt_org_setup(self):
         """Popup de configuration de l'organisation principale."""
         top = ctk.CTkToplevel(self)
-        top.title("CONFIGURATION ORGANISATION")
+        top.title("ORGANIZATION SETUP")
         top.geometry("480x400")
         top.resizable(False, False)
         top.configure(fg_color=DrakeConfig.BG_MAIN)
@@ -281,14 +281,14 @@ class MainView(ctk.CTkFrame):
         # ── Titre ──
         ctk.CTkLabel(
             top,
-            text="⚙  ORGANISATION PRINCIPALE",
+            text="⚙  MAIN ORGANIZATION",
             font=("Orbitron", 14, "bold"),
             text_color=DrakeConfig.ACCENT_PRIMARY,
         ).pack(pady=(24, 4))
 
         ctk.CTkLabel(
             top,
-            text="Définissez votre organisation avant d'accéder à cette section.",
+            text="Set your organization before opening this section.",
             font=("Consolas", 10),
             text_color=DrakeConfig.TEXT_SECONDARY,
             wraplength=420,
@@ -300,7 +300,7 @@ class MainView(ctk.CTkFrame):
         # ── Saisie manuelle ──
         ctk.CTkLabel(
             top,
-            text="ENTRER LE SID MANUELLEMENT",
+            text="ENTER SID MANUALLY",
             font=("Consolas", 9),
             text_color=DrakeConfig.TEXT_SECONDARY,
         ).pack(anchor="w", padx=24, pady=(14, 2))
@@ -327,7 +327,7 @@ class MainView(ctk.CTkFrame):
 
         DrakeButton(
             entry_frame,
-            text="VALIDER",
+            text="CONFIRM",
             width=90,
             height=36,
             command=_confirm_manual,
@@ -341,7 +341,7 @@ class MainView(ctk.CTkFrame):
         # ── Sélection parmi les orgs enregistrées ──
         ctk.CTkLabel(
             top,
-            text="OU SÉLECTIONNER PARMI LES ORGANISATIONS ENREGISTRÉES",
+            text="OR SELECT FROM SAVED ORGANIZATIONS",
             font=("Consolas", 9),
             text_color=DrakeConfig.TEXT_SECONDARY,
         ).pack(anchor="w", padx=24, pady=(12, 2))
@@ -388,7 +388,7 @@ class MainView(ctk.CTkFrame):
 
             DrakeButton(
                 select_frame,
-                text="CHOISIR",
+                text="SELECT",
                 width=90,
                 height=36,
                 command=_confirm_select,
@@ -396,7 +396,7 @@ class MainView(ctk.CTkFrame):
         else:
             ctk.CTkLabel(
                 select_frame,
-                text="Aucune organisation dans la base de données.",
+                text="No organizations found in database.",
                 font=("Consolas", 10),
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", pady=6)
@@ -404,7 +404,7 @@ class MainView(ctk.CTkFrame):
         # ── Bouton annuler ──
         DrakeButton(
             top,
-            text="ANNULER",
+            text="CANCEL",
             width=120,
             height=34,
             fg_color="transparent",
