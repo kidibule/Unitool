@@ -662,6 +662,25 @@ class ShipFrame(ctk.CTkFrame):
             t.insert("end", "   [DEFENSE]\n", "ACCENT")
             t.insert("end", f"   - HP: {ship.hp:,}"
                              f"  |  SHIELD: {ship.shield_hp:,} HP  regen {ship.shield_regen:.0f}/s\n")
+            if ship.armor_hp:
+                phys_pct  = int((1.0 - ship.armor_phys_mult)  * 100)
+                nrg_pct   = int((1.0 - ship.armor_energy_mult) * 100)
+                dist_pct  = int((1.0 - ship.armor_distortion_mult) * 100)
+                t.insert("end", f"   - ARMOR: {ship.armor_hp:,} HP"
+                                 f"  |  PHYS -{phys_pct}%"
+                                 f"  |  ENERGY -{nrg_pct}%"
+                                 f"  |  DIST -{dist_pct}%\n")
+                ir_mult = ship.armor_ir_mult
+                em_mult = ship.armor_em_mult
+                t.insert("end", f"   - SIG MULT  IR x{ir_mult:.2f}"
+                                 f"  |  EM x{em_mult:.2f}\n")
+            if ship.cooling_cap or ship.power_cap:
+                cool_used = int(ship.cooling_used_pct * 100)
+                pow_pct   = int((ship.power_used / ship.power_cap * 100) if ship.power_cap else 0)
+                t.insert("end", f"   - COOLING: {ship.cooling_cap:.0f} seg"
+                                 f"  |  USED {cool_used}%"
+                                 f"  |  POWER: {ship.power_cap:.0f} seg"
+                                 f"  |  USED {pow_pct}%\n")
             if ship.emission_ir or ship.emission_em:
                 t.insert("end", f"   - SIGNATURE  IR: {ship.emission_ir:,.0f}"
                                  f"  |  EM: {ship.emission_em:,.0f}\n")

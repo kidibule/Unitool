@@ -102,6 +102,18 @@ class Ship(BaseModel):
         "pilot_sustained_dps",
         "missiles_count",
         "missiles_damage",
+        # ---- Armure ----
+        "armor_hp",
+        "armor_phys_mult",
+        "armor_energy_mult",
+        "armor_distortion_mult",
+        "armor_ir_mult",
+        "armor_em_mult",
+        # ---- Dissipation / Énergie ----
+        "cooling_cap",
+        "cooling_used_pct",
+        "power_cap",
+        "power_used",
         # ---- Signature ----
         "emission_ir",
         "emission_em",
@@ -173,6 +185,18 @@ class Ship(BaseModel):
         pilot_sustained_dps: float = 0.0,
         missiles_count: int = 0,
         missiles_damage: float = 0.0,
+        # Armure
+        armor_hp: int = 0,
+        armor_phys_mult: float = 1.0,
+        armor_energy_mult: float = 1.0,
+        armor_distortion_mult: float = 1.0,
+        armor_ir_mult: float = 1.0,
+        armor_em_mult: float = 1.0,
+        # Dissipation / Énergie
+        cooling_cap: float = 0.0,
+        cooling_used_pct: float = 0.0,
+        power_cap: float = 0.0,
+        power_used: float = 0.0,
         # Signature
         emission_ir: float = 0.0,
         emission_em: float = 0.0,
@@ -239,6 +263,19 @@ class Ship(BaseModel):
         self.pilot_sustained_dps = float(pilot_sustained_dps) if pilot_sustained_dps else 0.0
         self.missiles_count = int(missiles_count) if missiles_count else 0
         self.missiles_damage = float(missiles_damage) if missiles_damage else 0.0
+        # Signature
+        # Armure
+        self.armor_hp = int(armor_hp) if armor_hp else 0
+        self.armor_phys_mult = float(armor_phys_mult) if armor_phys_mult is not None else 1.0
+        self.armor_energy_mult = float(armor_energy_mult) if armor_energy_mult is not None else 1.0
+        self.armor_distortion_mult = float(armor_distortion_mult) if armor_distortion_mult is not None else 1.0
+        self.armor_ir_mult = float(armor_ir_mult) if armor_ir_mult is not None else 1.0
+        self.armor_em_mult = float(armor_em_mult) if armor_em_mult is not None else 1.0
+        # Dissipation / Énergie
+        self.cooling_cap = float(cooling_cap) if cooling_cap else 0.0
+        self.cooling_used_pct = float(cooling_used_pct) if cooling_used_pct else 0.0
+        self.power_cap = float(power_cap) if power_cap else 0.0
+        self.power_used = float(power_used) if power_used else 0.0
         # Signature
         self.emission_ir = float(emission_ir) if emission_ir else 0.0
         self.emission_em = float(emission_em) if emission_em else 0.0
@@ -337,6 +374,11 @@ class Ship(BaseModel):
         missiles = weaponry.get("Missiles", {})
         emission = data.get("Emission", {})
         insurance = data.get("Insurance", {})
+        armor = data.get("Armor", {})
+        dmg_mult = armor.get("DamageMultipliers", {})
+        sig_mult = armor.get("SignalMultipliers", {})
+        cooling = data.get("Cooling", {})
+        power_data = data.get("Power", {})
         manufacturer = data.get("Manufacturer", {})
 
         name = data.get("Name", "")
@@ -392,6 +434,18 @@ class Ship(BaseModel):
             pilot_sustained_dps=weaponry.get("PilotSustainedDps", 0.0),
             missiles_count=missiles.get("Count", 0),
             missiles_damage=weaponry.get("TotalMissiles", 0.0),
+            # Armure
+            armor_hp=armor.get("Health", 0),
+            armor_phys_mult=dmg_mult.get("Physical", 1.0),
+            armor_energy_mult=dmg_mult.get("Energy", 1.0),
+            armor_distortion_mult=dmg_mult.get("Distortion", 1.0),
+            armor_ir_mult=sig_mult.get("Infrared", 1.0),
+            armor_em_mult=sig_mult.get("Electromagnetic", 1.0),
+            # Dissipation / Énergie
+            cooling_cap=cooling.get("GenerationSegments", 0.0),
+            cooling_used_pct=cooling.get("UsedSegmentsShieldsPct", 0.0),
+            power_cap=power_data.get("GenerationSegments", 0.0),
+            power_used=power_data.get("UsedSegmentsShields", 0.0),
             # Signature
             emission_ir=emission.get("IrShields", 0.0),
             emission_em=emission.get("EmShields", 0.0),

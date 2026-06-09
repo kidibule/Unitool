@@ -222,6 +222,18 @@ def _m001_schema_initial(cursor):
             expedite_time       REAL DEFAULT 0,
             sc_uuid             TEXT DEFAULT '',
             sc_class_name       TEXT DEFAULT '',
+            -- Armure
+            armor_hp            INTEGER DEFAULT 0,
+            armor_phys_mult     REAL DEFAULT 1,
+            armor_energy_mult   REAL DEFAULT 1,
+            armor_distortion_mult REAL DEFAULT 1,
+            armor_ir_mult       REAL DEFAULT 1,
+            armor_em_mult       REAL DEFAULT 1,
+            -- Dissipation / Énergie
+            cooling_cap         REAL DEFAULT 0,
+            cooling_used_pct    REAL DEFAULT 0,
+            power_cap           REAL DEFAULT 0,
+            power_used          REAL DEFAULT 0,
             dimensions          TEXT DEFAULT '',
             power_consumption   TEXT DEFAULT '',
             cm_decoy_noise      TEXT DEFAULT '',
@@ -783,6 +795,25 @@ def _m019_ships_sc_fields(cursor):
     logger.info("  ships: SC data miner columns added.")
 
 
+def _m020_ships_armor_cooling(cursor):
+    """Ajoute les colonnes armure et dissipation/énergie à la table ships."""
+    new_cols = [
+        ("armor_hp",              "INTEGER DEFAULT 0"),
+        ("armor_phys_mult",       "REAL DEFAULT 1"),
+        ("armor_energy_mult",     "REAL DEFAULT 1"),
+        ("armor_distortion_mult", "REAL DEFAULT 1"),
+        ("armor_ir_mult",         "REAL DEFAULT 1"),
+        ("armor_em_mult",         "REAL DEFAULT 1"),
+        ("cooling_cap",           "REAL DEFAULT 0"),
+        ("cooling_used_pct",      "REAL DEFAULT 0"),
+        ("power_cap",             "REAL DEFAULT 0"),
+        ("power_used",            "REAL DEFAULT 0"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "ships", col_name, col_type)
+    logger.info("  ships: armor & cooling columns added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -803,6 +834,7 @@ MIGRATIONS = [
     (17, _m017_org_events_time),
     (18, _m018_org_events_location_participants),
     (19, _m019_ships_sc_fields),
+    (20, _m020_ships_armor_cooling),
 ]
 
 

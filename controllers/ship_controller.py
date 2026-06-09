@@ -115,7 +115,10 @@ class ShipController:
             self.app.log(f"Ship SYNC: {ship.name}", source="FLEET")
 
     def load_ship(self, name: str) -> list:
-        return self.app.query("SELECT * FROM ships WHERE name=?", (name.upper(),))
+        cols = ", ".join(Ship.COLUMNS)
+        return self.app.query(
+            f"SELECT {cols} FROM ships WHERE name=?", (name.upper(),)
+        )
 
     def load_ship_as_model(self, name: str) -> Ship | None:
         rows = self.load_ship(name)
