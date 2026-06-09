@@ -174,33 +174,58 @@ def _m001_schema_initial(cursor):
     # --- Ships ---
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ships (
-            name               TEXT PRIMARY KEY,
-            brand              TEXT,
-            role               TEXT,
-            career             TEXT,
-            size               TEXT,
-            crew_size          INTEGER DEFAULT 0,
-            scm_speed          TEXT,
-            scm_boost_forward  TEXT,
-            scm_boost_backward TEXT,
-            nav_max_speed      TEXT,
-            pitch              TEXT,
-            yaw                TEXT,
-            roll               TEXT,
-            boosted_pitch      TEXT,
-            boosted_yaw        TEXT,
-            boosted_roll       TEXT,
-            power_consumption  TEXT,
-            cm_decoy_noise     TEXT,
-            hp                 INTEGER DEFAULT 0,
-            cargo              TEXT,
-            dimensions         TEXT,
-            mass               TEXT,
-            hydrogen_capacity  TEXT,
-            qt_fuel_capacity   TEXT,
-            expedition_fee     TEXT,
-            claim_time         TEXT,
-            expedite_time      TEXT
+            name                TEXT PRIMARY KEY,
+            brand               TEXT,
+            role                TEXT,
+            career              TEXT,
+            size                INTEGER DEFAULT 0,
+            crew_size           INTEGER DEFAULT 0,
+            length              REAL DEFAULT 0,
+            width               REAL DEFAULT 0,
+            height              REAL DEFAULT 0,
+            mass                REAL DEFAULT 0,
+            mass_total          REAL DEFAULT 0,
+            scm_speed           REAL DEFAULT 0,
+            scm_boost_forward   REAL DEFAULT 0,
+            scm_boost_backward  REAL DEFAULT 0,
+            nav_max_speed       REAL DEFAULT 0,
+            pitch               REAL DEFAULT 0,
+            yaw                 REAL DEFAULT 0,
+            roll                REAL DEFAULT 0,
+            boosted_pitch       REAL DEFAULT 0,
+            boosted_yaw         REAL DEFAULT 0,
+            boosted_roll        REAL DEFAULT 0,
+            accel_main          REAL DEFAULT 0,
+            accel_retro         REAL DEFAULT 0,
+            accel_maneuver      REAL DEFAULT 0,
+            accel_main_boosted  REAL DEFAULT 0,
+            hydrogen_capacity   REAL DEFAULT 0,
+            fuel_intake_rate    REAL DEFAULT 0,
+            fuel_usage_main     REAL DEFAULT 0,
+            qt_fuel_capacity    REAL DEFAULT 0,
+            qt_range            REAL DEFAULT 0,
+            qt_speed            REAL DEFAULT 0,
+            qt_spool_time       REAL DEFAULT 0,
+            hp                  INTEGER DEFAULT 0,
+            shield_hp           INTEGER DEFAULT 0,
+            shield_regen        REAL DEFAULT 0,
+            pilot_dps           REAL DEFAULT 0,
+            pilot_alpha         REAL DEFAULT 0,
+            pilot_sustained_dps REAL DEFAULT 0,
+            missiles_count      INTEGER DEFAULT 0,
+            missiles_damage     REAL DEFAULT 0,
+            emission_ir         REAL DEFAULT 0,
+            emission_em         REAL DEFAULT 0,
+            cargo               REAL DEFAULT 0,
+            expedition_fee      REAL DEFAULT 0,
+            claim_time          REAL DEFAULT 0,
+            expedite_time       REAL DEFAULT 0,
+            sc_uuid             TEXT DEFAULT '',
+            sc_class_name       TEXT DEFAULT '',
+            dimensions          TEXT DEFAULT '',
+            power_consumption   TEXT DEFAULT '',
+            cm_decoy_noise      TEXT DEFAULT '',
+            sc_data_json        TEXT DEFAULT ''
         )
     """)
 
@@ -707,6 +732,57 @@ def _m018_org_events_location_participants(cursor):
     _add_column_if_missing(cursor, "org_events", "participants", "TEXT DEFAULT ''")
 
 
+def _m019_ships_sc_fields(cursor):
+    """Ajoute les champs SC data miner à la table ships (bases legacy).
+
+    Ces colonnes permettent d'importer directement les fichiers JSON produits
+    par le SC data miner et de garder la compatibilité avec les futures mises
+    à jour de Star Citizen — il suffira d'ajouter une nouvelle migration.
+    """
+    new_cols = [
+        # Dimensions séparées
+        ("length",              "REAL DEFAULT 0"),
+        ("width",               "REAL DEFAULT 0"),
+        ("height",              "REAL DEFAULT 0"),
+        ("mass_total",          "REAL DEFAULT 0"),
+        # Accélérations
+        ("accel_main",          "REAL DEFAULT 0"),
+        ("accel_retro",         "REAL DEFAULT 0"),
+        ("accel_maneuver",      "REAL DEFAULT 0"),
+        ("accel_main_boosted",  "REAL DEFAULT 0"),
+        # Propulsion hydrogène
+        ("fuel_intake_rate",    "REAL DEFAULT 0"),
+        ("fuel_usage_main",     "REAL DEFAULT 0"),
+        # Quantum
+        ("qt_range",            "REAL DEFAULT 0"),
+        ("qt_speed",            "REAL DEFAULT 0"),
+        ("qt_spool_time",       "REAL DEFAULT 0"),
+        # Combat / défense
+        ("shield_hp",           "INTEGER DEFAULT 0"),
+        ("shield_regen",        "REAL DEFAULT 0"),
+        ("pilot_dps",           "REAL DEFAULT 0"),
+        ("pilot_alpha",         "REAL DEFAULT 0"),
+        ("pilot_sustained_dps", "REAL DEFAULT 0"),
+        ("missiles_count",      "INTEGER DEFAULT 0"),
+        ("missiles_damage",     "REAL DEFAULT 0"),
+        # Signature électronique
+        ("emission_ir",         "REAL DEFAULT 0"),
+        ("emission_em",         "REAL DEFAULT 0"),
+        # Identifiants SC
+        ("sc_uuid",             "TEXT DEFAULT ''"),
+        ("sc_class_name",       "TEXT DEFAULT ''"),
+        # Raw JSON (future-proof)
+        ("sc_data_json",        "TEXT DEFAULT ''"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "ships", col_name, col_type)
+
+    # Convertir les colonnes TEXT legacy en REAL là où c'est possible.
+    # SQLite ne permet pas ALTER COLUMN TYPE, on laisse les données telles quelles
+    # (SQLite stocke les numériques en TEXT sans perte pour les requêtes).
+    logger.info("  ships: SC data miner columns added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -726,6 +802,7 @@ MIGRATIONS = [
     (16, _m016_org_events),
     (17, _m017_org_events_time),
     (18, _m018_org_events_location_participants),
+    (19, _m019_ships_sc_fields),
 ]
 
 

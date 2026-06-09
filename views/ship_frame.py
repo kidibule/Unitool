@@ -112,6 +112,9 @@ class ShipFrame(ctk.CTkFrame):
         left_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
         left_actions.pack(side="left")
 
+        DrakeButton(left_actions, text="IMPORT JSON", width=150,
+                    command=self._import_json_ships).pack(side="left", padx=5)
+
         DrakeButton(left_actions, text="IMPORT CSV", width=150,
                     command=self.controller.ship.import_ships_from_csv).pack(side="left", padx=5)
         
@@ -139,6 +142,11 @@ class ShipFrame(ctk.CTkFrame):
                 view.open_archive_popup("SHIPS")
         except Exception:
             pass
+
+    def _import_json_ships(self):
+        """Lance l'import d'un ou plusieurs fichiers JSON SC data miner."""
+        self.controller.ship.import_ships_from_json()
+        self.run_ship_scan()
 
     # --- ONGLET COMPONENTS ---
 
@@ -595,46 +603,114 @@ class ShipFrame(ctk.CTkFrame):
         for ship_name in names:
             ship = self.controller.ship.load_ship_as_model(ship_name)
             if not ship: continue
-            
-            tag = f"edit_{ship.name.replace(' ', '_')}"
-            self.ship_results.insert("end", " ■ ", "ACCENT") 
-            self.ship_results.insert("end", f"{ship.brand} {ship.name} ", (tag, "ship_name_white"))
-            self.ship_results.insert("end", f"[{ship.size.upper()}]\n", "info_label")
-            self.ship_results.insert("end", f"   ROLE: {ship.role} | CAREER: {ship.career}\n")
-            self.ship_results.insert("end", "   [GENERAL]\n", "ACCENT")
-            self.ship_results.insert(
-                "end",
-                f"   - CARGO: {ship.cargo} SCU | CLAIM: {ship.claim_time} min | EXPEDITE: {ship.expedite_time} min\n"
-            )
-            self.ship_results.insert("end", f"   - EXPEDITE COST: {ship.expedition_fee} aUEC\n")
-            self.ship_results.insert("end", f"   - CREW: {ship.crew_size}\n")
 
+            tag = f"edit_{ship.name.replace(' ', '_')}"
+
+            # ── En-tête ──────────────────────────────────────────────────
+            self.ship_results.insert("end", " ■ ", "ACCENT")
+            self.ship_results.insert("end", f"{ship.brand}  {ship.name} ", (tag, "ship_name_white"))
+            size_label = f"S{ship.size}" if ship.size else "—"
+            self.ship_results.insert("end", f"[{size_label}]  CREW: {ship.crew_size}\n", "info_label")
+            self.ship_results.insert("end", f"   {ship.career}  ›  {ship.role}\n")
+
+            # ── Dimensions / masse ────────────────────────────────────────
+            if ship.length or ship.width or ship.height:
+                self.ship_results.insert("end", "   [DIMENSIONS]\n", "ACCENT")
+                self.ship_results.insert(
+                    "end",
+                    f"   - L×W×H : {ship.length:.1f} × {ship.width:.1f} × {ship.height:.1f} m"
+                    f"   MASS: {ship.mass_total:,.0f} kg\n",
+                )
+
+            # ── Vol ───────────────────────────────────────────────────────
             self.ship_results.insert("end", "   [FLIGHT]\n", "ACCENT")
             self.ship_results.insert(
                 "end",
-                f"   - SCM: {ship.scm_speed} | NAV: {ship.nav_max_speed} | HP: {ship.hp}\n"
+                f"   - SCM: {ship.scm_speed:.0f} m/s  "
+                f"BOOST ↑{ship.scm_boost_forward:.0f} / ↓{ship.scm_boost_backward:.0f}  "
+                f"MAX: {ship.nav_max_speed:.0f} m/s\n",
             )
             self.ship_results.insert(
                 "end",
-                f"   - PITCH/YAW/ROLL: {ship.pitch}/{ship.yaw}/{ship.roll}\n"
+                f"   - PITCH / YAW / ROLL : {ship.pitch:.0f} / {ship.yaw:.0f} / {ship.roll:.0f} °/s"
+                f"  (boosted: {ship.boosted_pitch:.0f} / {ship.boosted_yaw:.0f} / {ship.boosted_roll:.0f})\n",
             )
-            self.ship_results.insert(
-                "end",
-                f"   - BOOST P/Y/R: {ship.boosted_pitch}/{ship.boosted_yaw}/{ship.boosted_roll}\n"
-            )
-            self.ship_results.insert("end", "   " + "-"*45 + "\n", "separator")
+            if ship.accel_main or ship.accel_maneuver:
+                self.ship_results.insert(
+                    "end",
+                    f"   - ACCEL  main: {ship.accel_main:.1f} g  "
+                    f"retro: {ship.accel_retro:.1f} g  "
+                    f"maneuver: {ship.accel_maneuver:.1f} g  "
+                    f"(boost main: {ship.accel_main_boosted:.1f} g)\n",
+                )
 
-            # Affichage du loadout par défaut complet (inclut les slots vides).
-            self.ship_results.insert("end", "   DEFAULT LOADOUT (BY CATEGORY):\n", "ACCENT")
+            # ── Propulsion ────────────────────────────────────────────────
+            self.ship_results.insert("end", "   [PROPULSION]\n", "ACCENT")
+            self.ship_results.insert(
+                "end",
+                f"   - H₂ tank: {ship.hydrogen_capacity:,.0f} L"
+                f"   intake: {ship.fuel_intake_rate:.1f} L/s"
+                f"   burn (main): {ship.fuel_usage_main:.2f} L/s\n",
+            )
+            self.ship_results.insert(
+                "end",
+                f"   - QT tank: {ship.qt_fuel_capacity:,.0f} L"
+                f"   range: {ship.qt_range/1e9:.2f} Gm"
+                f"   speed: {ship.qt_speed/1e6:.0f} Mm/s"
+                f"   spool: {ship.qt_spool_time:.1f} s\n",
+            )
+
+            # ── Défense ───────────────────────────────────────────────────
+            self.ship_results.insert("end", "   [DEFENSE]\n", "ACCENT")
+            self.ship_results.insert(
+                "end",
+                f"   - HP: {ship.hp:,}   SHIELD: {ship.shield_hp:,} HP  regen: {ship.shield_regen:.0f}/s\n",
+            )
+            if ship.emission_ir or ship.emission_em:
+                self.ship_results.insert(
+                    "end",
+                    f"   - IR: {ship.emission_ir:,.0f}   EM: {ship.emission_em:,.0f}\n",
+                )
+
+            # ── Armement ──────────────────────────────────────────────────
+            if ship.pilot_dps or ship.missiles_count:
+                self.ship_results.insert("end", "   [WEAPONS]\n", "ACCENT")
+                if ship.pilot_dps:
+                    self.ship_results.insert(
+                        "end",
+                        f"   - PILOT DPS: {ship.pilot_dps:.0f}"
+                        f"  alpha: {ship.pilot_alpha:.0f}"
+                        f"  sustained: {ship.pilot_sustained_dps:.0f}\n",
+                    )
+                if ship.missiles_count:
+                    self.ship_results.insert(
+                        "end",
+                        f"   - MISSILES: {ship.missiles_count}x"
+                        f"  total dmg: {ship.missiles_damage:,.0f}\n",
+                    )
+
+            # ── Cargo / Assurance ─────────────────────────────────────────
+            self.ship_results.insert("end", "   [LOGISTICS]\n", "ACCENT")
+            self.ship_results.insert(
+                "end",
+                f"   - CARGO: {ship.cargo:.0f} SCU"
+                f"   CLAIM: {ship.claim_time:.2f} min"
+                f"   EXPEDITE: {ship.expedite_time:.2f} min ({ship.expedition_fee:,.0f} aUEC)\n",
+            )
+
+            # ── Loadout par défaut ─────────────────────────────────────────
+            self.ship_results.insert("end", "   [DEFAULT LOADOUT]\n", "ACCENT")
             default_lines = self._build_default_loadout_lines(ship.name)
             if default_lines:
                 for line in default_lines:
                     self.ship_results.insert("end", f"{line}\n")
             else:
                 self.ship_results.insert("end", "   No slot specs available.\n", "small_info")
-            
-            self.ship_results.insert("end", f"{'='*60}\n\n")
-            self.ship_results.tag_bind(tag, "<Double-Button-1>", lambda e, n=ship.name: self.open_edit_window(n))
+
+            self.ship_results.insert("end", f"{'═'*60}\n\n")
+            self.ship_results.tag_bind(
+                tag, "<Double-Button-1>", lambda e, n=ship.name: self.open_edit_window(n)
+            )
 
     def _build_default_loadout_lines(self, ship_name: str) -> list[str]:
         """Construit les lignes d'affichage du profil DEFAULT, slots vides inclus."""

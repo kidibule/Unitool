@@ -1,5 +1,6 @@
 """Controller pour la gestion des vaisseaux (ships)."""
 
+import json
 from models.ship import Ship
 from models.component import Component
 from services.ship_helpers import clean_number, parse_triple, parse_dimensions, clean_time, extract_header
@@ -91,35 +92,14 @@ class ShipController:
         return subtype == "GENERIC" or cat == "WEAPON"
 
     def save_ship(self, data_dict: dict) -> None:
-        ship = Ship(
-            name=str(data_dict.get("name", "")),
-            brand=str(data_dict.get("brand", "")),
-            role=str(data_dict.get("role", "")),
-            career=str(data_dict.get("career", "")),
-            size=str(data_dict.get("size", "")),
-            crew_size=self._safe_int(data_dict.get("crew_size")),
-            scm_speed=self._safe_int(data_dict.get("scm_speed")),
-            scm_boost_forward=self._safe_int(data_dict.get("scm_boost_forward")),
-            scm_boost_backward=self._safe_int(data_dict.get("scm_boost_backward")),
-            nav_max_speed=self._safe_int(data_dict.get("nav_max_speed")),
-            pitch=self._safe_int(data_dict.get("pitch")),
-            yaw=self._safe_int(data_dict.get("yaw")),
-            roll=self._safe_int(data_dict.get("roll")),
-            boosted_pitch=self._safe_int(data_dict.get("boosted_pitch")),
-            boosted_yaw=self._safe_int(data_dict.get("boosted_yaw")),
-            boosted_roll=self._safe_int(data_dict.get("boosted_roll")),
-            power_consumption=str(data_dict.get("power_consumption", "")),
-            cm_decoy_noise=str(data_dict.get("cm_decoy_noise", "")),
-            hp=self._safe_int(data_dict.get("hp")),
-            cargo=self._safe_int(data_dict.get("cargo")),
-            dimensions=str(data_dict.get("dimensions", "")),
-            mass=str(data_dict.get("mass", "")),
-            hydrogen_capacity=self._safe_float(data_dict.get("hydrogen_capacity")),
-            qt_fuel_capacity=self._safe_float(data_dict.get("qt_fuel_capacity")),
-            expedition_fee=str(data_dict.get("expedition_fee", "")),
-            claim_time=self._safe_float(data_dict.get("claim_time")),
-            expedite_time=self._safe_float(data_dict.get("expedite_time")),
-        )
+        ship = Ship(**{
+            k: data_dict.get(k, "" if k in (
+                "brand", "role", "career", "dimensions", "power_consumption",
+                "cm_decoy_noise", "sc_uuid", "sc_class_name", "sc_data_json",
+            ) else 0)
+            for k in Ship.COLUMNS
+            if k != "name"
+        } | {"name": str(data_dict.get("name", ""))})
 
         cols = ", ".join(ship.COLUMNS)
         placeholders = ", ".join(["?"] * len(ship.COLUMNS))
@@ -261,6 +241,94 @@ class ShipController:
             messagebox.showinfo("UNITOOL", "Export successful!")
         except Exception as e:
             messagebox.showerror("Export Error", str(e))
+
+    def import_ships_from_json(self) -> None:
+        """Importe un ou plusieurs fichiers JSON SC data miner dans la base.
+
+        Chaque fichier doit être un export du SC ship data miner (format JSON).
+        Les fichiers sont traités via Ship.from_sc_json() pour le mapping.
+        Les slots éditables du chassis sont automatiquement déduits via
+        Ship.slots_from_sc_json() et stockés dans ship_subtype_specs.
+        """
+        file_paths = filedialog.askopenfilenames(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="IMPORT SC SHIP DATA (JSON)",
+        )
+        if not file_paths:
+            return
+
+        imported = 0
+        errors = []
+        for path in file_paths:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                ship = Ship.from_sc_json(data)
+                if not ship.name:
+                    errors.append(f"{path}: missing Name field")
+                    continue
+
+                # --- Upsert ship stats ---
+                cols = ", ".join(ship.COLUMNS)
+                placeholders = ", ".join(["?"] * len(ship.COLUMNS))
+                updates = ", ".join([f"{c}=excluded.{c}" for c in ship.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO ships ({cols}) VALUES ({placeholders}) "
+                    f"ON CONFLICT(name) DO UPDATE SET {updates}",
+                    ship.to_db_tuple(),
+                )
+
+                # --- Déduit et insère les slots du chassis ---
+                slots = Ship.slots_from_sc_json(data)
+                ship_key = ship.name
+
+                # Supprime les anciennes specs SC pour ce vaisseau avant réimport
+                self.app.commit(
+                    "DELETE FROM ship_subtype_specs WHERE ship_name = ?",
+                    (ship_key,),
+                )
+                for slot in slots:
+                    self.app.commit(
+                        """
+                        INSERT OR REPLACE INTO ship_subtype_specs
+                            (ship_name, category, subtype_name, max_qty, max_size)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            ship_key,
+                            slot["category"],
+                            slot["subtype_name"],
+                            slot["max_qty"],
+                            slot["max_size"],
+                        ),
+                    )
+                self._sync_ship_specs_from_subtypes(ship_key)
+
+                imported += 1
+                slot_summary = ", ".join(
+                    f"{s['max_qty']}×{s['subtype_name']}" for s in slots
+                ) or "no editable slots"
+
+                if hasattr(self.app, "log"):
+                    self.app.log(
+                        f"JSON IMPORT: {ship.name} ({ship.brand})  "
+                        f"SCM {ship.scm_speed:.0f}  HP {ship.hp}  "
+                        f"CARGO {ship.cargo:.0f} SCU  |  SLOTS: {slot_summary}",
+                        source="FLEET",
+                    )
+
+            except json.JSONDecodeError as e:
+                errors.append(f"{path}: JSON error — {e}")
+            except Exception as e:
+                errors.append(f"{path}: {e}")
+
+        msg = f"Imported {imported} ship(s) from JSON."
+        if errors:
+            msg += f"\n\nErrors ({len(errors)}):\n" + "\n".join(errors)
+            messagebox.showwarning("UNITOOL — IMPORT JSON", msg)
+        else:
+            messagebox.showinfo("UNITOOL — IMPORT JSON", msg)
 
     def add_component_to_db(self, data: dict):
         sql = """
