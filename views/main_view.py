@@ -78,6 +78,7 @@ class MainView(ctk.CTkFrame):
         ]
 
         # Remplacement par des boutons typés Drake
+        self.nav_buttons = {}
         for name, label in menu_items:
             btn = DrakeButton(
                 self.sidebar,
@@ -93,6 +94,7 @@ class MainView(ctk.CTkFrame):
                 height=45,
             )
             btn.pack(pady=4, padx=15, fill="x")
+            self.nav_buttons[name] = btn
 
         # --- ZONE CENTRALE (Le "Deck") ---
         self.container = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -461,6 +463,25 @@ class MainView(ctk.CTkFrame):
         # Mise à jour globale du panel intel
         self.refresh_intel()
         self._current_page_name = page_name
+        self._update_active_nav_button()
+
+    def _update_active_nav_button(self) -> None:
+        """Met en surbrillance le bouton de navigation de la page active."""
+        current_page = getattr(self, "_current_page_name", None)
+        for page_name, button in getattr(self, "nav_buttons", {}).items():
+            try:
+                if page_name == current_page:
+                    button.configure(
+                        fg_color=DrakeConfig.ACCENT_HOVER,
+                        border_color=DrakeConfig.ACCENT_HOVER,
+                    )
+                else:
+                    button.configure(
+                        fg_color="transparent",
+                        border_color=DrakeConfig.BORDER_COLOR,
+                    )
+            except Exception:
+                pass
 
     def _get_or_create_frame(self, page_name):
         """Retourne une page existante ou l'instancie à la demande."""
