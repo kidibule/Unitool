@@ -305,6 +305,72 @@ class ShipController:
                     )
                 self._sync_ship_specs_from_subtypes(ship_key)
 
+                # --- Déduit et insère le loadout par défaut ---
+                default_load = Ship.defaultload_from_sc_json(data)
+
+                # Efface l'ancien profil DEFAULT SC pour ce vaisseau
+                self.app.commit(
+                    "DELETE FROM ship_loadout WHERE ship_name = ? AND profile_name = 'DEFAULT'",
+                    (ship_key,),
+                )
+                # S'assure que le profil DEFAULT existe
+                self.app.commit(
+                    "INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name) VALUES (?, 'DEFAULT')",
+                    (ship_key,),
+                )
+
+                comp_imported = 0
+                for entry in default_load:
+                    # Utilise le nom lisible (ex: "Bulwark Shield", "Revenant Gatling")
+                    # comme clé primaire dans components ; ClassName SC en fallback.
+                    comp_name = entry["component_name"].upper() or entry["component_class"]
+                    # Upsert composant dans le catalogue
+                    type_part = entry["sc_type"].split(".")[-1]  # ex: "Gun", "Power", …
+                    self.app.commit(
+                        """
+                        INSERT OR IGNORE INTO component_categories (name) VALUES (?)
+                        """,
+                        (entry["category"],),
+                    )
+                    self.app.commit(
+                        """
+                        INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)
+                        """,
+                        (type_part.upper(), entry["category"]),
+                    )
+                    self.app.commit(
+                        """
+                        INSERT OR IGNORE INTO components
+                            (name, brand, type_name, category, size, grade, stats)
+                        VALUES (?, ?, ?, ?, ?, ?, '{}')
+                        """,
+                        (
+                            comp_name,
+                            entry["manufacturer"].upper() or "UNKNOWN",
+                            type_part.upper(),
+                            entry["category"],
+                            entry["max_size"],
+                            entry["grade"],
+                        ),
+                    )
+                    # Upsert entrée dans ship_loadout
+                    self.app.commit(
+                        """
+                        INSERT OR REPLACE INTO ship_loadout
+                            (ship_name, profile_name, category, subtype_name,
+                             slot_number, component_name, quantity)
+                        VALUES (?, 'DEFAULT', ?, ?, ?, ?, 1)
+                        """,
+                        (
+                            ship_key,
+                            entry["category"],
+                            entry["subtype_name"],
+                            entry["slot_number"],
+                            comp_name,
+                        ),
+                    )
+                    comp_imported += 1
+
                 imported += 1
                 slot_summary = ", ".join(
                     f"{s['max_qty']}×{s['subtype_name']}" for s in slots
@@ -314,7 +380,8 @@ class ShipController:
                     self.app.log(
                         f"JSON IMPORT: {ship.name} ({ship.brand})  "
                         f"SCM {ship.scm_speed:.0f}  HP {ship.hp}  "
-                        f"CARGO {ship.cargo:.0f} SCU  |  SLOTS: {slot_summary}",
+                        f"CARGO {ship.cargo:.0f} SCU  |  "
+                        f"{len(slots)} slots  |  {comp_imported} default components",
                         source="FLEET",
                     )
 

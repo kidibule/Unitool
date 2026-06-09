@@ -411,6 +411,95 @@ class Ship(BaseModel):
         )
 
     @staticmethod
+    def defaultload_from_sc_json(data: dict) -> list[dict]:
+        """Déduit le loadout par défaut depuis un JSON SC data miner.
+
+        Pour chaque hardpoint de chassis (Editable, PortId==RootPortId) dont
+        le type est mappé dans SC_TYPE_TO_SLOT :
+          - Si c'est un Turret/Mount : le composant réel est le premier enfant
+            dans Loadout[] (la monture elle-même est remplaçable, mais l'arme
+            dedans est le composant à enregistrer).
+          - Sinon : l'item lui-même est le composant.
+
+        Returns:
+            Liste de dicts :
+            {
+              component_class : str  (ClassName SC, clé unique dans components)
+              component_name  : str  (nom affiché)
+              manufacturer    : str
+              sc_type         : str  (ex: "WeaponGun.Gun")
+              category        : str  (ex: "WEAPON")
+              subtype_name    : str  (ex: "GUN S4")
+              max_size        : int
+              grade_num       : int  (grade SC 1-4)
+              slot_number     : int  (0-based dans sa catégorie/sous-type)
+            }
+        """
+        # Conversion grade SC (int) → lettre DB
+        _GRADE = {1: "C", 2: "B", 3: "A", 4: "A"}
+
+        results = []
+        slot_counters: dict[tuple, int] = defaultdict(int)
+
+        for item in data.get("Loadout", []):
+            # Hardpoints de chassis uniquement
+            if item.get("PortId") != item.get("RootPortId"):
+                continue
+            if not item.get("Editable", False):
+                continue
+
+            max_size = item.get("MaxSize", 0)
+            if not max_size:
+                continue
+
+            sc_type_raw = item.get("Type", "")
+            sc_type_base = sc_type_raw.split(".")[0]
+
+            if sc_type_base not in SC_TYPE_TO_SLOT:
+                continue
+
+            category, base_subtype = SC_TYPE_TO_SLOT[sc_type_base]
+            subtype_name = f"{base_subtype} S{max_size}"
+
+            # Résolution du composant équipé
+            if sc_type_base == "Turret":
+                # La monture contient le composant réel dans son propre Loadout
+                children = item.get("Loadout", [])
+                if not children or not children[0].get("ClassName"):
+                    continue
+                comp_item = children[0]
+                # Reclasser selon le type réel de l'arme
+                child_type_base = comp_item.get("Type", "").split(".")[0]
+                if child_type_base in SC_TYPE_TO_SLOT:
+                    category, base_subtype = SC_TYPE_TO_SLOT[child_type_base]
+                    subtype_name = f"{base_subtype} S{max_size}"
+            else:
+                comp_item = item
+
+            class_name = comp_item.get("ClassName", "")
+            if not class_name:
+                continue
+
+            slot_key = (category, subtype_name)
+            slot_number = slot_counters[slot_key]
+            slot_counters[slot_key] += 1
+
+            results.append({
+                "component_class": class_name.upper(),
+                "component_name":  comp_item.get("Name") or class_name,
+                "manufacturer":    comp_item.get("ManufacturerName", ""),
+                "sc_type":         comp_item.get("Type", sc_type_raw),
+                "category":        category,
+                "subtype_name":    subtype_name,
+                "max_size":        max_size,
+                "grade_num":       int(comp_item.get("Grade") or 1),
+                "grade":           _GRADE.get(int(comp_item.get("Grade") or 1), "C"),
+                "slot_number":     slot_number,
+            })
+
+        return results
+
+    @staticmethod
     def slots_from_sc_json(data: dict) -> list[dict]:
         """Déduit les slots éditables du chassis depuis un JSON SC data miner.
 
