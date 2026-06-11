@@ -29,10 +29,21 @@ class ShipRepository:
         stats: str = "{}",
     ) -> None:
         """Insère ou remplace un composant dans le catalogue."""
+    def add_component(
+        self,
+        name: str,
+        brand: str,
+        type_name: str,
+        category: str,
+        size: int,
+        grade: str,
+        stats: str = "{}",
+    ) -> None:
+        """Insère ou remplace un composant dans le catalogue."""
         sql = """
             INSERT OR REPLACE INTO components
-                (name, brand, type_name, category, size, grade, stats)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (name, brand, type_name, category, size, grade)
+            VALUES (?, ?, ?, ?, ?, ?)
         """
         self._db.commit(sql, (
             name.upper(),
@@ -41,7 +52,6 @@ class ShipRepository:
             category.upper(),
             size,
             grade.upper(),
-            stats,
         ))
 
     def equip_component(

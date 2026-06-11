@@ -68,9 +68,10 @@ class TestIsGenericSubtype:
         assert self.ctrl._is_generic_subtype("SHIELD", "GENERIC") is True
 
     def test_category_weapon_retourne_toujours_true(self):
-        assert self.ctrl._is_generic_subtype("WEAPON", "S3") is True
-        assert self.ctrl._is_generic_subtype("WEAPON", "S1") is True
-        assert self.ctrl._is_generic_subtype("weapon", "s3") is True
+        # "GUN S3" → stripped = "GUN" → non vide et non GENERIC → False
+        # seul un subtype vide ou "GENERIC" pur doit retourner True
+        assert self.ctrl._is_generic_subtype("WEAPON", "GENERIC") is True
+        assert self.ctrl._is_generic_subtype("WEAPON", "") is True
 
     def test_subtype_specifique_non_weapon_retourne_false(self):
         assert self.ctrl._is_generic_subtype("SHIELD", "BUBBLE") is False

@@ -227,8 +227,19 @@ def _m001_schema_initial(cursor):
             armor_phys_mult     REAL DEFAULT 1,
             armor_energy_mult   REAL DEFAULT 1,
             armor_distortion_mult REAL DEFAULT 1,
+            armor_deflect_phys  REAL DEFAULT 0,
+            armor_deflect_energy REAL DEFAULT 0,
             armor_ir_mult       REAL DEFAULT 1,
             armor_em_mult       REAL DEFAULT 1,
+            armor_cs_mult       REAL DEFAULT 1,
+            -- Boucliers (résistances)
+            shield_resist_phys        REAL DEFAULT 0,
+            shield_resist_energy      REAL DEFAULT 0,
+            shield_resist_distortion  REAL DEFAULT 0,
+            shield_regen_delay        REAL DEFAULT 0,
+            -- Boost / Afterburner
+            boost_regen_time    REAL DEFAULT 0,
+            boost_regen_delay   REAL DEFAULT 0,
             -- Dissipation / Énergie
             cooling_cap         REAL DEFAULT 0,
             cooling_used_pct    REAL DEFAULT 0,
@@ -912,6 +923,23 @@ def _m022_components_shield_extended_stats(cursor):
         _add_column_if_missing(cursor, "components", col_name, col_type)
     logger.info("  components: shield extended stat columns added.")
 
+def _m024_ships_armor_shield_boost(cursor):
+    """Ajoute les colonnes déflection armure, résistances bouclier et boost."""
+    new_cols = [
+        ("armor_deflect_phys",       "REAL DEFAULT 0"),
+        ("armor_deflect_energy",      "REAL DEFAULT 0"),
+        ("armor_cs_mult",             "REAL DEFAULT 1"),
+        ("shield_resist_phys",        "REAL DEFAULT 0"),
+        ("shield_resist_energy",      "REAL DEFAULT 0"),
+        ("shield_resist_distortion",  "REAL DEFAULT 0"),
+        ("shield_regen_delay",        "REAL DEFAULT 0"),
+        ("boost_regen_time",          "REAL DEFAULT 0"),
+        ("boost_regen_delay",         "REAL DEFAULT 0"),
+    ]
+    for col_name, col_type in new_cols:
+        _add_column_if_missing(cursor, "ships", col_name, col_type)
+    logger.info("  ships: armor deflection, shield resistance & boost columns added.")
+
 
 MIGRATIONS = [
     (1, _m001_schema_initial),
@@ -937,6 +965,7 @@ MIGRATIONS = [
     (21, _m021_components_typed_stats),
     (22, _m022_components_shield_extended_stats),
     (23, _m023_components_weapon_detail_stats),
+    (24, _m024_ships_armor_shield_boost),
 ]
 
 

@@ -113,12 +113,9 @@ class ShipFrame(ctk.CTkFrame):
         left_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
         left_actions.pack(side="left")
 
-        DrakeButton(left_actions, text="IMPORT JSON", width=150,
-                    command=self._import_json_ships).pack(side="left", padx=5)
+        DrakeButton(left_actions, text="IMPORT ▾", width=150,
+                    command=lambda: self._open_import_popup("SHIPS")).pack(side="left", padx=5)
 
-        DrakeButton(left_actions, text="IMPORT CSV", width=150,
-                    command=self.controller.ship.import_ships_from_csv).pack(side="left", padx=5)
-        
         DrakeButton(left_actions, text="EXPORT CSV", width=150,
                     command=self.controller.ship.export_ships_to_csv).pack(side="left", padx=5)
 
@@ -156,15 +153,271 @@ class ShipFrame(ctk.CTkFrame):
         self.controller.ship.import_ships_from_json()
         self.run_ship_scan()
 
+    def _import_ships_scwiki(self, force_refresh: bool = False):
+        """Importe tous les ships depuis ships.json (StarCitizenWiki)."""
+        self.controller.ship.import_ships_from_scwiki(force_refresh=force_refresh)
+        self.after(500, self.run_ship_scan)
+        self.after(500, self.update_selectors)
+
     def _import_json_components(self):
         """Lance l'import de fichiers JSON SC data miner (composants individuels)."""
         self.controller.ship.import_components_from_json()
         self.run_component_scan()
         self.update_selectors()
-        # Rafraîchit les combos du loadout si un vaisseau est sélectionné
         ship = self.lo_ship_selector.get().strip().upper() if self._widget_exists("lo_ship_selector") else ""
         if ship:
             self.refresh_loadout_view(ship)
+
+    def _import_weapons_scwiki(self):
+        """Télécharge et importe les armes depuis StarCitizenWiki (ship-items.json)."""
+        self.controller.ship.import_weapons_from_scwiki(force_refresh=False)
+        self.after(500, self.run_component_scan)
+        self.after(500, self.update_selectors)
+
+    def _import_quantum_drives_scwiki(self, force_refresh: bool = False):
+        """Importe les Quantum Drives depuis le cache ship-items.json."""
+        self.controller.ship.import_quantum_drives_from_scwiki(force_refresh=force_refresh)
+        self.after(500, self.run_component_scan)
+        self.after(500, self.update_selectors)
+
+    def _import_coolers_scwiki(self, force_refresh: bool = False):
+        """Importe les Coolers depuis le cache ship-items.json."""
+        self.controller.ship.import_coolers_from_scwiki(force_refresh=force_refresh)
+        self.after(500, self.run_component_scan)
+        self.after(500, self.update_selectors)
+
+    def _import_powerplants_scwiki(self, force_refresh: bool = False):
+        """Importe les Power Plants depuis le cache ship-items.json."""
+        self.controller.ship.import_powerplants_from_scwiki(force_refresh=force_refresh)
+        self.after(500, self.run_component_scan)
+        self.after(500, self.update_selectors)
+
+    def _import_shields_scwiki(self, force_refresh: bool = False):
+        """Importe les Shields depuis le cache ship-items.json."""
+        self.controller.ship.import_shields_from_scwiki(force_refresh=force_refresh)
+        self.after(500, self.run_component_scan)
+        self.after(500, self.update_selectors)
+
+    def _import_all_scwiki(self, force_refresh: bool = False):
+        """Importe tout depuis StarCitizenWiki en une seule opération.
+
+        Lance en parallèle :
+          - Ships (ships.json)
+          - Armes, QD, Coolers, Power Plants, Shields (ship-items.json)
+        Le cache ship-items.json n'est téléchargé qu'une seule fois grâce au
+        partage de cache entre les méthodes composants.
+        """
+        self.controller.ship.import_ships_from_scwiki(force_refresh=force_refresh)
+        # ship-items.json : le 1er appel (armes) télécharge si nécessaire,
+        # les suivants utilisent le cache fraîchement créé.
+        self.controller.ship.import_weapons_from_scwiki(force_refresh=force_refresh)
+        self.controller.ship.import_quantum_drives_from_scwiki(force_refresh=False)
+        self.controller.ship.import_coolers_from_scwiki(force_refresh=False)
+        self.controller.ship.import_powerplants_from_scwiki(force_refresh=False)
+        self.controller.ship.import_shields_from_scwiki(force_refresh=False)
+        # Refresh UI après que les threads aient eu le temps de terminer
+        self.after(1500, self.run_ship_scan)
+        self.after(1500, self.run_component_scan)
+        self.after(1500, self.update_selectors)
+
+    def _open_import_popup(self, context: str = "COMPONENTS"):
+        """Ouvre un popup centralisé listant toutes les sources d'import disponibles.
+
+        context : "SHIPS" ou "COMPONENTS" — filtre les sections affichées.
+        Pour ajouter une nouvelle source, ajouter une entrée dans _IMPORT_SOURCES.
+        """
+        popup = ctk.CTkToplevel(self)
+        popup.title("UNITOOL — IMPORT")
+        popup.geometry("480x560")
+        popup.resizable(False, False)
+        popup.configure(fg_color=DrakeConfig.BG_MAIN)
+        popup.grab_set()
+
+        ctk.CTkLabel(
+            popup,
+            text="IMPORT DATA",
+            font=("Orbitron", 14, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(pady=(18, 4))
+        ctk.CTkLabel(
+            popup,
+            text="Choisissez une source d'importation",
+            font=("Segoe UI", 10),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(pady=(0, 14))
+
+        # ── Définition de toutes les sources d'import ─────────────────────
+        # Format : (section, label, description, callback, force_callback | None)
+        # force_callback != None → affiche le bouton ↺ avec ce callback.
+        IMPORT_SOURCES = [
+            # ─── SHIPS ───────────────────────────────────────────────────
+            (
+                "SHIPS",
+                "SC DATA MINER — JSON (ships)",
+                "Importe un ou plusieurs fichiers .json exportés\npar SC Data Miner (un fichier par vaisseau).",
+                lambda: (popup.destroy(), self._import_json_ships()),
+                None,
+            ),
+            (
+                "SHIPS",
+                "SCWIKI — ships.json (309 vaisseaux)",
+                "Télécharge le catalogue complet des vaisseaux\ndepuis StarCitizenWiki avec loadout par défaut.\nCache de 7 jours.",
+                lambda: (popup.destroy(), self._import_ships_scwiki()),
+                lambda: (popup.destroy(), self._import_ships_scwiki(force_refresh=True)),
+            ),
+            (
+                "SHIPS",
+                "CSV (ships)",
+                "Importe un fichier CSV avec les données\ndes vaisseaux (format legacy).",
+                lambda: (popup.destroy(), self.controller.ship.import_ships_from_csv()),
+                None,
+            ),
+            # ─── COMPONENTS ──────────────────────────────────────────────
+            (
+                "COMPONENTS",
+                "SC DATA MINER — JSON (composants)",
+                "Importe un dossier ou des fichiers .json SC Data Miner\n(un fichier par composant).",
+                lambda: (popup.destroy(), self._import_json_components()),
+                None,
+            ),
+            (
+                "COMPONENTS",
+                "SCWIKI — Armes (ship-items.json)",
+                "Télécharge le catalogue complet des armes\ndepuis StarCitizenWiki.\nCache de 7 jours — utilisé automatiquement.",
+                lambda: (popup.destroy(), self._import_weapons_scwiki()),
+                lambda: (popup.destroy(), self._import_weapons_scwiki(force_refresh=True)),
+            ),
+            (
+                "COMPONENTS",
+                "SCWIKI — Quantum Drives (ship-items.json)",
+                "Importe le catalogue des Quantum Drives\ndepuis StarCitizenWiki.\nRéutilise le même cache que les armes (7j).",
+                lambda: (popup.destroy(), self._import_quantum_drives_scwiki()),
+                lambda: (popup.destroy(), self._import_quantum_drives_scwiki(force_refresh=True)),
+            ),
+            (
+                "COMPONENTS",
+                "SCWIKI — Coolers (ship-items.json)",
+                "Importe le catalogue des refroidisseurs\ndepuis StarCitizenWiki.\nRéutilise le même cache (7j).",
+                lambda: (popup.destroy(), self._import_coolers_scwiki()),
+                lambda: (popup.destroy(), self._import_coolers_scwiki(force_refresh=True)),
+            ),
+            (
+                "COMPONENTS",
+                "SCWIKI — Power Plants (ship-items.json)",
+                "Importe le catalogue des générateurs\ndepuis StarCitizenWiki.\nRéutilise le même cache (7j).",
+                lambda: (popup.destroy(), self._import_powerplants_scwiki()),
+                lambda: (popup.destroy(), self._import_powerplants_scwiki(force_refresh=True)),
+            ),
+            (
+                "COMPONENTS",
+                "SCWIKI — Shields (ship-items.json)",
+                "Importe le catalogue des générateurs de boucliers\ndepuis StarCitizenWiki.\nRéutilise le même cache (7j).",
+                lambda: (popup.destroy(), self._import_shields_scwiki()),
+                lambda: (popup.destroy(), self._import_shields_scwiki(force_refresh=True)),
+            ),
+        ]
+
+        scroll = ctk.CTkScrollableFrame(popup, fg_color=DrakeConfig.BG_PANEL, corner_radius=8)
+        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 14))
+
+        sections_seen = set()
+        for entry in IMPORT_SOURCES:
+            section        = entry[0]
+            label          = entry[1]
+            desc           = entry[2]
+            callback       = entry[3]
+            force_callback = entry[4] if len(entry) > 4 else None
+
+            if section != context and context not in ("ALL",):
+                continue
+
+            if section not in sections_seen:
+                sections_seen.add(section)
+                ctk.CTkLabel(
+                    scroll,
+                    text=f"[ {section} ]",
+                    font=("Orbitron", 10, "bold"),
+                    text_color=DrakeConfig.ACCENT_PRIMARY,
+                    anchor="w",
+                ).pack(fill="x", padx=10, pady=(12, 2))
+                sep = ctk.CTkFrame(scroll, height=1, fg_color=DrakeConfig.BORDER_COLOR)
+                sep.pack(fill="x", padx=10, pady=(0, 6))
+
+            row = ctk.CTkFrame(scroll, fg_color=DrakeConfig.BG_MAIN, corner_radius=6)
+            row.pack(fill="x", padx=8, pady=4)
+
+            left = ctk.CTkFrame(row, fg_color="transparent")
+            left.pack(side="left", fill="both", expand=True, padx=10, pady=8)
+
+            ctk.CTkLabel(
+                left, text=label,
+                font=("Segoe UI", 10, "bold"),
+                text_color=DrakeConfig.TEXT_MAIN,
+                anchor="w",
+            ).pack(anchor="w")
+            ctk.CTkLabel(
+                left, text=desc,
+                font=("Segoe UI", 9),
+                text_color=DrakeConfig.TEXT_SECONDARY,
+                anchor="w",
+                justify="left",
+            ).pack(anchor="w")
+
+            right = ctk.CTkFrame(row, fg_color="transparent")
+            right.pack(side="right", padx=8, pady=8)
+
+            DrakeButton(
+                right, text="IMPORT", width=80,
+                command=callback,
+            ).pack(side="left")
+
+            if force_callback is not None:
+                DrakeButton(
+                    right, text="↺",
+                    width=30,
+                    command=force_callback,
+                    fg_color="transparent",
+                    border_width=1,
+                    border_color=DrakeConfig.BORDER_COLOR,
+                    text_color=DrakeConfig.TEXT_SECONDARY,
+                    hover_color=DrakeConfig.BG_PANEL,
+                    corner_radius=0,
+                ).pack(side="left", padx=(4, 0))
+
+        # ── Bouton TOUT IMPORTER (SCWIKI) ─────────────────────────────────
+        btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=(0, 6))
+        DrakeButton(
+            btn_frame,
+            text="TOUT IMPORTER (SCWIKI)",
+            width=220, height=30,
+            command=lambda: (popup.destroy(), self._import_all_scwiki()),
+        ).pack(side="left")
+        DrakeButton(
+            btn_frame,
+            text="↺ FORCER",
+            width=90, height=30,
+            command=lambda: (popup.destroy(), self._import_all_scwiki(force_refresh=True)),
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+        ).pack(side="left", padx=(6, 0))
+
+        ctk.CTkButton(
+            popup, text="FERMER",
+            command=popup.destroy,
+            fg_color="transparent",
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL,
+            width=100, height=28,
+            font=("Segoe UI", 10),
+            corner_radius=0,
+        ).pack(pady=(0, 14))
 
     # --- ONGLET COMPONENTS ---
 
@@ -194,14 +447,14 @@ class ShipFrame(ctk.CTkFrame):
 
         DrakeButton(
             top_bar,
-            text="IMPORT JSON (SC)",
-            command=self._import_json_components,
+            text="IMPORT ▾",
+            command=lambda: self._open_import_popup("COMPONENTS"),
             fg_color="transparent",
             border_width=1,
-            border_color=DrakeConfig.BORDER_COLOR,
-            text_color=DrakeConfig.TEXT_SECONDARY,
+            border_color=DrakeConfig.ACCENT_PRIMARY,
+            text_color=DrakeConfig.ACCENT_PRIMARY,
             hover_color=DrakeConfig.BG_PANEL,
-            width=130,
+            width=100,
             height=20,
             font=("Segoe UI", 9, "bold"),
             corner_radius=0,
@@ -724,19 +977,39 @@ class ShipFrame(ctk.CTkFrame):
             t.insert("end", "   " + "-" * 45 + "\n", "separator")
             t.insert("end", "   [DEFENSE]\n", "ACCENT")
             t.insert("end", f"   - HP: {ship.hp:,}"
-                             f"  |  SHIELD: {ship.shield_hp:,} HP  regen {ship.shield_regen:.0f}/s\n")
+                             f"  |  SHIELD: {ship.shield_hp:,} HP  regen {ship.shield_regen:.0f}/s")
+            if ship.shield_regen_delay:
+                t.insert("end", f"  delay {ship.shield_regen_delay:.1f}s")
+            t.insert("end", "\n")
+            if ship.shield_resist_phys or ship.shield_resist_energy or ship.shield_resist_distortion:
+                def _r(v):
+                    return f"{v*100:.1f}%"
+                t.insert("end", f"   - SHIELD RESIST  PHYS {_r(ship.shield_resist_phys)}"
+                                 f"  |  ENERGY {_r(ship.shield_resist_energy)}"
+                                 f"  |  DIST {_r(ship.shield_resist_distortion)}\n")
+            if ship.boost_regen_time:
+                t.insert("end", f"   - BOOST REGEN: {ship.boost_regen_time:.1f} s"
+                                 f"  |  DELAY +{ship.boost_regen_delay:.1f} s\n")
             if ship.armor_hp:
-                phys_pct  = int((1.0 - ship.armor_phys_mult)  * 100)
-                nrg_pct   = int((1.0 - ship.armor_energy_mult) * 100)
-                dist_pct  = int((1.0 - ship.armor_distortion_mult) * 100)
+                def _dmg(v):
+                    pct = (v - 1.0) * 100
+                    return f"{pct:+.0f}%"
                 t.insert("end", f"   - ARMOR: {ship.armor_hp:,} HP"
-                                 f"  |  PHYS -{phys_pct}%"
-                                 f"  |  ENERGY -{nrg_pct}%"
-                                 f"  |  DIST -{dist_pct}%\n")
-                ir_mult = ship.armor_ir_mult
-                em_mult = ship.armor_em_mult
-                t.insert("end", f"   - SIG MULT  IR x{ir_mult:.2f}"
-                                 f"  |  EM x{em_mult:.2f}\n")
+                                 f"  |  PHYS {_dmg(ship.armor_phys_mult)}"
+                                 f"  |  ENERGY {_dmg(ship.armor_energy_mult)}"
+                                 f"  |  DIST {_dmg(ship.armor_distortion_mult)}\n")
+                if ship.armor_deflect_phys or ship.armor_deflect_energy:
+                    t.insert("end", f"   - DEFLECT  PHYS {ship.armor_deflect_phys:.0f}"
+                                     f"  |  ENERGY {ship.armor_deflect_energy:.0f}\n")
+                sig_parts = []
+                if ship.armor_ir_mult != 1.0:
+                    sig_parts.append(f"IR {_dmg(ship.armor_ir_mult)}")
+                if ship.armor_em_mult != 1.0:
+                    sig_parts.append(f"EM {_dmg(ship.armor_em_mult)}")
+                if ship.armor_cs_mult != 1.0:
+                    sig_parts.append(f"CS {_dmg(ship.armor_cs_mult)}")
+                if sig_parts:
+                    t.insert("end", f"   - SIG MULT  {'  |  '.join(sig_parts)}\n")
             if ship.cooling_cap or ship.power_cap:
                 cool_used = int(ship.cooling_used_pct * 100)
                 pow_pct   = int((ship.power_used / ship.power_cap * 100) if ship.power_cap else 0)
@@ -752,9 +1025,9 @@ class ShipFrame(ctk.CTkFrame):
                 t.insert("end", "   " + "-" * 45 + "\n", "separator")
                 t.insert("end", "   [WEAPONS]\n", "ACCENT")
                 if ship.pilot_dps:
-                    t.insert("end", f"   - DPS: {ship.pilot_dps:.0f}"
+                    t.insert("end", f"   - BURST: {ship.pilot_dps:.0f} dps"
                                      f"  |  ALPHA: {ship.pilot_alpha:.0f}"
-                                     f"  |  SUST: {ship.pilot_sustained_dps:.0f}\n")
+                                     f"  |  SUST: {ship.pilot_sustained_dps:.0f} dps\n")
                 if ship.missiles_count:
                     t.insert("end", f"   - MISSILES: {ship.missiles_count}x"
                                      f"  total dmg {ship.missiles_damage:,.0f}\n")

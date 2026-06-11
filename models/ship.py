@@ -104,11 +104,22 @@ class Ship(BaseModel):
         "missiles_damage",
         # ---- Armure ----
         "armor_hp",
-        "armor_phys_mult",
-        "armor_energy_mult",
-        "armor_distortion_mult",
-        "armor_ir_mult",
-        "armor_em_mult",
+        "armor_phys_mult",       # ResistanceMultipliers.Physical  (0.81 = -19% dmg pris)
+        "armor_energy_mult",     # ResistanceMultipliers.Energy    (1.21 = +21% dmg pris)
+        "armor_distortion_mult", # ResistanceMultipliers.Distortion
+        "armor_deflect_phys",    # Deflection.Physical
+        "armor_deflect_energy",  # Deflection.Energy
+        "armor_ir_mult",         # SignalMultipliers.Infrared
+        "armor_em_mult",         # SignalMultipliers.Electromagnetic
+        "armor_cs_mult",         # SignalMultipliers.CrossSection
+        # ---- Boucliers (stats) ----
+        "shield_resist_phys",        # ShieldsTotal.Resistance.Physical.Maximum
+        "shield_resist_energy",      # ShieldsTotal.Resistance.Energy.Maximum
+        "shield_resist_distortion",  # ShieldsTotal.Resistance.Distortion.Maximum
+        "shield_regen_delay",        # ShieldsTotal.RegenerationTime
+        # ---- Boost / Afterburner ----
+        "boost_regen_time",      # Afterburner.RegenTime
+        "boost_regen_delay",     # Afterburner.CapacitorRegenDelayAfterUse
         # ---- Dissipation / Énergie ----
         "cooling_cap",
         "cooling_used_pct",
@@ -190,8 +201,19 @@ class Ship(BaseModel):
         armor_phys_mult: float = 1.0,
         armor_energy_mult: float = 1.0,
         armor_distortion_mult: float = 1.0,
+        armor_deflect_phys: float = 0.0,
+        armor_deflect_energy: float = 0.0,
         armor_ir_mult: float = 1.0,
         armor_em_mult: float = 1.0,
+        armor_cs_mult: float = 1.0,
+        # Boucliers (résistances)
+        shield_resist_phys: float = 0.0,
+        shield_resist_energy: float = 0.0,
+        shield_resist_distortion: float = 0.0,
+        shield_regen_delay: float = 0.0,
+        # Boost
+        boost_regen_time: float = 0.0,
+        boost_regen_delay: float = 0.0,
         # Dissipation / Énergie
         cooling_cap: float = 0.0,
         cooling_used_pct: float = 0.0,
@@ -269,8 +291,19 @@ class Ship(BaseModel):
         self.armor_phys_mult = float(armor_phys_mult) if armor_phys_mult is not None else 1.0
         self.armor_energy_mult = float(armor_energy_mult) if armor_energy_mult is not None else 1.0
         self.armor_distortion_mult = float(armor_distortion_mult) if armor_distortion_mult is not None else 1.0
+        self.armor_deflect_phys = float(armor_deflect_phys) if armor_deflect_phys else 0.0
+        self.armor_deflect_energy = float(armor_deflect_energy) if armor_deflect_energy else 0.0
         self.armor_ir_mult = float(armor_ir_mult) if armor_ir_mult is not None else 1.0
         self.armor_em_mult = float(armor_em_mult) if armor_em_mult is not None else 1.0
+        self.armor_cs_mult = float(armor_cs_mult) if armor_cs_mult is not None else 1.0
+        # Boucliers (résistances)
+        self.shield_resist_phys = float(shield_resist_phys) if shield_resist_phys else 0.0
+        self.shield_resist_energy = float(shield_resist_energy) if shield_resist_energy else 0.0
+        self.shield_resist_distortion = float(shield_resist_distortion) if shield_resist_distortion else 0.0
+        self.shield_regen_delay = float(shield_regen_delay) if shield_regen_delay else 0.0
+        # Boost
+        self.boost_regen_time = float(boost_regen_time) if boost_regen_time else 0.0
+        self.boost_regen_delay = float(boost_regen_delay) if boost_regen_delay else 0.0
         # Dissipation / Énergie
         self.cooling_cap = float(cooling_cap) if cooling_cap else 0.0
         self.cooling_used_pct = float(cooling_used_pct) if cooling_used_pct else 0.0
@@ -375,8 +408,11 @@ class Ship(BaseModel):
         emission = data.get("Emission", {})
         insurance = data.get("Insurance", {})
         armor = data.get("Armor", {})
-        dmg_mult = armor.get("DamageMultipliers", {})
-        sig_mult = armor.get("SignalMultipliers", {})
+        resist_mult = armor.get("ResistanceMultipliers", {})
+        sig_mult    = armor.get("SignalMultipliers", {})
+        deflection  = armor.get("Deflection", {})
+        shields_resist = shields.get("Resistance", {})
+        ab = flight.get("Afterburner", {})
         cooling = data.get("Cooling", {})
         power_data = data.get("Power", {})
         manufacturer = data.get("Manufacturer", {})
@@ -434,13 +470,24 @@ class Ship(BaseModel):
             pilot_sustained_dps=weaponry.get("PilotSustainedDps", 0.0),
             missiles_count=missiles.get("Count", 0),
             missiles_damage=weaponry.get("TotalMissiles", 0.0),
-            # Armure
+            # Armure — source : ResistanceMultipliers (valeur nette dommages subis)
             armor_hp=armor.get("Health", 0),
-            armor_phys_mult=dmg_mult.get("Physical", 1.0),
-            armor_energy_mult=dmg_mult.get("Energy", 1.0),
-            armor_distortion_mult=dmg_mult.get("Distortion", 1.0),
+            armor_phys_mult=resist_mult.get("Physical", 1.0),
+            armor_energy_mult=resist_mult.get("Energy", 1.0),
+            armor_distortion_mult=resist_mult.get("Distortion", 1.0),
+            armor_deflect_phys=deflection.get("Physical", 0.0),
+            armor_deflect_energy=deflection.get("Energy", 0.0),
             armor_ir_mult=sig_mult.get("Infrared", 1.0),
             armor_em_mult=sig_mult.get("Electromagnetic", 1.0),
+            armor_cs_mult=sig_mult.get("CrossSection", 1.0),
+            # Boucliers — résistances
+            shield_resist_phys=shields_resist.get("Physical", {}).get("Maximum", 0.0),
+            shield_resist_energy=shields_resist.get("Energy", {}).get("Maximum", 0.0),
+            shield_resist_distortion=shields_resist.get("Distortion", {}).get("Maximum", 0.0),
+            shield_regen_delay=shields.get("RegenerationTime", 0.0),
+            # Boost / Afterburner
+            boost_regen_time=ab.get("RegenTime", 0.0),
+            boost_regen_delay=ab.get("CapacitorRegenDelayAfterUse", 0.0),
             # Dissipation / Énergie
             cooling_cap=cooling.get("GenerationSegments", 0.0),
             cooling_used_pct=cooling.get("UsedSegmentsShieldsPct", 0.0),

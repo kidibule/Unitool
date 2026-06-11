@@ -425,6 +425,130 @@ class ShipController:
         else:
             messagebox.showinfo("UNITOOL — IMPORT JSON", msg)
 
+    def import_ships_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les ships depuis ships.json (StarCitizenWiki) avec loadout par défaut.
+
+        Cache : cache/scwiki-ships.json, TTL 7 jours.
+        Réutilise Ship.from_sc_json() et Ship.defaultload_from_sc_json() car le
+        format ships.json SCWiki est identique au format SC data miner.
+        """
+        import threading, urllib.request, time
+
+        SHIPS_URL   = "https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master/ships.json"
+        CACHE_DIR   = os.path.join(os.path.dirname(__file__), "..", "cache")
+        SHIPS_CACHE = os.path.join(CACHE_DIR, "scwiki-ships.json")
+        TTL         = 7 * 24 * 3600
+
+        def _do():
+            os.makedirs(CACHE_DIR, exist_ok=True)
+
+            # ── Chargement ships.json ────────────────────────────────────────
+            cache_ok = (
+                not force_refresh
+                and os.path.isfile(SHIPS_CACHE)
+                and (time.time() - os.path.getmtime(SHIPS_CACHE)) < TTL
+            )
+            if cache_ok:
+                age = (time.time() - os.path.getmtime(SHIPS_CACHE)) / 86400
+                if hasattr(self.app, "log"):
+                    self.app.log(f"SCWIKI SHIPS: cache utilisé (age {age:.1f}j)", source="FLEET")
+                with open(SHIPS_CACHE, encoding="utf-8") as f:
+                    ships_data = json.load(f)
+            else:
+                try:
+                    if hasattr(self.app, "log"):
+                        self.app.log("SCWIKI SHIPS: téléchargement ships.json ...", source="FLEET")
+                    with urllib.request.urlopen(SHIPS_URL, timeout=30) as r:
+                        content = r.read().decode("utf-8")
+                    ships_data = json.loads(content)
+                    with open(SHIPS_CACHE, "w", encoding="utf-8") as f:
+                        f.write(content)
+                except Exception as e:
+                    if os.path.isfile(SHIPS_CACHE):
+                        if hasattr(self.app, "log"):
+                            self.app.log(f"SCWIKI SHIPS: erreur réseau — cache expiré utilisé. ({e})", source="FLEET")
+                        with open(SHIPS_CACHE, encoding="utf-8") as f:
+                            ships_data = json.load(f)
+                    else:
+                        messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur téléchargement ships.json:\n{e}")
+                        return
+
+            imported = skipped = errors = 0
+            for raw in ships_data:
+                name = (raw.get("Name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                try:
+                    ship = Ship.from_sc_json(raw)
+                    if not ship.name:
+                        skipped += 1
+                        continue
+
+                    # ── Upsert ship stats ────────────────────────────────────
+                    cols = ", ".join(Ship.COLUMNS)
+                    phs  = ", ".join(["?"] * len(Ship.COLUMNS))
+                    upd  = ", ".join([f"{c}=excluded.{c}" for c in Ship.COLUMNS if c != "name"])
+                    self.app.commit(
+                        f"INSERT INTO ships ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                        ship.to_db_tuple(),
+                    )
+
+                    # ── Slots du chassis ─────────────────────────────────────
+                    slots = Ship.slots_from_sc_json(raw)
+                    self.app.commit("DELETE FROM ship_subtype_specs WHERE ship_name = ?", (ship.name,))
+                    for slot in slots:
+                        self.app.commit(
+                            "INSERT OR REPLACE INTO ship_subtype_specs (ship_name, category, subtype_name, max_qty, max_size) VALUES (?, ?, ?, ?, ?)",
+                            (ship.name, slot["category"], slot["subtype_name"], slot["max_qty"], slot["max_size"]),
+                        )
+                    self._sync_ship_specs_from_subtypes(ship.name)
+
+                    # ── Loadout par défaut ────────────────────────────────────
+                    default_load = Ship.defaultload_from_sc_json(raw)
+                    self.app.commit(
+                        "DELETE FROM ship_loadout WHERE ship_name = ? AND profile_name = 'DEFAULT'",
+                        (ship.name,),
+                    )
+                    self.app.commit(
+                        "INSERT OR IGNORE INTO ship_loadout_profiles (ship_name, profile_name) VALUES (?, 'DEFAULT')",
+                        (ship.name,),
+                    )
+                    for entry in default_load:
+                        comp_name = entry["component_name"].upper() or entry["component_class"]
+                        type_part = entry["sc_type"].split(".")[-1]
+                        self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", (entry["category"],))
+                        self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", (type_part.upper(), entry["category"]))
+                        self.app.commit(
+                            "INSERT OR IGNORE INTO components (name, brand, type_name, category, size, grade) VALUES (?, ?, ?, ?, ?, ?)",
+                            (comp_name, entry["manufacturer"].upper() or "UNKNOWN", type_part.upper(), entry["category"], entry["max_size"], entry["grade"]),
+                        )
+                        self.app.commit(
+                            "INSERT OR REPLACE INTO ship_loadout (ship_name, profile_name, category, subtype_name, slot_number, component_name, quantity) VALUES (?, 'DEFAULT', ?, ?, ?, ?, 1)",
+                            (ship.name, entry["category"], entry["subtype_name"], entry["slot_number"], comp_name),
+                        )
+
+                    if hasattr(self.app, "log"):
+                        self.app.log(
+                            f"SCWIKI SHIPS: {ship.name}  SCM {ship.scm_speed:.0f}  HP {ship.hp}  "
+                            f"{len(slots)} slots  {len(default_load)} composants par défaut",
+                            source="FLEET",
+                        )
+                    imported += 1
+
+                except Exception as e:
+                    errors += 1
+                    if hasattr(self.app, "log"):
+                        self.app.log(f"SCWIKI SHIPS: erreur {name} — {e}", source="FLEET")
+
+            msg = f"SCWIKI SHIPS IMPORT: {imported} ships importés. {skipped} ignorés. {errors} erreurs."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do, daemon=True).start()
+
     def import_components_from_json(self) -> None:
         """Importe un ou plusieurs fichiers JSON SC data miner (items individuels)."""
         choice = messagebox.askquestion(
@@ -501,7 +625,397 @@ class ShipController:
         else:
             messagebox.showinfo("UNITOOL — IMPORT COMPONENTS", msg)
 
-    def add_component_to_db(self, data: dict):
+    # Mapping grade entier → lettre SC (1 = meilleur = A)
+    _GRADE_MAP = {1: "A", 2: "B", 3: "C", 4: "D"}
+    # Types ship-items à importer comme armes
+    _WEAPON_TYPES = {"WeaponGun", "Turret", "MissileLauncher", "BombLauncher"}
+
+    def import_weapons_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les armes depuis ship-items.json (cache partagé 7 jours)."""
+        import threading
+
+        def _do_import():
+            try:
+                raw = self._load_scwiki_ship_items(force_refresh)
+            except Exception as e:
+                messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur chargement:\n{e}")
+                return
+
+            imported = skipped = 0
+            for item in raw:
+                item_type = str(item.get("type", "")).split(".")[0]
+                if item_type not in self._WEAPON_TYPES:
+                    continue
+
+                name = (item.get("name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                std          = item.get("stdItem") or {}
+                weapon_block = std.get("Weapon") or {}
+                ammo_block   = std.get("Ammunition") or {}
+                rn_block     = std.get("ResourceNetwork") or {}
+                mfr_block    = std.get("Manufacturer") or std.get("manufacturer") or {}
+                emit_block   = std.get("Emission") or {}
+                modes        = weapon_block.get("Modes") or []
+                first_mode   = modes[0] if modes else {}
+                usage        = (rn_block.get("Usage") or {}).get("Power") or {}
+
+                grade_num = int(item.get("grade") or 1)
+                if isinstance(mfr_block, dict):
+                    brand = (mfr_block.get("Name") or item.get("manufacturer") or "UNKNOWN").strip().upper()
+                else:
+                    brand = str(item.get("manufacturer") or "UNKNOWN").strip().upper()
+
+                subtype   = item.get("subType") or ""
+                type_name = (subtype.upper() or item_type.upper())
+
+                comp = Component(
+                    name=name.upper(),
+                    brand=brand,
+                    type_name=type_name,
+                    category="WEAPON",
+                    size=int(item.get("size") or std.get("Size") or 1),
+                    grade=self._GRADE_MAP.get(grade_num, "C"),
+                    stat_dps=float(weapon_block.get("Damage", {}).get("Burst") or first_mode.get("Dps") or 0),
+                    stat_alpha=float(first_mode.get("Alpha") or first_mode.get("DamagePerShot") or 0),
+                    stat_range=float(ammo_block.get("Range") or weapon_block.get("EffectiveRange") or 0),
+                    stat_fire_rate=float(weapon_block.get("RateOfFire") or first_mode.get("RoundsPerMinute") or 0),
+                    stat_ammo_count=int(weapon_block.get("Capacity") or 0),
+                    stat_power_draw=float(usage.get("Maximum") or 0),
+                    stat_em_gen=float((emit_block.get("Em") or {}).get("Maximum") or 0),
+                )
+
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("WEAPON",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", (type_name, "WEAPON"))
+                cols = ", ".join(Component.COLUMNS)
+                phs  = ", ".join(["?"] * len(Component.COLUMNS))
+                upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+
+            msg = f"SCWIKI IMPORT: {imported} armes importées. {skipped} ignorées (sans nom)."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do_import, daemon=True).start()
+
+    # ── Utilitaire partagé : charge ship-items.json (cache ou web) ──────────
+    _SCWIKI_SHIP_ITEMS_URL  = "https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master/ship-items.json"
+    _SCWIKI_CACHE_TTL       = 7 * 24 * 3600
+
+    def _load_scwiki_ship_items(self, force_refresh: bool = False) -> list:
+        """Retourne ship-items.json depuis le cache (ou le télécharge si absent/expiré)."""
+        import urllib.request, time
+        cache_dir  = os.path.join(os.path.dirname(__file__), "..", "cache")
+        cache_file = os.path.join(cache_dir, "ship-items.json")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        cache_ok = (
+            not force_refresh
+            and os.path.isfile(cache_file)
+            and (time.time() - os.path.getmtime(cache_file)) < self._SCWIKI_CACHE_TTL
+        )
+        if cache_ok:
+            age = (time.time() - os.path.getmtime(cache_file)) / 86400
+            if hasattr(self.app, "log"):
+                self.app.log(f"SCWIKI: cache utilisé (age {age:.1f}j)", source="FLEET")
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        if hasattr(self.app, "log"):
+            self.app.log("SCWIKI: téléchargement ship-items.json ...", source="FLEET")
+        try:
+            with urllib.request.urlopen(self._SCWIKI_SHIP_ITEMS_URL, timeout=30) as resp:
+                content = resp.read().decode("utf-8")
+            data = json.loads(content)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                f.write(content)
+            if hasattr(self.app, "log"):
+                self.app.log(f"SCWIKI: cache mis à jour [{cache_file}]", source="FLEET")
+            return data
+        except Exception as e:
+            if os.path.isfile(cache_file):
+                if hasattr(self.app, "log"):
+                    self.app.log(f"SCWIKI: erreur réseau — cache expiré utilisé. ({e})", source="FLEET")
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            raise
+
+    def import_quantum_drives_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les Quantum Drives depuis ship-items.json (cache partagé)."""
+        import threading
+
+        def _do():
+            try:
+                raw = self._load_scwiki_ship_items(force_refresh)
+            except Exception as e:
+                messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur chargement:\n{e}")
+                return
+
+            imported = skipped = 0
+            for item in raw:
+                if not str(item.get("type", "")).startswith("QuantumDrive"):
+                    continue
+
+                name = (item.get("name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                std   = item.get("stdItem") or {}
+                qt    = std.get("QuantumDrive") or {}
+                sj    = qt.get("StandardJump") or {}
+                rn    = std.get("ResourceNetwork") or {}
+                emit  = std.get("Emission") or {}
+                usage = (rn.get("Usage") or {}).get("Power") or {}
+                mfr   = std.get("Manufacturer") or {}
+
+                grade_num = int(item.get("grade") or 1)
+                brand = (
+                    mfr.get("Name") if isinstance(mfr, dict)
+                    else str(item.get("manufacturer") or "UNKNOWN")
+                ).strip().upper()
+
+                comp = Component(
+                    name=name.upper(),
+                    brand=brand or "UNKNOWN",
+                    type_name="QUANTUM DRIVE",
+                    category="PROPULSION",
+                    size=int(item.get("size") or std.get("Size") or 1),
+                    grade=self._GRADE_MAP.get(grade_num, "C"),
+                    stat_qt_speed=float(sj.get("DriveSpeed") or 0),
+                    stat_qt_spool=float(sj.get("SpoolUpTime") or 0),
+                    stat_regen_delay=float(sj.get("CooldownTime") or 0),
+                    stat_qt_fuel_usage=float(qt.get("FuelConsumptionSCUPerGM") or 0),
+                    stat_power_draw=float(usage.get("Maximum") or 0),
+                    stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
+                )
+
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("PROPULSION",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("QUANTUM DRIVE", "PROPULSION"))
+                cols = ", ".join(Component.COLUMNS)
+                phs  = ", ".join(["?"] * len(Component.COLUMNS))
+                upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+
+            msg = f"SCWIKI QT IMPORT: {imported} quantum drives importés. {skipped} ignorés."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def import_coolers_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les Coolers depuis ship-items.json (cache partagé)."""
+        import threading
+
+        def _do():
+            try:
+                raw = self._load_scwiki_ship_items(force_refresh)
+            except Exception as e:
+                messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur chargement:\n{e}")
+                return
+
+            imported = skipped = 0
+            for item in raw:
+                if not str(item.get("type", "")).startswith("Cooler"):
+                    continue
+
+                name = (item.get("name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                std   = item.get("stdItem") or {}
+                rn    = std.get("ResourceNetwork") or {}
+                emit  = std.get("Emission") or {}
+                gen   = rn.get("Generation") or {}
+                usage = (rn.get("Usage") or {}).get("Power") or {}
+                mfr   = std.get("Manufacturer") or {}
+
+                grade_num = int(item.get("grade") or std.get("Grade") or 1)
+                brand = (
+                    mfr.get("Name") if isinstance(mfr, dict)
+                    else str(item.get("manufacturer") or "UNKNOWN")
+                ).strip().upper()
+
+                comp = Component(
+                    name=name.upper(),
+                    brand=brand or "UNKNOWN",
+                    type_name="COOLER",
+                    category="SYSTEMS",
+                    size=int(item.get("size") or std.get("Size") or 1),
+                    grade=self._GRADE_MAP.get(grade_num, "C"),
+                    stat_cooling_rate=float(gen.get("Coolant") or 0),
+                    stat_power_draw=float(usage.get("Maximum") or 0),
+                    stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
+                )
+
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("SYSTEMS",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("COOLER", "SYSTEMS"))
+                cols = ", ".join(Component.COLUMNS)
+                phs  = ", ".join(["?"] * len(Component.COLUMNS))
+                upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+
+            msg = f"SCWIKI COOLER IMPORT: {imported} coolers importés. {skipped} ignorés."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def import_powerplants_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les Power Plants depuis ship-items.json (cache partagé)."""
+        import threading
+
+        def _do():
+            try:
+                raw = self._load_scwiki_ship_items(force_refresh)
+            except Exception as e:
+                messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur chargement:\n{e}")
+                return
+
+            imported = skipped = 0
+            for item in raw:
+                if not str(item.get("type", "")).startswith("PowerPlant"):
+                    continue
+
+                name = (item.get("name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                std   = item.get("stdItem") or {}
+                rn    = std.get("ResourceNetwork") or {}
+                emit  = std.get("Emission") or {}
+                gen   = rn.get("Generation") or {}
+                usage = (rn.get("Usage") or {}).get("Coolant") or {}
+                mfr   = std.get("Manufacturer") or {}
+
+                grade_num = int(item.get("grade") or std.get("Grade") or 1)
+                brand = (
+                    mfr.get("Name") if isinstance(mfr, dict)
+                    else str(item.get("manufacturer") or "UNKNOWN")
+                ).strip().upper()
+
+                comp = Component(
+                    name=name.upper(),
+                    brand=brand or "UNKNOWN",
+                    type_name="POWER PLANT",
+                    category="SYSTEMS",
+                    size=int(item.get("size") or std.get("Size") or 1),
+                    grade=self._GRADE_MAP.get(grade_num, "C"),
+                    stat_power_output=float(gen.get("Power") or 0),
+                    stat_heat_gen=float(usage.get("Maximum") or 0),
+                    stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
+                )
+
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("SYSTEMS",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("POWER PLANT", "SYSTEMS"))
+                cols = ", ".join(Component.COLUMNS)
+                phs  = ", ".join(["?"] * len(Component.COLUMNS))
+                upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+
+            msg = f"SCWIKI POWER PLANT IMPORT: {imported} power plants importés. {skipped} ignorés."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def import_shields_from_scwiki(self, force_refresh: bool = False) -> None:
+        """Importe les Shield Generators depuis ship-items.json (cache partagé)."""
+        import threading
+
+        def _do():
+            try:
+                raw = self._load_scwiki_ship_items(force_refresh)
+            except Exception as e:
+                messagebox.showerror("UNITOOL — SCWIKI IMPORT", f"Erreur chargement:\n{e}")
+                return
+
+            imported = skipped = 0
+            for item in raw:
+                if not str(item.get("type", "")).startswith("Shield"):
+                    continue
+
+                name = (item.get("name") or "").strip()
+                if not name or name.startswith("<="):
+                    skipped += 1
+                    continue
+
+                std   = item.get("stdItem") or {}
+                shld  = std.get("Shield") or {}
+                rn    = std.get("ResourceNetwork") or {}
+                emit  = std.get("Emission") or {}
+                usage = (rn.get("Usage") or {}).get("Power") or {}
+                absorb = shld.get("Absorption") or {}
+                mfr   = std.get("Manufacturer") or {}
+
+                grade_num = int(item.get("grade") or std.get("Grade") or 1)
+                brand = (
+                    mfr.get("Name") if isinstance(mfr, dict)
+                    else str(item.get("manufacturer") or "UNKNOWN")
+                ).strip().upper()
+
+                comp = Component(
+                    name=name.upper(),
+                    brand=brand or "UNKNOWN",
+                    type_name="SHIELD",
+                    category="DEFENSE",
+                    size=int(item.get("size") or std.get("Size") or 1),
+                    grade=self._GRADE_MAP.get(grade_num, "C"),
+                    stat_shield_hp=float(shld.get("MaxShieldHealth") or 0),
+                    stat_shield_regen=float(shld.get("MaxShieldRegen") or 0),
+                    stat_regen_delay=float(shld.get("DamagedDelay") or 0),
+                    stat_shield_downed_delay=float(shld.get("DownedDelay") or 0),
+                    stat_shield_decay_ratio=float(shld.get("DecayRatio") or 0),
+                    stat_absorption_phys=float((absorb.get("Physical") or {}).get("Maximum") or 0),
+                    stat_resistance_phys=float((absorb.get("Energy") or {}).get("Maximum") or 0),
+                    stat_resistance_dist=float((absorb.get("Distortion") or {}).get("Maximum") or 0),
+                    stat_power_draw=float(usage.get("Maximum") or 0),
+                    stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
+                )
+
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("DEFENSE",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("SHIELD", "DEFENSE"))
+                cols = ", ".join(Component.COLUMNS)
+                phs  = ", ".join(["?"] * len(Component.COLUMNS))
+                upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])
+                self.app.commit(
+                    f"INSERT INTO components ({cols}) VALUES ({phs}) ON CONFLICT(name) DO UPDATE SET {upd}",
+                    comp.to_db_tuple(),
+                )
+                imported += 1
+
+            msg = f"SCWIKI SHIELD IMPORT: {imported} shields importés. {skipped} ignorés."
+            if hasattr(self.app, "log"):
+                self.app.log(msg, source="FLEET")
+            messagebox.showinfo("UNITOOL — SCWIKI IMPORT", msg)
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def add_component_to_db(self, data: dict) -> None:
         comp = Component(
             name=str(data.get("name") or "").strip().upper(),
             brand=str(data.get("brand") or "UNKNOWN").strip().upper(),
