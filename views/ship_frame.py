@@ -1598,14 +1598,28 @@ class ShipFrame(ctk.CTkFrame):
         t.insert("end", f" {c.category}  S{c.size}  GR-{c.grade}{spec_str}\n")
         t.insert("end", " " + "─" * 28 + "\n")
 
+        sz = int(c.size or 0)
+        sq = "■" * sz + "□" * max(0, 6 - sz)
+
         def _line(label, value, unit=""):
             if value:
                 t.insert("end", f" {label:<22} {value}{unit}\n")
 
+        def _seg_line(label, val_float):
+            """Affiche une valeur de segment avec une barre visuelle de 10 cases."""
+            if not val_float:
+                return
+            filled = min(10, round(val_float))
+            bar = "■" * filled + "□" * (10 - filled)
+            t.insert("end", f" {label:<22} {bar}  {val_float:.2f}\n")
+
+        # Taille du composant
+        t.insert("end", f" SIZE SLOT           {sq}\n")
+
         # Universels
-        _line("POWER DRAW", f"{c.stat_power_draw:.2f}", " seg")
-        _line("EM GEN", f"{c.stat_em_gen:.0f}")
-        _line("HEAT GEN", f"{c.stat_heat_gen:.0f}")
+        _seg_line("POWER DRAW", c.stat_power_draw)
+        _line("EM GEN", f"{c.stat_em_gen:.0f}" if c.stat_em_gen else None)
+        _line("HEAT GEN", f"{c.stat_heat_gen:.0f}" if c.stat_heat_gen else None)
 
         # Bouclier
         if c.stat_shield_hp:
@@ -1647,12 +1661,12 @@ class ShipFrame(ctk.CTkFrame):
         # Énergie
         if c.stat_power_output:
             t.insert("end", " [POWER PLANT]\n", "ACCENT")
-            _line("OUTPUT", f"{c.stat_power_output:.2f}", " seg")
+            _seg_line("OUTPUT", c.stat_power_output)
 
         # Refroidisseur
         if c.stat_cooling_rate:
             t.insert("end", " [COOLER]\n", "ACCENT")
-            _line("COOLING RATE", f"{c.stat_cooling_rate:.2f}", " seg/s")
+            _seg_line("COOLING RATE", c.stat_cooling_rate)
 
         # QT Drive
         if c.stat_qt_speed:
@@ -2349,6 +2363,19 @@ class ShipFrame(ctk.CTkFrame):
                 _row("EM SIGNATURE", f"{total_em:.0f}", "IR SIGNATURE", f"{total_ir:.0f}" if total_ir else "—")
 
         t.insert("end", "\n", "MUTED")
+
+        # ── POWER SEGMENTS ───────────────────────────────────────
+        draw_comps = sorted(
+            [c for c in comps if c.stat_power_draw > 0],
+            key=lambda c: c.stat_power_draw, reverse=True,
+        )
+        if draw_comps:
+            _hdr("[POWER SEGMENTS]")
+            max_draw = draw_comps[0].stat_power_draw
+            for dc in draw_comps:
+                bar_filled = round((dc.stat_power_draw / max_draw) * 10) if max_draw else 0
+                bar = "■" * bar_filled + "□" * (10 - bar_filled)
+                t.insert("end", f"  {dc.name:<35} {bar}  {dc.stat_power_draw:.2f}\n", "DIM")
 
     def _render_loadout_global_actions(self):
         """Affiche les actions globales à la fin de la liste des slots (zone droite)."""
