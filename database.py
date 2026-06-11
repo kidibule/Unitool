@@ -23,6 +23,6 @@ class Database(DBConnection):
 
     def setup(self):
         """Point d'entrée des migrations — délègue à db_migrations.run_migrations."""
-        run_migrations(self.conn, self.cursor)
+        run_migrations(self.conn, self.conn.cursor())
 
 

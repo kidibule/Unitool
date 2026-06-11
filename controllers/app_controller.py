@@ -153,10 +153,6 @@ class AppController:
 
     # --- PROPRIÉTÉS DE COMPATIBILITÉ (accès direct à la DB pour les vues) ---
 
-    @property
-    def cursor(self):
-        """Accès au curseur SQLite pour opérations brutes."""
-        return self.db.cursor
 
     @property
     def conn(self):

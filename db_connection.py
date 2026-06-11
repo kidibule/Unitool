@@ -26,20 +26,26 @@ class DBConnection:
             os.remove(db_name)
 
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+        self._lock = __import__("threading").Lock()
 
     def query(self, sql: str, params: tuple = ()) -> list:
         """Exécute un SELECT et renvoie toutes les lignes."""
-        self.cursor.execute(sql, params)
-        return self.cursor.fetchall()
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            return cur.fetchall()
 
     def commit(self, sql: str, params: tuple = ()) -> None:
         """Exécute une requête d'écriture puis commit la transaction."""
-        self.cursor.execute(sql, params)
-        self.conn.commit()
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            self.conn.commit()
 
     def execute(self, query: str, params: tuple = ()):
         """Raccourci pour exécuter et commiter rapidement."""
-        result = self.cursor.execute(query, params)
-        self.conn.commit()
-        return result
+        with self._lock:
+            cur = self.conn.cursor()
+            result = cur.execute(query, params)
+            self.conn.commit()
+            return result

@@ -941,6 +941,12 @@ def _m024_ships_armor_shield_boost(cursor):
     logger.info("  ships: armor deflection, shield resistance & boost columns added.")
 
 
+def _m025_components_specialization(cursor):
+    """Ajoute la colonne specialization (Military/Civilian/Industrial/Stealth) sur components."""
+    _add_column_if_missing(cursor, "components", "specialization", "TEXT DEFAULT ''")
+    logger.info("  components: specialization column added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -966,6 +972,7 @@ MIGRATIONS = [
     (22, _m022_components_shield_extended_stats),
     (23, _m023_components_weapon_detail_stats),
     (24, _m024_ships_armor_shield_boost),
+    (25, _m025_components_specialization),
 ]
 
 

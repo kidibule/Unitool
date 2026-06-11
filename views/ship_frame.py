@@ -168,9 +168,9 @@ class ShipFrame(ctk.CTkFrame):
         if ship:
             self.refresh_loadout_view(ship)
 
-    def _import_weapons_scwiki(self):
+    def _import_weapons_scwiki(self, force_refresh: bool = False):
         """Télécharge et importe les armes depuis StarCitizenWiki (ship-items.json)."""
-        self.controller.ship.import_weapons_from_scwiki(force_refresh=False)
+        self.controller.ship.import_weapons_from_scwiki(force_refresh=force_refresh)
         self.after(500, self.run_component_scan)
         self.after(500, self.update_selectors)
 
@@ -460,16 +460,58 @@ class ShipFrame(ctk.CTkFrame):
             corner_radius=0,
         ).pack(side="right", padx=(0, 6))
 
-        # Recherche
+        # État pagination
+        self._comp_page = 0
+        self._comp_page_size = 25
+        self._comp_cat_filter = ""
+        self._comp_type_filter = ""
+
+        # Barre recherche
         search_bar = ctk.CTkFrame(parent, fg_color="transparent")
-        search_bar.pack(fill="x", padx=20, pady=(4, 4))
+        search_bar.pack(fill="x", padx=20, pady=(4, 0))
         self.comp_search_entry = DrakeEntry(
             search_bar, placeholder_text="SEARCH COMPONENTS...", height=32
         )
-        self.comp_search_entry.pack(fill="x")
-        self.comp_search_entry.bind("<KeyRelease>", lambda _e: self.run_component_scan())
+        self.comp_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.comp_search_entry.bind("<KeyRelease>", lambda _e: self._comp_reset_and_scan())
 
-        # Liste (haut)
+        # Filtres catégorie + type
+        cat_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        cat_bar.pack(fill="x", padx=20, pady=(4, 4))
+        ctk.CTkLabel(
+            cat_bar, text="CAT:",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 4))
+        self.comp_cat_combo = DrakeComboBoxLight(
+            cat_bar, values=["TOUTES"], width=140,
+            command=self._on_comp_cat_changed,
+        )
+        self.comp_cat_combo.set("TOUTES")
+        self.comp_cat_combo.pack(side="left")
+
+        ctk.CTkLabel(
+            cat_bar, text="TYPE:",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(side="left", padx=(16, 4))
+        self.comp_type_combo = DrakeComboBoxLight(
+            cat_bar, values=["TOUS"], width=160,
+            command=self._on_comp_type_changed,
+        )
+        self.comp_type_combo.set("TOUS")
+        self.comp_type_combo.pack(side="left")
+        # Bouton reset filtres
+        DrakeButton(
+            cat_bar, text="✕", width=26,
+            command=self._comp_reset_filters,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL, corner_radius=0,
+        ).pack(side="left", padx=(8, 0))
+
+        # Liste
         self.comp_list_scroll = ctk.CTkScrollableFrame(
             parent,
             fg_color=DrakeConfig.BG_TERMINAL,
@@ -478,6 +520,39 @@ class ShipFrame(ctk.CTkFrame):
             border_color=DrakeConfig.BORDER_COLOR,
         )
         self.comp_list_scroll.pack(fill="both", expand=True, padx=20)
+
+        # Barre pagination (bas de liste)
+        pag_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        pag_bar.pack(fill="x", padx=20, pady=(2, 4))
+        DrakeButton(
+            pag_bar, text="◀", width=32, height=24,
+            command=self._comp_prev_page,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL, corner_radius=0,
+        ).pack(side="left")
+        self.comp_page_label = ctk.CTkLabel(
+            pag_bar, text="1 / 1",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            width=80,
+        )
+        self.comp_page_label.pack(side="left", padx=6)
+        DrakeButton(
+            pag_bar, text="▶", width=32, height=24,
+            command=self._comp_next_page,
+            fg_color="transparent", border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            hover_color=DrakeConfig.BG_PANEL, corner_radius=0,
+        ).pack(side="left")
+        self.comp_total_label = ctk.CTkLabel(
+            pag_bar, text="",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        )
+        self.comp_total_label.pack(side="left", padx=(12, 0))
 
         # Terminal stats (bas)
         stats_panel = ctk.CTkFrame(parent, fg_color="transparent", height=300)
@@ -1247,14 +1322,66 @@ class ShipFrame(ctk.CTkFrame):
             if self.controller.ship.equip_component(ship, comp):
                 self.refresh_loadout_view(ship)
 
+    # ── Helpers pagination composants ─────────────────────────────────────
+    def _comp_reset_and_scan(self):
+        """Remet la page à 0 et relance le scan (appelé sur changement de filtre)."""
+        self._comp_page = 0
+        self.run_component_scan()
+
+    def _comp_reset_filters(self):
+        """Réinitialise tous les filtres cat/type."""
+        self._comp_cat_filter = ""
+        self._comp_type_filter = ""
+        if self._widget_exists("comp_cat_combo"):
+            self.comp_cat_combo.set("TOUTES")
+        if self._widget_exists("comp_type_combo"):
+            self.comp_type_combo.set("TOUS")
+            try:
+                self.comp_type_combo.configure(values=["TOUS"])
+            except Exception:
+                pass
+        self._comp_reset_and_scan()
+
+    def _on_comp_cat_changed(self, choice):
+        self._comp_cat_filter = "" if choice == "TOUTES" else choice
+        self._comp_type_filter = ""
+        # Rafraîchit le combo type avec les types de cette catégorie
+        if self._widget_exists("comp_type_combo"):
+            if self._comp_cat_filter:
+                types = self.controller.ship.list_component_subtypes(self._comp_cat_filter) or []
+            else:
+                all_rows = self.controller.ship.list_components_catalog()
+                types = sorted({str(r[2]) for r in all_rows if r[2]})
+            type_values = ["TOUS"] + [t for t in types if t]
+            try:
+                self.comp_type_combo.configure(values=type_values)
+                self.comp_type_combo.set("TOUS")
+            except Exception:
+                pass
+        self._comp_reset_and_scan()
+
+    def _on_comp_type_changed(self, choice):
+        self._comp_type_filter = "" if choice == "TOUS" else choice
+        self._comp_reset_and_scan()
+
+    def _comp_prev_page(self):
+        if self._comp_page > 0:
+            self._comp_page -= 1
+            self.run_component_scan()
+
+    def _comp_next_page(self):
+        self._comp_page += 1
+        self.run_component_scan()
+
     def run_component_scan(self):
-        """Affiche le catalogue de composants filtré dans la liste scrollable."""
+        """Affiche le catalogue de composants filtré et paginé."""
         if not self._widget_exists("comp_list_scroll"):
             return
 
         for widget in self.comp_list_scroll.winfo_children():
             widget.destroy()
 
+        # ── Lecture des filtres ───────────────────────────────────────────
         query = ""
         if self._widget_exists("comp_search_entry"):
             try:
@@ -1265,8 +1392,26 @@ class ShipFrame(ctk.CTkFrame):
             except Exception:
                 query = ""
 
-        LIMIT = 50
+        cat_filter  = getattr(self, "_comp_cat_filter", "")
+        type_filter = getattr(self, "_comp_type_filter", "")
+        page        = getattr(self, "_comp_page", 0)
+        page_size   = getattr(self, "_comp_page_size", 25)
+
+        # ── Mise à jour du combo catégories ──────────────────────────────
+        if self._widget_exists("comp_cat_combo"):
+            db_cats = self.controller.ship.list_component_categories() or []
+            combo_values = ["TOUTES"] + [c for c in db_cats if c]
+            try:
+                self.comp_cat_combo.configure(values=combo_values)
+            except Exception:
+                pass
+
+        # ── Filtrage ─────────────────────────────────────────────────────
         all_rows = self.controller.ship.list_components_catalog()
+        if cat_filter:
+            all_rows = [r for r in all_rows if str(r[3]).upper() == cat_filter.upper()]
+        if type_filter:
+            all_rows = [r for r in all_rows if str(r[2]).upper() == type_filter.upper()]
         if query:
             all_rows = [
                 r for r in all_rows
@@ -1275,27 +1420,37 @@ class ShipFrame(ctk.CTkFrame):
                 or query in str(r[2]).upper()
                 or query in str(r[3]).upper()
             ]
-        rows = all_rows[:LIMIT]
+
+        total     = len(all_rows)
+        n_pages   = max(1, (total + page_size - 1) // page_size)
+        # Clamp la page courante
+        if page >= n_pages:
+            page = n_pages - 1
+            self._comp_page = page
+
+        # ── Mise à jour des labels pagination ────────────────────────────
+        if self._widget_exists("comp_page_label"):
+            self.comp_page_label.configure(text=f"{page + 1} / {n_pages}")
+        if self._widget_exists("comp_total_label"):
+            self.comp_total_label.configure(text=f"{total} composant{'s' if total != 1 else ''}")
+
+        # ── Slice de la page courante ─────────────────────────────────────
+        start = page * page_size
+        rows  = all_rows[start : start + page_size]
 
         if not rows:
             ctk.CTkLabel(
                 self.comp_list_scroll,
-                text="NO COMPONENT REGISTERED" if not query else "NO RESULTS",
+                text="NO COMPONENT REGISTERED" if not query and not cat_filter else "NO RESULTS",
                 font=DrakeConfig.FONT_LOGS,
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(anchor="w", padx=12, pady=12)
             return
 
-        if len(all_rows) > LIMIT:
-            ctk.CTkLabel(
-                self.comp_list_scroll,
-                text=f"Showing {LIMIT} / {len(all_rows)} — use search to filter",
-                font=DrakeConfig.FONT_LOGS,
-                text_color=DrakeConfig.TEXT_SECONDARY,
-            ).pack(anchor="w", padx=12, pady=(6, 2))
-
+        # ── Rendu des cards ───────────────────────────────────────────────
         last_cat = None
         for r in rows:
+            # En-tête de catégorie (affiché une fois par groupe dans la page)
             if r[3] != last_cat:
                 ctk.CTkLabel(
                     self.comp_list_scroll,
@@ -1321,12 +1476,20 @@ class ShipFrame(ctk.CTkFrame):
                 "category": r[3],
                 "size": r[4],
                 "grade": r[5],
+                "specialization": r[6] if len(r) > 6 else "",
             }
 
             if self.component_editing_name == r[0]:
                 self._render_component_edit_row(card, component)
             else:
                 self._render_component_display_row(card, component)
+
+    _SPEC_COLORS = {
+        "Military":   "#C8A000",
+        "Civilian":   "#5AB4E0",
+        "Industrial": "#E07830",
+        "Stealth":    "#7ECE7E",
+    }
 
     def _render_component_display_row(self, parent, component):
         # Clic sur la card → afficher les stats
@@ -1343,23 +1506,40 @@ class ShipFrame(ctk.CTkFrame):
             font=("Segoe UI", 12, "bold"),
             anchor="w",
         ).pack(anchor="w")
+        spec_raw   = (component.get('specialization') or "").strip().title()
+        spec_label = spec_raw.upper() if spec_raw else ""
+        spec_color = self._SPEC_COLORS.get(spec_raw, DrakeConfig.TEXT_SECONDARY)
+        info_row = ctk.CTkFrame(left, fg_color="transparent")
+        info_row.pack(anchor="w", fill="x")
+        info_row.bind("<Button-1>", card_click)
         ctk.CTkLabel(
-            left,
+            info_row,
             text=f"{component['brand']}  |  {component['type_name']}",
             font=DrakeConfig.FONT_LOGS,
             text_color=DrakeConfig.TEXT_SECONDARY,
             anchor="w",
-        ).pack(anchor="w")
+        ).pack(side="left")
+        if spec_label:
+            ctk.CTkLabel(
+                info_row,
+                text=f"  ▸ {spec_label}",
+                font=DrakeConfig.FONT_LOGS,
+                text_color=spec_color,
+                anchor="w",
+            ).pack(side="left")
 
         right = ctk.CTkFrame(parent, fg_color="transparent")
         right.pack(side="right", padx=10, pady=8)
 
+        size_val = int(component['size'] or 0)
+        filled   = "■" * size_val
+        empty    = "□" * max(0, 6 - size_val)
         ctk.CTkLabel(
             right,
-            text=f"S{component['size']}",
-            font=("Segoe UI", 11, "bold"),
+            text=filled + empty,
+            font=("Segoe UI", 10),
             text_color=DrakeConfig.ACCENT_PRIMARY,
-            width=36,
+            width=72,
         ).pack(side="left", padx=(0, 8))
         ctk.CTkLabel(
             right,
@@ -1408,7 +1588,9 @@ class ShipFrame(ctk.CTkFrame):
 
         t.insert("end", f" {c.name}\n", "ACCENT")
         t.insert("end", f" {c.brand}  |  {c.type_name}\n")
-        t.insert("end", f" {c.category}  S{c.size}  GR-{c.grade}\n")
+        spec_raw = (c.specialization or "").strip().title()
+        spec_str = f"  {spec_raw.upper()}" if spec_raw else ""
+        t.insert("end", f" {c.category}  S{c.size}  GR-{c.grade}{spec_str}\n")
         t.insert("end", " " + "─" * 28 + "\n")
 
         def _line(label, value, unit=""):

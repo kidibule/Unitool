@@ -237,8 +237,8 @@ class ShipController:
             return
 
         try:
-            rows = self.app.query("SELECT * FROM ships")
-            headers = [description[0] for description in self.app.cursor.description]
+            rows = self.app.query(f"SELECT {', '.join(Ship.COLUMNS)} FROM ships")
+            headers = list(Ship.COLUMNS)
 
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -661,6 +661,8 @@ class ShipController:
                 modes        = weapon_block.get("Modes") or []
                 first_mode   = modes[0] if modes else {}
                 usage        = (rn_block.get("Usage") or {}).get("Power") or {}
+                desc_data    = std.get("DescriptionData") or {}
+                specialization = (desc_data.get("Class") or "").strip()
 
                 grade_num = int(item.get("grade") or 1)
                 if isinstance(mfr_block, dict):
@@ -668,8 +670,11 @@ class ShipController:
                 else:
                     brand = str(item.get("manufacturer") or "UNKNOWN").strip().upper()
 
-                subtype   = item.get("subType") or ""
-                type_name = (subtype.upper() or item_type.upper())
+                type_name = self._weapon_type_name(
+                    item_type=item_type,
+                    subtype=item.get("subType") or "",
+                    class_name=item.get("className") or "",
+                )
 
                 comp = Component(
                     name=name.upper(),
@@ -678,6 +683,7 @@ class ShipController:
                     category="WEAPON",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
+                    specialization=specialization,
                     stat_dps=float(weapon_block.get("Damage", {}).get("Burst") or first_mode.get("Dps") or 0),
                     stat_alpha=float(first_mode.get("Alpha") or first_mode.get("DamagePerShot") or 0),
                     stat_range=float(ammo_block.get("Range") or weapon_block.get("EffectiveRange") or 0),
@@ -705,8 +711,82 @@ class ShipController:
 
         threading.Thread(target=_do_import, daemon=True).start()
 
-    # ── Utilitaire partagé : charge ship-items.json (cache ou web) ──────────
-    _SCWIKI_SHIP_ITEMS_URL  = "https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master/ship-items.json"
+    @staticmethod
+    def _weapon_type_name(item_type: str, subtype: str, class_name: str) -> str:
+        """Déduit un type lisible depuis le className SC.
+
+        Exemples :
+          KLWE_LASERREPEATER_S5       → LASER REPEATER
+          BEHR_BALLISTICGATLING_S4    → BALLISTIC GATLING
+          ASAD_DISTORTIONREPEATER_S2  → DISTORTION REPEATER
+          KLWE_MASSDRIVER_S2          → MASS DRIVER
+          MissileLauncher + MissileRack → MISSILE RACK
+          Turret + GunTurret          → TURRET
+        """
+        import re
+
+        # ── Missiles / Bombes ─────────────────────────────────────────────
+        if item_type in ("MissileLauncher", "BombLauncher"):
+            sub_map = {
+                "MissileRack": "MISSILE RACK",
+                "BombRack":    "BOMB RACK",
+            }
+            return sub_map.get(subtype, "MISSILE RACK")
+
+        # ── Tourelles ────────────────────────────────────────────────────
+        if item_type == "Turret":
+            sub_map = {
+                "GunTurret":     "TURRET",
+                "MannedTurret":  "MANNED TURRET",
+                "MissileTurret": "MISSILE TURRET",
+                "PDCTurret":     "PDC TURRET",
+                "BallTurret":    "BALL TURRET",
+                "TopTurret":     "TOP TURRET",
+                "BottomTurret":  "BOTTOM TURRET",
+                "CanardTurret":  "CANARD TURRET",
+                "NoseMounted":   "NOSE TURRET",
+                "Utility":       "UTILITY TURRET",
+            }
+            return sub_map.get(subtype, "TURRET")
+
+        # ── WeaponGun : extraire le type depuis le className ──────────────
+        cls = class_name.upper()
+        # Ordre important : du plus spécifique au plus général
+        _PROJ_KEYWORDS = [
+            ("LASERSCATTERGUN",     "LASER SCATTERGUN"),
+            ("LASERREPEATER",       "LASER REPEATER"),
+            ("LASERCANNON",         "LASER CANNON"),
+            ("LASERBEAM",           "LASER BEAM"),
+            ("LASERGATLING",        "LASER GATLING"),
+            ("BALLISTICGATLING",    "BALLISTIC GATLING"),
+            ("JAVELINBALLISTICCAN", "BALLISTIC CANNON"),
+            ("BALLISTICCANNON",     "BALLISTIC CANNON"),
+            ("BALLISTICREPEATER",   "BALLISTIC REPEATER"),
+            ("BALLISTICSCATTERGUN", "BALLISTIC SCATTERGUN"),
+            ("DISTORTIONREPEATER",  "DISTORTION REPEATER"),
+            ("DISTORTIONCANNON",    "DISTORTION CANNON"),
+            ("DISTORTIONSCATTERGUN","DISTORTION SCATTERGUN"),
+            ("MASSDRIVER",          "MASS DRIVER"),
+            ("NEUTRONCANNON",       "NEUTRON CANNON"),
+            ("NEUTRONREPEATER",     "NEUTRON REPEATER"),
+            ("PLASMACANNON",        "PLASMA CANNON"),
+            ("TACHYONCANNON",       "TACHYON CANNON"),
+            ("TACHYONBEAM",         "TACHYON BEAM"),
+            ("ENERGYREPEATER",      "ENERGY REPEATER"),
+            ("SCATTERGUN",          "SCATTERGUN"),
+        ]
+        for keyword, label in _PROJ_KEYWORDS:
+            if keyword in cls:
+                return label
+
+        # Fallback : sous-type SC ou item_type brut
+        sub_map_gun = {
+            "Gun":        "GUN",
+            "GunTurret":  "TURRET",
+        }
+        return sub_map_gun.get(subtype, subtype.upper() or item_type.upper())
+
+
     _SCWIKI_CACHE_TTL       = 7 * 24 * 3600
 
     def _load_scwiki_ship_items(self, force_refresh: bool = False) -> list:
@@ -775,6 +855,8 @@ class ShipController:
                 emit  = std.get("Emission") or {}
                 usage = (rn.get("Usage") or {}).get("Power") or {}
                 mfr   = std.get("Manufacturer") or {}
+                desc_data     = std.get("DescriptionData") or {}
+                specialization = (desc_data.get("Class") or "").strip()
 
                 grade_num = int(item.get("grade") or 1)
                 brand = (
@@ -789,6 +871,7 @@ class ShipController:
                     category="PROPULSION",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
+                    specialization=specialization,
                     stat_qt_speed=float(sj.get("DriveSpeed") or 0),
                     stat_qt_spool=float(sj.get("SpoolUpTime") or 0),
                     stat_regen_delay=float(sj.get("CooldownTime") or 0),
@@ -842,6 +925,8 @@ class ShipController:
                 gen   = rn.get("Generation") or {}
                 usage = (rn.get("Usage") or {}).get("Power") or {}
                 mfr   = std.get("Manufacturer") or {}
+                desc_data     = std.get("DescriptionData") or {}
+                specialization = (desc_data.get("Class") or "").strip()
 
                 grade_num = int(item.get("grade") or std.get("Grade") or 1)
                 brand = (
@@ -856,6 +941,7 @@ class ShipController:
                     category="SYSTEMS",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
+                    specialization=specialization,
                     stat_cooling_rate=float(gen.get("Coolant") or 0),
                     stat_power_draw=float(usage.get("Maximum") or 0),
                     stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
@@ -906,6 +992,8 @@ class ShipController:
                 gen   = rn.get("Generation") or {}
                 usage = (rn.get("Usage") or {}).get("Coolant") or {}
                 mfr   = std.get("Manufacturer") or {}
+                desc_data     = std.get("DescriptionData") or {}
+                specialization = (desc_data.get("Class") or "").strip()
 
                 grade_num = int(item.get("grade") or std.get("Grade") or 1)
                 brand = (
@@ -920,6 +1008,7 @@ class ShipController:
                     category="SYSTEMS",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
+                    specialization=specialization,
                     stat_power_output=float(gen.get("Power") or 0),
                     stat_heat_gen=float(usage.get("Maximum") or 0),
                     stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
@@ -971,6 +1060,8 @@ class ShipController:
                 usage = (rn.get("Usage") or {}).get("Power") or {}
                 absorb = shld.get("Absorption") or {}
                 mfr   = std.get("Manufacturer") or {}
+                desc_data     = std.get("DescriptionData") or {}
+                specialization = (desc_data.get("Class") or "").strip()
 
                 grade_num = int(item.get("grade") or std.get("Grade") or 1)
                 brand = (
@@ -985,6 +1076,7 @@ class ShipController:
                     category="DEFENSE",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
+                    specialization=specialization,
                     stat_shield_hp=float(shld.get("MaxShieldHealth") or 0),
                     stat_shield_regen=float(shld.get("MaxShieldRegen") or 0),
                     stat_regen_delay=float(shld.get("DamagedDelay") or 0),

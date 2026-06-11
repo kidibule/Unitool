@@ -22,6 +22,7 @@ class Component(BaseModel):
         "category",
         "size",
         "grade",
+        "specialization",       # profil du composant : Military / Civilian / Industrial / Stealth
         # ── Stats universels (tous composants) ──────────────────────────────
         "stat_power_draw",          # consommation électrique (segments)
         "stat_em_gen",              # génération EM
@@ -71,6 +72,7 @@ class Component(BaseModel):
         category: str = "SYSTEMS",
         size: int = 1,
         grade: str = "C",
+        specialization: str = "",
         # Stats universels
         stat_power_draw: float = 0.0,
         stat_em_gen: float = 0.0,
@@ -119,6 +121,7 @@ class Component(BaseModel):
         self.category  = (category or "SYSTEMS").upper()
         self.size      = int(size) if size else 1
         self.grade     = (grade or "C").upper()
+        self.specialization = (specialization or "").strip().title()
         # Stats universels
         self.stat_power_draw = float(stat_power_draw or 0)
         self.stat_em_gen     = float(stat_em_gen or 0)
