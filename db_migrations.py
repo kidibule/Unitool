@@ -947,6 +947,13 @@ def _m025_components_specialization(cursor):
     logger.info("  components: specialization column added.")
 
 
+def _m026_shields_category_fix(cursor):
+    """Corrige la catégorie des shields de DEFENSE → SYSTEMS (correction d'import)."""
+    cursor.execute("UPDATE components SET category='SYSTEMS' WHERE type_name='SHIELD' AND category='DEFENSE'")
+    cursor.execute("UPDATE component_types SET category='SYSTEMS' WHERE name='SHIELD' AND category='DEFENSE'")
+    logger.info("  components: shields category corrected DEFENSE → SYSTEMS.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -973,6 +980,7 @@ MIGRATIONS = [
     (23, _m023_components_weapon_detail_stats),
     (24, _m024_ships_armor_shield_boost),
     (25, _m025_components_specialization),
+    (26, _m026_shields_category_fix),
 ]
 
 

@@ -1073,7 +1073,7 @@ class ShipController:
                     name=name.upper(),
                     brand=brand or "UNKNOWN",
                     type_name="SHIELD",
-                    category="DEFENSE",
+                    category="SYSTEMS",
                     size=int(item.get("size") or std.get("Size") or 1),
                     grade=self._GRADE_MAP.get(grade_num, "C"),
                     specialization=specialization,
@@ -1089,8 +1089,8 @@ class ShipController:
                     stat_em_gen=float((emit.get("Em") or {}).get("Maximum") or 0),
                 )
 
-                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("DEFENSE",))
-                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("SHIELD", "DEFENSE"))
+                self.app.commit("INSERT OR IGNORE INTO component_categories (name) VALUES (?)", ("SYSTEMS",))
+                self.app.commit("INSERT OR IGNORE INTO component_types (name, category) VALUES (?, ?)", ("SHIELD", "SYSTEMS"))
                 cols = ", ".join(Component.COLUMNS)
                 phs  = ", ".join(["?"] * len(Component.COLUMNS))
                 upd  = ", ".join([f"{c}=excluded.{c}" for c in Component.COLUMNS if c != "name"])

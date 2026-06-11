@@ -1155,7 +1155,9 @@ class ShipFrame(ctk.CTkFrame):
             )
             if comp_rows:
                 n, type_name, size, grade = comp_rows[0]
-                comp_map[str(n).upper()] = {"name": n, "type_name": type_name, "size": size, "grade": grade}
+                sz = int(size or 0)
+                squares = "■" * sz + "□" * max(0, 6 - sz)
+                comp_map[str(n).upper()] = {"name": n, "type_name": type_name, "size": sz, "grade": grade, "squares": squares}
 
         specs_sorted = sorted(
             specs,
@@ -1181,7 +1183,7 @@ class ShipFrame(ctk.CTkFrame):
                 t.insert("end", f"     - {subtype:<22}  ", "slot_filled")
                 if equipped_name and equipped_name in comp_map:
                     comp = comp_map[equipped_name]
-                    t.insert("end", f"{comp['name']}  S{comp['size']} {comp['grade']}\n", "slot_filled")
+                    t.insert("end", f"{comp['name']}  {comp['squares']} {comp['grade']}\n", "slot_filled")
                 else:
                     t.insert("end", "EMPTY\n", "slot_empty")
 
@@ -1216,11 +1218,14 @@ class ShipFrame(ctk.CTkFrame):
             )
             if comp_rows:
                 name, type_name, size, grade = comp_rows[0]
+                sz = int(size or 0)
+                squares = "■" * sz + "□" * max(0, 6 - sz)
                 comp_map[str(name).upper()] = {
                     "name": name,
                     "type_name": type_name,
-                    "size": size,
+                    "size": sz,
                     "grade": grade,
+                    "squares": squares,
                 }
 
         lines = []
@@ -1253,11 +1258,11 @@ class ShipFrame(ctk.CTkFrame):
                     comp = comp_map[equipped_name]
                     if category == "WEAPON":
                         lines.append(
-                            f"     - {subtype} : {comp['type_name']} | S{comp['size']} | {comp['name']} | {comp['grade']}"
+                            f"     - {subtype} : {comp['type_name']} | {comp['squares']} | {comp['name']} | {comp['grade']}"
                         )
                     else:
                         lines.append(
-                            f"     - {subtype} : S{comp['size']} | {comp['name']} | {comp['grade']}"
+                            f"     - {subtype} : {comp['squares']} | {comp['name']} | {comp['grade']}"
                         )
                 else:
                     if category == "WEAPON":
@@ -2262,7 +2267,9 @@ class ShipFrame(ctk.CTkFrame):
             _sep()
             for w in weapons:
                 modes = f"  {w.stat_fire_mode}" if w.stat_fire_mode else ""
-                t.insert("end", f"  + {w.name:<35} S{w.size}  {w.stat_dps:>6.0f} dps{modes}\n", "DIM")
+                sz = int(w.size or 0)
+                sq = "■" * sz + "□" * max(0, 6 - sz)
+                t.insert("end", f"  + {w.name:<35} {sq}  {w.stat_dps:>6.0f} dps{modes}\n", "DIM")
 
         # ── BOUCLIERS ────────────────────────────────────────────────────
         shields = [c for c in comps if (c.type_name or "").upper() == "SHIELD" and c.stat_shield_hp > 0]
@@ -2279,6 +2286,11 @@ class ShipFrame(ctk.CTkFrame):
             _row("REGEN DELAY",    f"{avg_delay:.1f}",  "DOWNED DELAY", f"{avg_downed:.1f}", " s", " s")
             if avg_abs_phys  > 0: _row("ABS PHYS",  f"{avg_abs_phys:.0%}",  "RES PHYS", f"{avg_res_phys:.0%}")
             if avg_res_dist  > 0: _row("RES DISTORT", f"{avg_res_dist:.0%}")
+            _sep()
+            for sh in shields:
+                sz = int(sh.size or 0)
+                sq = "■" * sz + "□" * max(0, 6 - sz)
+                t.insert("end", f"  + {sh.name:<35} {sq}  {sh.stat_shield_hp:>7,.0f} hp\n", "DIM")
 
         # ── ÉNERGIE / COOLING ────────────────────────────────────────────
         powerplants = [c for c in comps if (c.type_name or "").upper() == "POWER PLANT" and c.stat_power_output > 0]
@@ -2296,15 +2308,21 @@ class ShipFrame(ctk.CTkFrame):
             _row("COOLING avail/heat",
                  f"{total_cooling:.1f} / {total_heat:.1f}", tag1=ctag)
             for pp in powerplants:
-                t.insert("end", f"  + {pp.name:<35} {pp.stat_power_output:.1f} seg\n", "DIM")
+                sz = int(pp.size or 0)
+                sq = "■" * sz + "□" * max(0, 6 - sz)
+                t.insert("end", f"  + {pp.name:<35} {sq}  {pp.stat_power_output:.1f} seg\n", "DIM")
             for cl in coolers:
-                t.insert("end", f"  + {cl.name:<35} {cl.stat_cooling_rate:.1f} seg/s\n", "DIM")
+                sz = int(cl.size or 0)
+                sq = "■" * sz + "□" * max(0, 6 - sz)
+                t.insert("end", f"  + {cl.name:<35} {sq}  {cl.stat_cooling_rate:.1f} seg/s\n", "DIM")
 
         # ── QUANTUM DRIVE ────────────────────────────────────────────────
         qt_drives = [c for c in comps if (c.type_name or "").upper() == "QUANTUM DRIVE" and c.stat_qt_speed > 0]
         if qt_drives:
             q = qt_drives[0]
-            _hdr("[QUANTUM DRIVE]")
+            sz = int(q.size or 0)
+            sq = "■" * sz + "□" * max(0, 6 - sz)
+            _hdr(f"[QUANTUM DRIVE]  {sq}  {q.grade}")
             _row("SPEED",     f"{q.stat_qt_speed:.0f}",
                  "SPOOL",     f"{q.stat_qt_spool:.1f}",    " Mm/s", " s")
             _row("FUEL/GM",   f"{q.stat_qt_fuel_usage:.4f}" if q.stat_qt_fuel_usage else "—",
