@@ -78,9 +78,11 @@ class ShipFrame(ctk.CTkFrame):
         if self.mode in ("all", "loadout_only"):
             self.tab_loadout = self.tabview.add("LOADOUT")
             self.tab_components = self.tabview.add("COMPONENTS")
+            self.tab_simulator = self.tabview.add("SIMULATOR")
             self.tab_config = self.tabview.add("CONFIG")
             self.setup_loadout_tab()
             self._build_components_content(self.tab_components)
+            self.setup_simulator_tab()
             self.setup_config_tab()
 
     def refresh(self):
@@ -788,6 +790,17 @@ class ShipFrame(ctk.CTkFrame):
         self._set_ship_cycle_indicator(0, 0)
         self._clear_loadout_preview_pending_validation()
 
+    def _sim_ship_suggestions(self, raw_query: str):
+        query = (raw_query or "").strip().upper()
+        ships = [str(s).strip().upper() for s in self._loadout_ship_values]
+        if not ships:
+            return []
+        if not query:
+            return ships[:10]
+        starts = [s for s in ships if s.startswith(query)]
+        contains = [s for s in ships if query in s and s not in starts]
+        return (starts + contains)[:10]
+
     def _loadout_ship_suggestions(self, raw_query: str):
         query = (raw_query or "").strip().upper()
         ships = [str(s).strip().upper() for s in self._loadout_ship_values]
@@ -863,6 +876,202 @@ class ShipFrame(ctk.CTkFrame):
             current_tab = ""
         if current_tab != "LOADOUT":
             self._close_ship_popup()
+
+    def setup_simulator_tab(self):
+        """Onglet simulateur d'énergie — sliders par composant, bilan en temps réel."""
+        parent = self.tab_simulator
+        self._sim_sliders = []   # list of (comp_name, draw_max, active_var, val_lbl, total_sq, draw_per_sq)
+        self._sim_power_total = 0.0
+
+        self._sim_suggestion_manager = DrakeSuggestionManager(self)
+
+        # ── En-tête ──────────────────────────────────────────────────────
+        header = ctk.CTkFrame(parent, fg_color="transparent")
+        header.pack(fill="x", padx=15, pady=(10, 4))
+        DrakeTitle2(header, text="ENERGY SIMULATOR").pack(side="left")
+
+        # ── Sélecteurs vaisseau / profil ─────────────────────────────────
+        selrow = ctk.CTkFrame(parent, fg_color="transparent")
+        selrow.pack(fill="x", padx=15, pady=(0, 6))
+
+        DrakeTitle4(selrow, "SHIP").pack(side="left", padx=(0, 6))
+        self.sim_ship_entry = DrakeEntryLight(selrow, placeholder_text="Ship name…", width=220)
+        self.sim_ship_entry.pack(side="left", padx=(0, 10))
+        self._sim_suggestion_manager.attach(
+            self.sim_ship_entry,
+            get_items=self._sim_ship_suggestions,
+            on_validate=lambda _w, val: self.sim_ship_entry.delete(0, "end") or self.sim_ship_entry.insert(0, val),
+            normalize=lambda s: str(s).strip().upper(),
+            max_items=10,
+        )
+
+        DrakeTitle4(selrow, "PROFILE").pack(side="left", padx=(0, 6))
+        self.sim_profile_combo = DrakeComboBoxLight(selrow, values=["DEFAULT"], width=140)
+        self.sim_profile_combo.set("DEFAULT")
+        self.sim_profile_combo.pack(side="left", padx=(0, 10))
+
+        DrakeButton(selrow, text="LOAD", width=70, height=28,
+                    command=self._sim_load).pack(side="left")
+
+        # ── Barre d'énergie globale ───────────────────────────────────────
+        bar_frame = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL,
+                                  corner_radius=0, border_width=1,
+                                  border_color=DrakeConfig.BORDER_COLOR)
+        bar_frame.pack(fill="x", padx=15, pady=(4, 2))
+
+        self.sim_power_bar_label = ctk.CTkLabel(
+            bar_frame, text="─  LOAD SHIP TO BEGIN  ─",
+            font=("Courier New", 11),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        )
+        self.sim_power_bar_label.pack(padx=12, pady=6)
+
+        # ── Zone scrollable des sliders ───────────────────────────────────
+        self.sim_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        self.sim_scroll.pack(fill="both", expand=True, padx=15, pady=(4, 10))
+
+    def _sim_load(self):
+        """Charge le loadout du vaisseau sélectionné et crée les sliders."""
+        ship_name = (self.sim_ship_entry.get() or "").strip().upper()
+        profile = (self.sim_profile_combo.get() or "DEFAULT").strip().upper()
+        if not ship_name:
+            return
+
+        # Vider les anciens sliders
+        for w in self.sim_scroll.winfo_children():
+            w.destroy()
+        self._sim_sliders = []
+        self._sim_power_total = 0.0
+
+        # Récupérer le loadout
+        rows = self.controller.ship.app.query(
+            "SELECT component_name FROM ship_loadout WHERE ship_name=? AND profile_name=?",
+            (ship_name, profile),
+        )
+        if not rows:
+            self.sim_power_bar_label.configure(text=f"NO LOADOUT FOUND — {ship_name} / {profile}")
+            return
+
+        from models.component import Component as _Comp
+        comp_names = list({r[0] for r in rows if r[0]})
+        ph = ", ".join(["?"] * len(comp_names))
+        comp_rows = self.controller.ship.app.query(
+            f"SELECT {', '.join(_Comp.COLUMNS)} FROM components WHERE UPPER(name) IN ({ph})",
+            [n.upper() for n in comp_names],
+        )
+        comps = [_Comp.from_db_row(r) for r in comp_rows if r]
+        comps_with_draw = [c for c in comps if c.stat_power_draw > 0]
+
+        # Power plants
+        all_comps = comps + [_Comp.from_db_row(r) for r in comp_rows if r]
+        power_plants = [c for c in comps if (c.type_name or "").upper() == "POWER PLANT"]
+        self._sim_power_total = sum(c.stat_power_output for c in power_plants)
+
+        if not comps_with_draw:
+            self.sim_power_bar_label.configure(text="NO POWER-DRAWING COMPONENTS FOUND")
+            return
+
+        # Créer une ligne de carrés par composant
+        for comp in sorted(comps_with_draw, key=lambda c: c.stat_power_draw, reverse=True):
+            self._sim_create_seg_row(comp)
+
+        self._sim_update_bar()
+
+    def _sim_create_seg_row(self, comp):
+        """Crée une ligne avec carrés cliquables (1 carré = 1 segment de puissance)."""
+        draw_max = comp.stat_power_draw
+        is_weapon = (comp.category or "").upper() == "WEAPON"
+        total_sq  = 6 if is_weapon else max(1, round(draw_max))
+        draw_per_sq = draw_max / total_sq
+        sz = int(comp.size or 0)
+        size_sq = "■" * sz + "□" * max(0, 6 - sz)
+
+        row = ctk.CTkFrame(self.sim_scroll, fg_color=DrakeConfig.BG_PANEL,
+                            corner_radius=0, border_width=1,
+                            border_color=DrakeConfig.BORDER_COLOR)
+        row.pack(fill="x", pady=2)
+
+        info = ctk.CTkFrame(row, fg_color="transparent", width=270)
+        info.pack(side="left", padx=10, pady=6, fill="y")
+        info.pack_propagate(False)
+        ctk.CTkLabel(info, text=comp.name, font=("Segoe UI", 11, "bold"), anchor="w").pack(anchor="w")
+        spec = (comp.specialization or "").upper()
+        sub = f"{comp.type_name}  {size_sq}  GR-{comp.grade}" + (f"  {spec}" if spec else "")
+        ctk.CTkLabel(info, text=sub, font=DrakeConfig.FONT_LOGS,
+                     text_color=DrakeConfig.TEXT_SECONDARY, anchor="w").pack(anchor="w")
+
+        seg_frame = ctk.CTkFrame(row, fg_color="transparent")
+        seg_frame.pack(side="left", padx=(0, 10), pady=8)
+
+        active_var = ctk.IntVar(value=total_sq)
+        sq_btns = []
+
+        def _refresh(btn_list, var):
+            cur = var.get()
+            for i, b in enumerate(btn_list):
+                if i < cur:
+                    b.configure(text="■", text_color=DrakeConfig.ACCENT_PRIMARY)
+                else:
+                    b.configure(text="□", text_color=DrakeConfig.TEXT_SECONDARY)
+
+        def _make_click(idx, btn_list, var):
+            def _cb():
+                var.set(idx if var.get() != idx else idx - 1)
+                _refresh(btn_list, var)
+                self._sim_update_bar()
+            return _cb
+
+        for i in range(1, total_sq + 1):
+            b = ctk.CTkButton(
+                seg_frame, text="■", width=22, height=22, corner_radius=0,
+                font=("Segoe UI", 12), fg_color=DrakeConfig.BG_PANEL,
+                text_color=DrakeConfig.ACCENT_PRIMARY, hover_color=DrakeConfig.BG_MAIN,
+                border_width=0,
+            )
+            b.pack(side="left", padx=1)
+            sq_btns.append(b)
+
+        for i, b in enumerate(sq_btns, start=1):
+            b.configure(command=_make_click(i, sq_btns, active_var))
+
+        val_lbl = ctk.CTkLabel(row, text=f"{draw_max:.2f} / {draw_max:.2f}",
+                                font=("Courier New", 11),
+                                text_color=DrakeConfig.ACCENT_PRIMARY, width=110)
+        val_lbl.pack(side="left", padx=(0, 10))
+
+        self._sim_sliders.append((comp.name, draw_max, active_var, val_lbl, total_sq, draw_per_sq))
+
+    def _sim_create_slider_row(self, comp):
+        self._sim_create_seg_row(comp)
+
+    def _sim_update_bar(self):
+        """Recalcule la consommation totale et met à jour la barre."""
+        total_draw = sum(active.get() * dps for _, _, active, _, _, dps in self._sim_sliders)
+        avail = self._sim_power_total
+
+        for _, draw_max, active, val_lbl, total_sq, dps in self._sim_sliders:
+            cur_draw = active.get() * dps
+            val_lbl.configure(text=f"{cur_draw:.2f} / {draw_max:.2f}")
+
+        # Barre globale
+        ratio = (total_draw / avail) if avail > 0 else 1.0
+        filled = min(20, round(ratio * 20))
+        bar = "■" * filled + "□" * (20 - filled)
+        pct = ratio * 100
+
+        if avail <= 0:
+            color = DrakeConfig.TEXT_SECONDARY
+            status = "NO POWER PLANT"
+        elif total_draw <= avail:
+            color = "#44cc44"
+            status = f"OK  {total_draw:.2f} / {avail:.2f} seg"
+        else:
+            color = "#ff4444"
+            over = total_draw - avail
+            status = f"OVERLOAD +{over:.2f} seg  {total_draw:.2f} / {avail:.2f}"
+
+        bar_text = f"[{bar}]  {pct:.0f}%  {status}"
+        self.sim_power_bar_label.configure(text=bar_text, text_color=color)
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
