@@ -1691,6 +1691,7 @@ class ShipFrame(ctk.CTkFrame):
                 "size": r[4],
                 "grade": r[5],
                 "specialization": r[6] if len(r) > 6 else "",
+                "stat_power_draw": float(r[7]) if len(r) > 7 else 0.0,
             }
 
             if self.component_editing_name == r[0]:
@@ -1745,9 +1746,16 @@ class ShipFrame(ctk.CTkFrame):
         right = ctk.CTkFrame(parent, fg_color="transparent")
         right.pack(side="right", padx=10, pady=8)
 
-        size_val = int(component['size'] or 0)
-        filled   = "■" * size_val
-        empty    = "□" * max(0, 6 - size_val)
+        draw_val = float(component.get('stat_power_draw') or 0)
+        filled_count = min(6, round(draw_val))
+        filled   = "■" * filled_count
+        empty    = "□" * max(0, 6 - filled_count)
+        ctk.CTkLabel(
+            right,
+            text="PWR",
+            font=("Courier New", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 2))
         ctk.CTkLabel(
             right,
             text=filled + empty,
