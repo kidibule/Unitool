@@ -467,6 +467,8 @@ class ShipFrame(ctk.CTkFrame):
         self._comp_page_size = 25
         self._comp_cat_filter = ""
         self._comp_type_filter = ""
+        self._comp_grade_filter = ""
+        self._comp_spec_filter = ""
 
         # Barre recherche
         search_bar = ctk.CTkFrame(parent, fg_color="transparent")
@@ -477,35 +479,64 @@ class ShipFrame(ctk.CTkFrame):
         self.comp_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self.comp_search_entry.bind("<KeyRelease>", lambda _e: self._comp_reset_and_scan())
 
-        # Filtres catégorie + type
-        cat_bar = ctk.CTkFrame(parent, fg_color="transparent")
-        cat_bar.pack(fill="x", padx=20, pady=(4, 4))
+        # ── Filtres (ligne 1 : CAT + TYPE) ──────────────────────────────
+        filter_row1 = ctk.CTkFrame(parent, fg_color="transparent")
+        filter_row1.pack(fill="x", padx=20, pady=(4, 2))
         ctk.CTkLabel(
-            cat_bar, text="CAT:",
+            filter_row1, text="CAT:",
             font=("Segoe UI", 9),
             text_color=DrakeConfig.TEXT_SECONDARY,
         ).pack(side="left", padx=(0, 4))
         self.comp_cat_combo = DrakeComboBoxLight(
-            cat_bar, values=["TOUTES"], width=140,
+            filter_row1, values=["TOUTES"], width=140,
             command=self._on_comp_cat_changed,
         )
         self.comp_cat_combo.set("TOUTES")
         self.comp_cat_combo.pack(side="left")
 
-        ctk.CTkLabel(
-            cat_bar, text="TYPE:",
+        self._comp_type_label = ctk.CTkLabel(
+            filter_row1, text="TYPE:",
             font=("Segoe UI", 9),
             text_color=DrakeConfig.TEXT_SECONDARY,
-        ).pack(side="left", padx=(16, 4))
+        )
+        self._comp_type_label.pack(side="left", padx=(16, 4))
         self.comp_type_combo = DrakeComboBoxLight(
-            cat_bar, values=["TOUS"], width=160,
+            filter_row1, values=["TOUS"], width=160,
             command=self._on_comp_type_changed,
         )
         self.comp_type_combo.set("TOUS")
         self.comp_type_combo.pack(side="left")
-        # Bouton reset filtres
+
+        # ── Filtres (ligne 2 : GRADE + SPEC + reset) ─────────────────────
+        filter_row2 = ctk.CTkFrame(parent, fg_color="transparent")
+        filter_row2.pack(fill="x", padx=20, pady=(0, 4))
+        ctk.CTkLabel(
+            filter_row2, text="GRADE:",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 4))
+        self.comp_grade_combo = DrakeComboBoxLight(
+            filter_row2, values=["TOUS", "A", "B", "C", "D", "E"], width=90,
+            command=self._on_comp_grade_changed,
+        )
+        self.comp_grade_combo.set("TOUS")
+        self.comp_grade_combo.pack(side="left")
+
+        self._comp_spec_label = ctk.CTkLabel(
+            filter_row2, text="SPEC:",
+            font=("Segoe UI", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+        )
+        self._comp_spec_label.pack(side="left", padx=(16, 4))
+        self.comp_spec_combo = DrakeComboBoxLight(
+            filter_row2, values=["TOUS", "MILITARY", "CIVILIAN", "INDUSTRIAL", "STEALTH"], width=130,
+            command=self._on_comp_spec_changed,
+        )
+        self.comp_spec_combo.set("TOUS")
+        self.comp_spec_combo.pack(side="left")
+
         DrakeButton(
-            cat_bar, text="✕", width=26,
+            filter_row2, text="✕", width=26,
             command=self._comp_reset_filters,
             fg_color="transparent", border_width=1,
             border_color=DrakeConfig.BORDER_COLOR,
@@ -1543,9 +1574,11 @@ class ShipFrame(ctk.CTkFrame):
         self.run_component_scan()
 
     def _comp_reset_filters(self):
-        """Réinitialise tous les filtres cat/type."""
+        """Réinitialise tous les filtres cat/type/grade/spec."""
         self._comp_cat_filter = ""
         self._comp_type_filter = ""
+        self._comp_grade_filter = ""
+        self._comp_spec_filter = ""
         if self._widget_exists("comp_cat_combo"):
             self.comp_cat_combo.set("TOUTES")
         if self._widget_exists("comp_type_combo"):
@@ -1554,11 +1587,17 @@ class ShipFrame(ctk.CTkFrame):
                 self.comp_type_combo.configure(values=["TOUS"])
             except Exception:
                 pass
+        if self._widget_exists("comp_grade_combo"):
+            self.comp_grade_combo.set("TOUS")
+        if self._widget_exists("comp_spec_combo"):
+            self.comp_spec_combo.set("TOUS")
         self._comp_reset_and_scan()
 
     def _on_comp_cat_changed(self, choice):
         self._comp_cat_filter = "" if choice == "TOUTES" else choice
         self._comp_type_filter = ""
+        self._comp_spec_filter = ""
+        is_weapon = self._comp_cat_filter.upper() == "WEAPON"
         # Rafraîchit le combo type avec les types de cette catégorie
         if self._widget_exists("comp_type_combo"):
             if self._comp_cat_filter:
@@ -1572,6 +1611,26 @@ class ShipFrame(ctk.CTkFrame):
                 self.comp_type_combo.set("TOUS")
             except Exception:
                 pass
+        # Masquer/afficher le filtre spec selon la catégorie
+        if self._widget_exists("comp_spec_combo"):
+            try:
+                if is_weapon:
+                    self._comp_spec_label.pack_forget()
+                    self.comp_spec_combo.set("TOUS")
+                    self.comp_spec_combo.pack_forget()
+                else:
+                    self._comp_spec_label.pack(side="left", padx=(16, 4))
+                    self.comp_spec_combo.pack(side="left")
+            except Exception:
+                pass
+        self._comp_reset_and_scan()
+
+    def _on_comp_grade_changed(self, choice):
+        self._comp_grade_filter = "" if choice == "TOUS" else choice
+        self._comp_reset_and_scan()
+
+    def _on_comp_spec_changed(self, choice):
+        self._comp_spec_filter = "" if choice == "TOUS" else choice
         self._comp_reset_and_scan()
 
     def _on_comp_type_changed(self, choice):
@@ -1606,10 +1665,12 @@ class ShipFrame(ctk.CTkFrame):
             except Exception:
                 query = ""
 
-        cat_filter  = getattr(self, "_comp_cat_filter", "")
-        type_filter = getattr(self, "_comp_type_filter", "")
-        page        = getattr(self, "_comp_page", 0)
-        page_size   = getattr(self, "_comp_page_size", 25)
+        cat_filter   = getattr(self, "_comp_cat_filter", "")
+        type_filter  = getattr(self, "_comp_type_filter", "")
+        grade_filter = getattr(self, "_comp_grade_filter", "")
+        spec_filter  = getattr(self, "_comp_spec_filter", "")
+        page         = getattr(self, "_comp_page", 0)
+        page_size    = getattr(self, "_comp_page_size", 25)
 
         # ── Mise à jour du combo catégories ──────────────────────────────
         if self._widget_exists("comp_cat_combo"):
@@ -1626,6 +1687,10 @@ class ShipFrame(ctk.CTkFrame):
             all_rows = [r for r in all_rows if str(r[3]).upper() == cat_filter.upper()]
         if type_filter:
             all_rows = [r for r in all_rows if str(r[2]).upper() == type_filter.upper()]
+        if grade_filter:
+            all_rows = [r for r in all_rows if str(r[5]).upper() == grade_filter.upper()]
+        if spec_filter:
+            all_rows = [r for r in all_rows if str(r[6]).upper() == spec_filter.upper()]
         if query:
             all_rows = [
                 r for r in all_rows
