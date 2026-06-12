@@ -950,12 +950,20 @@ class ShipFrame(ctk.CTkFrame):
                                   border_color=DrakeConfig.BORDER_COLOR)
         bar_frame.pack(fill="x", padx=15, pady=(4, 2))
 
+        self.sim_pp_label = ctk.CTkLabel(
+            bar_frame, text="",
+            font=("Courier New", 10),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        )
+        self.sim_pp_label.pack(fill="x", padx=12, pady=(5, 0))
+
         self.sim_power_bar_label = ctk.CTkLabel(
             bar_frame, text="─  LOAD SHIP TO BEGIN  ─",
             font=("Courier New", 11),
             text_color=DrakeConfig.TEXT_SECONDARY,
         )
-        self.sim_power_bar_label.pack(padx=12, pady=6)
+        self.sim_power_bar_label.pack(padx=12, pady=(2, 6))
 
         # ── Zone scrollable des sliders ───────────────────────────────────
         self.sim_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
@@ -991,50 +999,100 @@ class ShipFrame(ctk.CTkFrame):
             [n.upper() for n in comp_names],
         )
         comps = [_Comp.from_db_row(r) for r in comp_rows if r]
-        comps_with_draw = [c for c in comps if c.stat_power_draw > 0]
 
-        # Power plants
-        all_comps = comps + [_Comp.from_db_row(r) for r in comp_rows if r]
+        # Séparer power plants (générateurs) des consommateurs
         power_plants = [c for c in comps if (c.type_name or "").upper() == "POWER PLANT"]
         self._sim_power_total = sum(c.stat_power_output for c in power_plants)
 
-        if not comps_with_draw:
+        # Afficher les power plants dans la barre
+        if power_plants:
+            pp_parts = []
+            for pp in power_plants:
+                spec = (pp.specialization or "").upper()
+                pp_parts.append(f"{pp.name}  GR-{pp.grade}" + (f"  {spec}" if spec else "") + f"  ▸  {pp.stat_power_output:.1f} seg")
+            self.sim_pp_label.configure(
+                text="⚡ " + "   |   ".join(pp_parts),
+                text_color=DrakeConfig.ACCENT_PRIMARY,
+            )
+        else:
+            self.sim_pp_label.configure(text="⚡ NO POWER PLANT", text_color=DrakeConfig.TEXT_SECONDARY)
+
+        # Consommateurs uniquement (exclure les power plants)
+        consumers = [
+            c for c in comps
+            if c.stat_power_draw > 0 and (c.type_name or "").upper() != "POWER PLANT"
+        ]
+
+        if not consumers:
             self.sim_power_bar_label.configure(text="NO POWER-DRAWING COMPONENTS FOUND")
             return
 
-        # Créer une ligne de carrés par composant
-        for comp in sorted(comps_with_draw, key=lambda c: c.stat_power_draw, reverse=True):
-            self._sim_create_seg_row(comp)
+        # Grouper : armes ensemble, autres par type_name
+        from collections import defaultdict
+        groups = {}   # label -> (total_draw, [comps])
 
+        weapon_comps = [c for c in consumers if (c.category or "").upper() == "WEAPON"]
+        other_comps  = [c for c in consumers if (c.category or "").upper() != "WEAPON"]
+
+        by_type = defaultdict(list)
+        for c in other_comps:
+            by_type[(c.type_name or "SYSTEM").upper()].append(c)
+
+        ordered = sorted(by_type.items())
+
+        # Conteneur horizontal des cards
+        cards_frame = ctk.CTkFrame(self.sim_scroll, fg_color="transparent")
+        cards_frame.pack(fill="x", padx=2, pady=4)
+
+        for label, comp_list in ordered:
+            total_draw = sum(c.stat_power_draw for c in comp_list)
+            self._sim_create_type_card(cards_frame, label, total_draw)
+
+        # PROPULSION avant WEAPONS
+        self._sim_create_type_card(cards_frame, "PROPULSION", 6.0, fixed_sq=6)
+        if weapon_comps:
+            self._sim_create_type_card(cards_frame, "WEAPONS", 6.0, fixed_sq=6)
+
+        # Distribuer les segments de gauche à droite sans dépasser la capacité
+        self._sim_distribute_initial()
         self._sim_update_bar()
 
-    def _sim_create_seg_row(self, comp):
-        """Crée une ligne avec carrés cliquables (1 carré = 1 segment de puissance)."""
-        draw_max = comp.stat_power_draw
-        is_weapon = (comp.category or "").upper() == "WEAPON"
-        total_sq  = 6 if is_weapon else max(1, round(draw_max))
-        draw_per_sq = draw_max / total_sq
-        sz = int(comp.size or 0)
-        size_sq = "■" * sz + "□" * max(0, 6 - sz)
+    def _sim_distribute_initial(self):
+        """Remplit les segments de gauche à droite sans dépasser _sim_power_total."""
+        remaining = self._sim_power_total
+        for label, total_draw, active_var, val_lbl, total_sq, draw_per_sq, refresh_fn in self._sim_sliders:
+            if draw_per_sq <= 0 or total_sq == 0:
+                active_var.set(0)
+                refresh_fn()
+                continue
+            fillable = int(remaining / draw_per_sq) if draw_per_sq > 0 else 0
+            filled = min(total_sq, fillable)
+            active_var.set(filled)
+            refresh_fn()
+            remaining -= filled * draw_per_sq
+            remaining = max(0.0, remaining)
 
-        row = ctk.CTkFrame(self.sim_scroll, fg_color=DrakeConfig.BG_PANEL,
-                            corner_radius=0, border_width=1,
-                            border_color=DrakeConfig.BORDER_COLOR)
-        row.pack(fill="x", pady=2)
+    def _sim_create_type_card(self, parent, label, total_draw, fixed_sq=None):
+        """Crée une card verticale compacte affichant un type de composant."""
+        total_sq    = fixed_sq if fixed_sq is not None else max(1, round(total_draw))
+        draw_per_sq = total_draw / total_sq if total_sq > 0 else 0.0
 
-        info = ctk.CTkFrame(row, fg_color="transparent", width=270)
-        info.pack(side="left", padx=10, pady=6, fill="y")
-        info.pack_propagate(False)
-        ctk.CTkLabel(info, text=comp.name, font=("Segoe UI", 11, "bold"), anchor="w").pack(anchor="w")
-        spec = (comp.specialization or "").upper()
-        sub = f"{comp.type_name}  {size_sq}  GR-{comp.grade}" + (f"  {spec}" if spec else "")
-        ctk.CTkLabel(info, text=sub, font=DrakeConfig.FONT_LOGS,
-                     text_color=DrakeConfig.TEXT_SECONDARY, anchor="w").pack(anchor="w")
+        card = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL,
+                             corner_radius=0, border_width=1,
+                             border_color=DrakeConfig.BORDER_COLOR)
+        card.pack(side="left", padx=4, pady=2, anchor="n")
 
-        seg_frame = ctk.CTkFrame(row, fg_color="transparent")
-        seg_frame.pack(side="left", padx=(0, 10), pady=8)
+        ctk.CTkLabel(
+            card, text=label,
+            font=("Segoe UI", 10, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+            anchor="center",
+        ).pack(padx=10, pady=(6, 2))
 
-        active_var = ctk.IntVar(value=total_sq)
+        seg_frame = ctk.CTkFrame(card, fg_color="transparent")
+        seg_frame.pack(padx=6, pady=2)
+
+        active_var = ctk.IntVar(value=0)  # sera rempli par _sim_distribute_initial
         sq_btns = []
 
         def _refresh(btn_list, var):
@@ -1045,9 +1103,22 @@ class ShipFrame(ctk.CTkFrame):
                 else:
                     b.configure(text="□", text_color=DrakeConfig.TEXT_SECONDARY)
 
-        def _make_click(idx, btn_list, var):
+        def _make_click(idx, btn_list, var, max_sq):
             def _cb():
-                var.set(idx if var.get() != idx else idx - 1)
+                cur = var.get()
+                new_val = idx if cur != idx else idx - 1
+                # Bloquer si l'augmentation dépasse la capacité disponible
+                if new_val > cur:
+                    other_draw = sum(
+                        a.get() * d
+                        for _, _, a, _, _, d, _ in self._sim_sliders
+                        if a is not var
+                    )
+                    cur_draw = cur * (total_draw / max_sq) if max_sq else 0
+                    new_draw = new_val * (total_draw / max_sq) if max_sq else 0
+                    if other_draw + new_draw > self._sim_power_total > 0:
+                        return
+                var.set(new_val)
                 _refresh(btn_list, var)
                 self._sim_update_bar()
             return _cb
@@ -1063,24 +1134,31 @@ class ShipFrame(ctk.CTkFrame):
             sq_btns.append(b)
 
         for i, b in enumerate(sq_btns, start=1):
-            b.configure(command=_make_click(i, sq_btns, active_var))
+            b.configure(command=_make_click(i, sq_btns, active_var, total_sq))
 
-        val_lbl = ctk.CTkLabel(row, text=f"{draw_max:.2f} / {draw_max:.2f}",
-                                font=("Courier New", 11),
-                                text_color=DrakeConfig.ACCENT_PRIMARY, width=110)
-        val_lbl.pack(side="left", padx=(0, 10))
+        val_lbl = ctk.CTkLabel(
+            card, text=f"{total_draw:.2f} / {total_draw:.2f}",
+            font=("Courier New", 10),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        )
+        val_lbl.pack(padx=10, pady=(2, 6))
 
-        self._sim_sliders.append((comp.name, draw_max, active_var, val_lbl, total_sq, draw_per_sq))
+        self._sim_sliders.append((label, total_draw, active_var, val_lbl, total_sq, draw_per_sq,
+                                   lambda bl=sq_btns, v=active_var: _refresh(bl, v)))
+
+    def _sim_create_seg_row(self, comp):
+        # Compat legacy — plus utilisé
+        pass
 
     def _sim_create_slider_row(self, comp):
-        self._sim_create_seg_row(comp)
+        pass
 
     def _sim_update_bar(self):
         """Recalcule la consommation totale et met à jour la barre."""
-        total_draw = sum(active.get() * dps for _, _, active, _, _, dps in self._sim_sliders)
+        total_draw = sum(active.get() * dps for _, _, active, _, _, dps, _ in self._sim_sliders)
         avail = self._sim_power_total
 
-        for _, draw_max, active, val_lbl, total_sq, dps in self._sim_sliders:
+        for _, draw_max, active, val_lbl, total_sq, dps, _ in self._sim_sliders:
             cur_draw = active.get() * dps
             val_lbl.configure(text=f"{cur_draw:.2f} / {draw_max:.2f}")
 
