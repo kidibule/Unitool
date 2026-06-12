@@ -1834,7 +1834,16 @@ class ShipFrame(ctk.CTkFrame):
                 "size": r[4],
                 "grade": r[5],
                 "specialization": r[6] if len(r) > 6 else "",
-                "stat_power_draw": float(r[7]) if len(r) > 7 else 0.0,
+                "stat_power_draw":    float(r[7])  if len(r) > 7  else 0.0,
+                "stat_dps":           float(r[10]) if len(r) > 10 else 0.0,
+                "stat_alpha":         float(r[11]) if len(r) > 11 else 0.0,
+                "stat_shield_hp":     int(r[16])   if len(r) > 16 else 0,
+                "stat_shield_regen":  float(r[17]) if len(r) > 17 else 0.0,
+                "stat_power_output":  float(r[19]) if len(r) > 19 else 0.0,
+                "stat_cooling_rate":  float(r[20]) if len(r) > 20 else 0.0,
+                "stat_qt_speed":      float(r[22]) if len(r) > 22 else 0.0,
+                "stat_qt_spool":      float(r[23]) if len(r) > 23 else 0.0,
+                "stat_detection_range": float(r[25]) if len(r) > 25 else 0.0,
             }
 
             if self.component_editing_name == r[0]:
@@ -1886,32 +1895,78 @@ class ShipFrame(ctk.CTkFrame):
                 anchor="w",
             ).pack(side="left")
 
+        # Ligne stats principales
+        stat_parts = []
+        type_up = (component['type_name'] or "").upper()
+        cat_up  = (component['category'] or "").upper()
+        if cat_up == "WEAPON" or component['stat_dps']:
+            if component['stat_dps']:  stat_parts.append(f"DPS {component['stat_dps']:.1f}")
+            if component['stat_alpha']: stat_parts.append(f"ALPHA {component['stat_alpha']:.1f}")
+        if component['stat_shield_hp']:
+            stat_parts.append(f"HP {component['stat_shield_hp']:,}")
+            if component['stat_shield_regen']: stat_parts.append(f"RGN {component['stat_shield_regen']:.0f}/s")
+        if component['stat_qt_speed']:
+            stat_parts.append(f"SPD {component['stat_qt_speed']/1e6:.0f}Mm/s")
+            if component['stat_qt_spool']: stat_parts.append(f"SPOOL {component['stat_qt_spool']:.1f}s")
+        if component['stat_detection_range'] and "RADAR" in type_up:
+            stat_parts.append(f"RANGE {component['stat_detection_range']/1000:.0f}km")
+        if component['stat_cooling_rate']:
+            stat_parts.append(f"COOL {component['stat_cooling_rate']:.0f}")
+        if stat_parts:
+            stat_row = ctk.CTkFrame(left, fg_color="transparent")
+            stat_row.pack(anchor="w", fill="x")
+            stat_row.bind("<Button-1>", card_click)
+            ctk.CTkLabel(
+                stat_row,
+                text="  ".join(stat_parts),
+                font=("Courier New", 9),
+                text_color="#aaaaaa",
+                anchor="w",
+            ).pack(side="left")
+
         right = ctk.CTkFrame(parent, fg_color="transparent")
         right.pack(side="right", padx=10, pady=8)
 
-        draw_val = float(component.get('stat_power_draw') or 0)
-        filled_count = min(6, round(draw_val))
-        filled   = "■" * filled_count
-        empty    = "□" * max(0, 6 - filled_count)
-        ctk.CTkLabel(
-            right,
-            text="PWR",
-            font=("Courier New", 9),
-            text_color=DrakeConfig.TEXT_SECONDARY,
-        ).pack(side="left", padx=(0, 2))
-        ctk.CTkLabel(
-            right,
-            text=filled + empty,
-            font=("Segoe UI", 10),
-            text_color=DrakeConfig.ACCENT_PRIMARY,
-            width=72,
-        ).pack(side="left", padx=(0, 8))
+        type_up2 = (component['type_name'] or "").upper()
+        if "POWER PLANT" in type_up2:
+            ctk.CTkLabel(
+                right,
+                text=f"⚡ {component['stat_power_output']:.0f}",
+                font=("Courier New", 10, "bold"),
+                text_color=DrakeConfig.ACCENT_PRIMARY,
+            ).pack(side="left", padx=(0, 10))
+        else:
+            draw_val = float(component.get('stat_power_draw') or 0)
+            filled_count = min(6, round(draw_val))
+            filled   = "■" * filled_count
+            empty    = "□" * max(0, 6 - filled_count)
+            ctk.CTkLabel(
+                right,
+                text="PWR",
+                font=("Courier New", 9),
+                text_color=DrakeConfig.TEXT_SECONDARY,
+            ).pack(side="left", padx=(0, 2))
+            ctk.CTkLabel(
+                right,
+                text=filled + empty,
+                font=("Segoe UI", 10),
+                text_color=DrakeConfig.ACCENT_PRIMARY,
+                width=72,
+            ).pack(side="left", padx=(0, 8))
+
         ctk.CTkLabel(
             right,
             text=f"GR-{component['grade']}",
             font=("Segoe UI", 11, "bold"),
             text_color=DrakeConfig.TEXT_MAIN,
             width=54,
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(
+            right,
+            text=f"S{component['size']}",
+            font=("Segoe UI", 11, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            width=32,
         ).pack(side="left", padx=(0, 12))
         DrakeButton(
             right,
