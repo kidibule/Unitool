@@ -84,7 +84,7 @@ class DrakeConfig:
         geometry: str = "500x220",
         fg_color: Optional[str] = None,
         resizable: bool = False,
-        #grab: bool = True,
+        grab: bool = True,
     ):
         """Crée une fenêtre modale toujours au premier plan de la fenêtre principale.
 
