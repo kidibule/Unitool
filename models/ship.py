@@ -1,6 +1,7 @@
 """Modèle Ship — représente un vaisseau enregistré dans la base."""
 
 import json
+import math
 from collections import defaultdict
 from .base_model import BaseModel
 from .component import Component
@@ -125,6 +126,13 @@ class Ship(BaseModel):
         "cooling_used_pct",
         "power_cap",
         "power_used",
+        # ---- Segments d'énergie par groupe (Power.MaxSegments) ----
+        "power_seg_flight",       # FlightController (propulsion / blade)
+        "power_seg_weapon",       # WeaponGun  (arrondi au sup)
+        "power_seg_radar",        # Radar
+        "power_seg_cooler",       # Cooler
+        "power_seg_shield",       # Shield
+        "power_seg_lifesupport",  # LifeSupportGenerator
         # ---- Signature ----
         "emission_ir",
         "emission_em",
@@ -219,6 +227,13 @@ class Ship(BaseModel):
         cooling_used_pct: float = 0.0,
         power_cap: float = 0.0,
         power_used: float = 0.0,
+        # Segments d'énergie par groupe
+        power_seg_flight: int = 0,
+        power_seg_weapon: int = 0,
+        power_seg_radar: int = 0,
+        power_seg_cooler: int = 0,
+        power_seg_shield: int = 0,
+        power_seg_lifesupport: int = 0,
         # Signature
         emission_ir: float = 0.0,
         emission_em: float = 0.0,
@@ -309,6 +324,13 @@ class Ship(BaseModel):
         self.cooling_used_pct = float(cooling_used_pct) if cooling_used_pct else 0.0
         self.power_cap = float(power_cap) if power_cap else 0.0
         self.power_used = float(power_used) if power_used else 0.0
+        # Segments d'énergie par groupe
+        self.power_seg_flight      = int(power_seg_flight or 0)
+        self.power_seg_weapon      = int(power_seg_weapon or 0)
+        self.power_seg_radar       = int(power_seg_radar or 0)
+        self.power_seg_cooler      = int(power_seg_cooler or 0)
+        self.power_seg_shield      = int(power_seg_shield or 0)
+        self.power_seg_lifesupport = int(power_seg_lifesupport or 0)
         # Signature
         self.emission_ir = float(emission_ir) if emission_ir else 0.0
         self.emission_em = float(emission_em) if emission_em else 0.0
@@ -493,6 +515,14 @@ class Ship(BaseModel):
             cooling_used_pct=cooling.get("UsedSegmentsShieldsPct", 0.0),
             power_cap=power_data.get("GenerationSegments", 0.0),
             power_used=power_data.get("UsedSegmentsShields", 0.0),
+            # Segments d'énergie par groupe — source : Power.MaxSegments
+            # WeaponGun est arrondi au supérieur car la valeur peut être décimale (ex: 3.1 → 4)
+            power_seg_flight=int(power_data.get("MaxSegments", {}).get("FlightController", 0)),
+            power_seg_weapon=math.ceil(power_data.get("MaxSegments", {}).get("WeaponGun", 0)),
+            power_seg_radar=int(power_data.get("MaxSegments", {}).get("Radar", 0)),
+            power_seg_cooler=int(power_data.get("MaxSegments", {}).get("Cooler", 0)),
+            power_seg_shield=int(power_data.get("MaxSegments", {}).get("Shield", 0)),
+            power_seg_lifesupport=int(power_data.get("MaxSegments", {}).get("LifeSupportGenerator", 0)),
             # Signature
             emission_ir=emission.get("IrShields", 0.0),
             emission_em=emission.get("EmShields", 0.0),

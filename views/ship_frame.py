@@ -78,11 +78,9 @@ class ShipFrame(ctk.CTkFrame):
         if self.mode in ("all", "loadout_only"):
             self.tab_loadout = self.tabview.add("LOADOUT")
             self.tab_components = self.tabview.add("COMPONENTS")
-            self.tab_simulator = self.tabview.add("SIMULATOR")
             self.tab_config = self.tabview.add("CONFIG")
             self.setup_loadout_tab()
             self._build_components_content(self.tab_components)
-            self.setup_simulator_tab()
             self.setup_config_tab()
 
     def refresh(self):
@@ -770,7 +768,7 @@ class ShipFrame(ctk.CTkFrame):
 
         # ── ZONE CENTRALE : slots ─────────────────────────────────────────
         center = ctk.CTkFrame(self.lo_container, fg_color="transparent")
-        center.pack(fill="both", expand=True, pady=(0, 8))
+        center.pack(fill="both", expand=True, pady=(0, 4))
 
         self.lo_slots_frame = ctk.CTkScrollableFrame(
             center,
@@ -780,6 +778,53 @@ class ShipFrame(ctk.CTkFrame):
             label_text_color=DrakeConfig.ACCENT_PRIMARY,
         )
         self.lo_slots_frame.pack(fill="both", expand=True)
+
+        # ── PANNEAU ÉNERGIE (entre les slots et le terminal) ──────────────
+        self._sim_sliders = []
+        self._sim_power_total = 0.0
+
+        sim_panel = ctk.CTkFrame(
+            self.lo_container,
+            fg_color=DrakeConfig.BG_PANEL,
+            corner_radius=0,
+            border_width=1,
+            border_color=DrakeConfig.BORDER_COLOR,
+        )
+        sim_panel.pack(fill="x", pady=(0, 4))
+
+        # En-tête + barre power-plant + barre globale sur une ligne
+        sim_hdr = ctk.CTkFrame(sim_panel, fg_color="transparent")
+        sim_hdr.pack(fill="x", padx=12, pady=(6, 2))
+
+        ctk.CTkLabel(
+            sim_hdr, text="ENERGY SIMULATOR",
+            font=("Orbitron", 10, "bold"),
+            text_color=DrakeConfig.ACCENT_PRIMARY,
+        ).pack(side="left", padx=(0, 16))
+
+        self.sim_pp_label = ctk.CTkLabel(
+            sim_hdr, text="─  LOAD A SHIP  ─",
+            font=("Courier New", 9),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="w",
+        )
+        self.sim_pp_label.pack(side="left", fill="x", expand=True)
+
+        self.sim_power_bar_label = ctk.CTkLabel(
+            sim_hdr, text="",
+            font=("Courier New", 10, "bold"),
+            text_color=DrakeConfig.TEXT_SECONDARY,
+            anchor="e",
+        )
+        self.sim_power_bar_label.pack(side="right")
+
+        ctk.CTkFrame(sim_panel, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(fill="x", padx=8, pady=(0, 4))
+
+        # Zone horizontale scrollable des cards de segments (hauteur fixe compacte)
+        self.sim_scroll = ctk.CTkScrollableFrame(
+            sim_panel, fg_color="transparent", height=110, orientation="horizontal",
+        )
+        self.sim_scroll.pack(fill="x", padx=4, pady=(0, 6))
 
         # ── TERMINAL DE STATS (bas) ───────────────────────────────────────
         stats_panel = ctk.CTkFrame(self.lo_container, fg_color=DrakeConfig.BG_PANEL,
@@ -909,70 +954,25 @@ class ShipFrame(ctk.CTkFrame):
             self._close_ship_popup()
 
     def setup_simulator_tab(self):
-        """Onglet simulateur d'énergie — sliders par composant, bilan en temps réel."""
-        parent = self.tab_simulator
-        self._sim_sliders = []   # list of (comp_name, draw_max, active_var, val_lbl, total_sq, draw_per_sq)
-        self._sim_power_total = 0.0
+        """Déprécié — le simulateur est désormais intégré dans l'onglet LOADOUT."""
+        pass
 
-        self._sim_suggestion_manager = DrakeSuggestionManager(self)
-
-        # ── En-tête ──────────────────────────────────────────────────────
-        header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.pack(fill="x", padx=15, pady=(10, 4))
-        DrakeTitle2(header, text="ENERGY SIMULATOR").pack(side="left")
-
-        # ── Sélecteurs vaisseau / profil ─────────────────────────────────
-        selrow = ctk.CTkFrame(parent, fg_color="transparent")
-        selrow.pack(fill="x", padx=15, pady=(0, 6))
-
-        DrakeTitle4(selrow, "SHIP").pack(side="left", padx=(0, 6))
-        self.sim_ship_entry = DrakeEntryLight(selrow, placeholder_text="Ship name…", width=220)
-        self.sim_ship_entry.pack(side="left", padx=(0, 10))
-        self._sim_suggestion_manager.attach(
-            self.sim_ship_entry,
-            get_items=self._sim_ship_suggestions,
-            on_validate=lambda _w, val: self.sim_ship_entry.delete(0, "end") or self.sim_ship_entry.insert(0, val),
-            normalize=lambda s: str(s).strip().upper(),
-            max_items=10,
-        )
-
-        DrakeTitle4(selrow, "PROFILE").pack(side="left", padx=(0, 6))
-        self.sim_profile_combo = DrakeComboBoxLight(selrow, values=["DEFAULT"], width=140)
-        self.sim_profile_combo.set("DEFAULT")
-        self.sim_profile_combo.pack(side="left", padx=(0, 10))
-
-        DrakeButton(selrow, text="LOAD", width=70, height=28,
-                    command=self._sim_load).pack(side="left")
-
-        # ── Barre d'énergie globale ───────────────────────────────────────
-        bar_frame = ctk.CTkFrame(parent, fg_color=DrakeConfig.BG_PANEL,
-                                  corner_radius=0, border_width=1,
-                                  border_color=DrakeConfig.BORDER_COLOR)
-        bar_frame.pack(fill="x", padx=15, pady=(4, 2))
-
-        self.sim_pp_label = ctk.CTkLabel(
-            bar_frame, text="",
-            font=("Courier New", 10),
-            text_color=DrakeConfig.TEXT_SECONDARY,
-            anchor="w",
-        )
-        self.sim_pp_label.pack(fill="x", padx=12, pady=(5, 0))
-
-        self.sim_power_bar_label = ctk.CTkLabel(
-            bar_frame, text="─  LOAD SHIP TO BEGIN  ─",
-            font=("Courier New", 11),
-            text_color=DrakeConfig.TEXT_SECONDARY,
-        )
-        self.sim_power_bar_label.pack(padx=12, pady=(2, 6))
-
-        # ── Zone scrollable des sliders ───────────────────────────────────
-        self.sim_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        self.sim_scroll.pack(fill="both", expand=True, padx=15, pady=(4, 10))
+    def _sim_refresh_from_loadout(self, ship_name: str, profile: str):
+        """Synchronise le simulateur d'énergie avec le loadout actuellement affiché."""
+        self._sim_load_for(ship_name, profile)
 
     def _sim_load(self):
         """Charge le loadout du vaisseau sélectionné et crée les sliders."""
-        ship_name = (self.sim_ship_entry.get() or "").strip().upper()
-        profile = (self.sim_profile_combo.get() or "DEFAULT").strip().upper()
+        ship_name = (getattr(self, "lo_ship_selector", None) and self.lo_ship_selector.get() or "").strip().upper()
+        profile = self._get_active_profile()
+        if not ship_name:
+            return
+        self._sim_load_for(ship_name, profile)
+
+    def _sim_load_for(self, ship_name: str, profile: str):
+        """Charge le simulateur d'énergie pour le vaisseau/profil donné."""
+        ship_name = (ship_name or "").strip().upper()
+        profile = (profile or "DEFAULT").strip().upper()
         if not ship_name:
             return
 
@@ -1027,31 +1027,92 @@ class ShipFrame(ctk.CTkFrame):
             self.sim_power_bar_label.configure(text="NO POWER-DRAWING COMPONENTS FOUND")
             return
 
-        # Grouper : armes ensemble, autres par type_name
         from collections import defaultdict
-        groups = {}   # label -> (total_draw, [comps])
-
-        weapon_comps = [c for c in consumers if (c.category or "").upper() == "WEAPON"]
-        other_comps  = [c for c in consumers if (c.category or "").upper() != "WEAPON"]
-
         by_type = defaultdict(list)
-        for c in other_comps:
-            by_type[(c.type_name or "SYSTEM").upper()].append(c)
+        for c in consumers:
+            by_type[(c.type_name or "UNKNOWN").upper()].append(c)
 
-        ordered = sorted(by_type.items())
+        # Catégories "spéciales" (ni weapon, ni systèmes classiques, ni propulsion)
+        _FIXED_TYPES = {"POWER PLANT", "SHIELD", "COOLER", "RADAR",
+                        "QUANTUM DRIVE", "LIFE SUPPORT", "FLIGHT BLADE"}
+        _WEAPON_CATS = {"WEAPON"}
 
-        # Conteneur horizontal des cards
-        cards_frame = ctk.CTkFrame(self.sim_scroll, fg_color="transparent")
-        cards_frame.pack(fill="x", padx=2, pady=4)
+        weapon_comps  = [c for c in consumers if (c.category or "").upper() in _WEAPON_CATS]
+        qt_drive_comps = by_type.get("QUANTUM DRIVE", [])
+        special_comps  = {
+            lbl: lst
+            for lbl, lst in by_type.items()
+            if lbl not in _FIXED_TYPES
+            and (lst[0].category or "").upper() not in _WEAPON_CATS
+        }
 
-        for label, comp_list in ordered:
-            total_draw = sum(c.stat_power_draw for c in comp_list)
-            self._sim_create_type_card(cards_frame, label, total_draw)
+        # Conteneur horizontal des cards (dans le scroll horizontal)
+        cards_frame = self.sim_scroll
 
-        # PROPULSION avant WEAPONS
-        self._sim_create_type_card(cards_frame, "PROPULSION", 6.0, fixed_sq=6)
+        # Récupérer les segments d'énergie réels depuis la DB du vaisseau
+        ship_row = self.controller.ship.app.query(
+            """SELECT power_cap, power_seg_flight, power_seg_weapon, power_seg_radar,
+                      power_seg_cooler, power_seg_shield, power_seg_lifesupport
+               FROM ships WHERE UPPER(name) = ?""",
+            (ship_name,),
+        )
+        seg_flight = seg_weapon = seg_radar = seg_cooler = seg_shield = seg_life = 0
+        if ship_row:
+            r = ship_row[0]
+            if self._sim_power_total == 0 and r[0]:
+                self._sim_power_total = float(r[0])
+            seg_flight = int(r[1] or 0)
+            seg_weapon = int(r[2] or 0)
+            seg_radar  = int(r[3] or 0)
+            seg_cooler = int(r[4] or 0)
+            seg_shield = int(r[5] or 0)
+            seg_life   = int(r[6] or 0)
+
+        # ── Ordre des cards : WEAPONS → PROPULSION → SHIELD → QT DRIVE →
+        #    COMPOSANTS SPÉCIAUX → RADAR → LIFE SUPPORT → COOLER ──────────
+
+        # 1. WEAPONS (fixe, segments du vaisseau)
         if weapon_comps:
-            self._sim_create_type_card(cards_frame, "WEAPONS", 6.0, fixed_sq=6)
+            self._sim_create_type_card(cards_frame, "WEAPONS",
+                                       float(seg_weapon), fixed_sq=seg_weapon or 4)
+
+        # 2. PROPULSION (FlightController — fixe)
+        self._sim_create_type_card(cards_frame, "PROPULSION",
+                                   float(seg_flight), fixed_sq=seg_flight or 4)
+
+        # 3. SHIELD (segments du vaisseau)
+        shield_comps = by_type.get("SHIELD", [])
+        if shield_comps or seg_shield:
+            total_draw = sum(c.stat_power_draw for c in shield_comps)
+            self._sim_create_type_card(cards_frame, "SHIELD",
+                                       total_draw, fixed_sq=seg_shield or None)
+
+        # 4. QUANTUM DRIVE (dynamique)
+        if qt_drive_comps:
+            total_draw = sum(c.stat_power_draw for c in qt_drive_comps)
+            self._sim_create_type_card(cards_frame, "QUANTUM DRIVE", total_draw)
+
+        # 5. COMPOSANTS SPÉCIAUX (EMP, Quantum Snare, etc.) — triés par label
+        for lbl in sorted(special_comps):
+            lst = special_comps[lbl]
+            total_draw = sum(c.stat_power_draw for c in lst)
+            self._sim_create_type_card(cards_frame, lbl, total_draw)
+
+        # 6. RADAR (fixe)
+        self._sim_create_type_card(cards_frame, "RADAR",
+                                   float(seg_radar), fixed_sq=seg_radar or 4)
+
+        # 7. LIFE SUPPORT (fixe, seulement si présent)
+        if seg_life:
+            self._sim_create_type_card(cards_frame, "LIFE SUPPORT",
+                                       float(seg_life), fixed_sq=seg_life)
+
+        # 8. COOLER (segments du vaisseau)
+        cooler_comps = by_type.get("COOLER", [])
+        if cooler_comps or seg_cooler:
+            total_draw = sum(c.stat_power_draw for c in cooler_comps)
+            self._sim_create_type_card(cards_frame, "COOLER",
+                                       total_draw, fixed_sq=seg_cooler or None)
 
         # Distribuer les segments de gauche à droite sans dépasser la capacité
         self._sim_distribute_initial()
@@ -2705,6 +2766,7 @@ class ShipFrame(ctk.CTkFrame):
 
         self._refresh_loadout_status_terminal_from_widgets(ship_name)
         self._render_loadout_global_actions()
+        self._sim_refresh_from_loadout(ship_name, profile_name)
 
     def _refresh_loadout_status_terminal_from_widgets(self, ship_name=None):
         """Calcule et affiche les stats agrégées du loadout dans le terminal."""

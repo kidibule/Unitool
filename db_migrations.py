@@ -954,6 +954,25 @@ def _m026_shields_category_fix(cursor):
     logger.info("  components: shields category corrected DEFENSE → SYSTEMS.")
 
 
+def _m027_ships_power_segments(cursor):
+    """Ajoute les colonnes de segments d'énergie par groupe sur la table ships.
+
+    Ces valeurs proviennent de Power.MaxSegments dans le JSON SC data miner et
+    permettent au simulateur d'énergie du tab LOADOUT d'afficher les vraies
+    valeurs par groupe au lieu de valeurs codées en dur.
+    """
+    for col in [
+        ("power_seg_flight",      "INTEGER DEFAULT 0"),
+        ("power_seg_weapon",      "INTEGER DEFAULT 0"),
+        ("power_seg_radar",       "INTEGER DEFAULT 0"),
+        ("power_seg_cooler",      "INTEGER DEFAULT 0"),
+        ("power_seg_shield",      "INTEGER DEFAULT 0"),
+        ("power_seg_lifesupport", "INTEGER DEFAULT 0"),
+    ]:
+        _add_column_if_missing(cursor, "ships", col[0], col[1])
+    logger.info("  ships: power_seg_* columns added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -981,6 +1000,7 @@ MIGRATIONS = [
     (24, _m024_ships_armor_shield_boost),
     (25, _m025_components_specialization),
     (26, _m026_shields_category_fix),
+    (27, _m027_ships_power_segments),
 ]
 
 
