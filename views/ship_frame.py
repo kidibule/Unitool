@@ -6,7 +6,7 @@ pour administrer le catalogue et l'équipement des vaisseaux.
 
 import customtkinter as ctk
 from tkinter import filedialog
-from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeEntryLight, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakePopup, DrakeSuggestionManager
+from drake_ui.engine import DrakeConfig, DrakeButton, DrakeClearButton, DrakeComboBox, DrakeDualComboBox, DrakeEntry, DrakeEntryLight, DrakeTerminal, DrakeTitle1, DrakeTitle2, DrakeTitle3, DrakeTitle4, DrakeComboBoxLight, DrakeStatsComboBox, DrakePopup, DrakeSuggestionManager
 from controllers.ship_controller import SHIP_CAREER_OPTIONS, SHIP_MANUFACTURER_OPTIONS
 
 class ShipFrame(ctk.CTkFrame):
@@ -2511,6 +2511,95 @@ class ShipFrame(ctk.CTkFrame):
         )
         btn_save.pack(side="bottom", fill="x", padx=20, pady=(10, 5))
 
+    # --- STATS COMPOSANT (provider pour DrakeStatsComboBox) ---
+
+    def _get_display_stats(self, comp) -> list:
+        """Retourne les paires (label, valeur) pertinentes pour ce composant."""
+        rows = []
+        cat = (comp.category or "").upper()
+        type_name = (comp.type_name or "").upper()
+
+        def add(label, val, unit=""):
+            try:
+                fval = float(val)
+            except (TypeError, ValueError):
+                fval = None
+            if fval:
+                if isinstance(val, float) and val != int(val):
+                    formatted = f"{val:.2f}"
+                else:
+                    formatted = str(val)
+                if unit:
+                    formatted += f" {unit}"
+                rows.append((label, formatted))
+
+        # Stats universelles
+        add("POWER DRAW", comp.stat_power_draw, "SCU")
+        add("EM SIGNATURE", comp.stat_em_gen)
+        add("HEAT GEN", comp.stat_heat_gen)
+
+        # Armes (WEAPON ou type laser/ballistic)
+        weapon_types = ("LASER REPEATER", "LASER CANNON", "BALLISTIC REPEATER",
+                        "BALLISTIC CANNON", "DISTORTION REPEATER", "GUN", "TURRET")
+        if cat == "WEAPON" or any(t in type_name for t in weapon_types):
+            add("DPS", comp.stat_dps)
+            add("ALPHA DMG", comp.stat_alpha)
+            add("RANGE", comp.stat_range, "m")
+            add("FIRE RATE", comp.stat_fire_rate, "rps")
+            add("AMMO", comp.stat_ammo_count)
+            add("DMG PHYSICAL", comp.stat_dmg_phys)
+            add("DMG ENERGY", comp.stat_dmg_energy)
+            add("DMG DISTORTION", comp.stat_dmg_distortion)
+            add("PROJECTILE SPD", comp.stat_projectile_speed, "m/s")
+            if comp.stat_fire_mode:
+                rows.append(("FIRE MODE", comp.stat_fire_mode))
+
+        # Missiles
+        elif "MISSILE" in type_name or "RACK" in type_name:
+            add("DMG", comp.stat_dmg)
+
+        # Boucliers
+        elif "SHIELD" in type_name or "SHIELD" in cat:
+            add("SHIELD HP", comp.stat_shield_hp)
+            add("REGEN /s", comp.stat_shield_regen)
+            add("REGEN DELAY", comp.stat_regen_delay, "s")
+            add("DOWN DELAY", comp.stat_shield_downed_delay, "s")
+            add("ABS PHYSICAL", comp.stat_absorption_phys)
+            add("RES PHYSICAL", comp.stat_resistance_phys)
+            add("RES DISTORTION", comp.stat_resistance_dist)
+
+        # Power Plant
+        elif "POWER" in type_name:
+            add("POWER OUTPUT", comp.stat_power_output, "SCU")
+
+        # Cooler
+        elif "COOLER" in type_name:
+            add("COOLING RATE", comp.stat_cooling_rate)
+
+        # Quantum Drive
+        elif "QUANTUM" in type_name:
+            qt_range_gm = comp.stat_qt_range / 1e9 if comp.stat_qt_range else 0
+            if qt_range_gm:
+                rows.append(("QT RANGE", f"{qt_range_gm:.2f} Gm"))
+            qt_speed_mm = comp.stat_qt_speed / 1e6 if comp.stat_qt_speed else 0
+            if qt_speed_mm:
+                rows.append(("QT SPEED", f"{qt_speed_mm:.0f} Mm/s"))
+            add("SPOOL TIME", comp.stat_qt_spool, "s")
+            add("FUEL USAGE", comp.stat_qt_fuel_usage)
+
+        # Radar/Scanner
+        elif "RADAR" in type_name or "SCANNER" in type_name:
+            add("DETECT RANGE", comp.stat_detection_range, "m")
+
+        return rows
+
+    def _loadout_stats_provider(self, component_name: str) -> list:
+        """Provider de stats appelé par DrakeStatsComboBox pour chaque item de la liste."""
+        comp = self.controller.ship.get_component_by_name(component_name)
+        if not comp:
+            return []
+        return self._get_display_stats(comp)
+
     def refresh_loadout_view(self, ship_name):
         """Affiche les slots à droite et met à jour le terminal à gauche."""
         if not ship_name:
@@ -2594,7 +2683,12 @@ class ShipFrame(ctk.CTkFrame):
                 ).pack(anchor="w")
                 
                 # Menu de sélection
-                combo = DrakeComboBoxLight(card, values=["EMPTY"] + available, width=220)
+                combo = DrakeStatsComboBox(
+                    card,
+                    values=["EMPTY"] + available,
+                    width=220,
+                    stats_provider=self._loadout_stats_provider,
+                )
                 combo.set(current)
                 combo.pack(side="left", padx=(0, 10), pady=5)
                 self.lo_slot_widgets.append((cat, subtype, i, combo))

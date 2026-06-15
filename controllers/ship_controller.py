@@ -1291,6 +1291,19 @@ class ShipController:
         )
         self._sync_ship_specs_from_subtypes(ship)
 
+    def get_component_by_name(self, component_name: str):
+        """Retourne un objet Component depuis la DB, ou None si introuvable."""
+        if not component_name or component_name.strip().upper() in ("", "EMPTY"):
+            return None
+        cols = ", ".join(Component.COLUMNS)
+        rows = self.app.query(
+            f"SELECT {cols} FROM components WHERE UPPER(name) = UPPER(?)",
+            (component_name.strip(),),
+        )
+        if not rows:
+            return None
+        return Component.from_db_row(rows[0])
+
     def get_compatible_components(self, category, max_size):
         query = "SELECT name FROM components WHERE UPPER(category) = UPPER(?) AND size <= ? ORDER BY name"
         rows = self.app.query(query, (category, max_size))

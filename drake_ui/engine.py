@@ -1446,6 +1446,163 @@ class DrakeComboBoxLight(ctk.CTkFrame):
         super().configure(**kwargs)
 
 
+class DrakeStatsComboBox(DrakeComboBoxLight):
+    """Variante de DrakeComboBoxLight qui affiche les stats de chaque composant
+    directement dans les items de la liste déroulante.
+
+    Paramètre supplémentaire :
+        stats_provider  callable(name: str) -> list[(label, value)]
+                        Retourne les paires de stats à afficher sous chaque item.
+    """
+
+    _ITEM_HEIGHT_PLAIN = 30   # px pour "EMPTY"
+    _ITEM_HEIGHT_RICH  = 50   # px pour un item avec stats
+    _MIN_DROPDOWN_W    = 380  # largeur minimale du panneau
+
+    def __init__(self, master, values=None, command=None, variable=None,
+                 stats_provider=None, width=200, **kwargs):
+        self._stats_provider = stats_provider
+        super().__init__(master, values=values, command=command,
+                         variable=variable, width=width, **kwargs)
+
+    # ------------------------------------------------------------------ #
+    # Overrides de géométrie                                               #
+    # ------------------------------------------------------------------ #
+
+    def _compute_dropdown_height(self) -> int:
+        if not self._stats_provider:
+            return min(len(self.values) * 35 + 10, 200)
+        total = 0
+        for v in self.values:
+            if str(v).upper() == "EMPTY":
+                total += self._ITEM_HEIGHT_PLAIN + 4
+            else:
+                total += self._ITEM_HEIGHT_RICH + 4
+        return min(total + 10, 400)
+
+    def _compute_dropdown_width(self, field_width: int) -> int:
+        base = super()._compute_dropdown_width(field_width)
+        if self._stats_provider:
+            return max(base, self._MIN_DROPDOWN_W)
+        return base
+
+    def _reposition_dropdown(self):
+        if self.dropdown:
+            self.update_idletasks()
+            x = self.winfo_rootx()
+            y = self.winfo_rooty() + self.winfo_height()
+            field_width = self.winfo_width()
+            dropdown_width = self._compute_dropdown_width(field_width)
+            height = self._compute_dropdown_height()
+            self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
+
+    # ------------------------------------------------------------------ #
+    # Ouverture avec items enrichis                                        #
+    # ------------------------------------------------------------------ #
+
+    def open_dropdown(self):
+        if self.is_open:
+            self.close_dropdown()
+            return
+
+        self.is_open = True
+        self.update_idletasks()
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        field_width = self.winfo_width()
+        dropdown_width = self._compute_dropdown_width(field_width)
+        height = self._compute_dropdown_height()
+
+        self.dropdown = ctk.CTkToplevel(self)
+        self.dropdown.overrideredirect(True)
+        self.dropdown.attributes("-topmost", True)
+
+        self._parent_window = self.winfo_toplevel()
+        self._move_bind_id = self._parent_window.bind("<Configure>", self._update_pos, add="+")
+        self._click_bind_id = self._parent_window.bind("<ButtonPress-1>", self._on_parent_click, add="+")
+
+        self.dropdown.geometry(f"{dropdown_width}x{height}+{x}+{y}")
+        self.dropdown.configure(fg_color=DrakeConfig.ACCENT_PRIMARY)
+
+        border_frame = ctk.CTkFrame(
+            self.dropdown,
+            fg_color=DrakeConfig.BG_PANEL,
+            border_color=DrakeConfig.ACCENT_PRIMARY,
+            border_width=1,
+            corner_radius=0,
+        )
+        border_frame.pack(fill="both", expand=True)
+
+        scroll = ctk.CTkScrollableFrame(border_frame, fg_color="transparent", corner_radius=0)
+        scroll.pack(fill="both", expand=True, padx=2, pady=2)
+
+        for value in self.values:
+            name_upper = str(value).upper()
+
+            # Item simple (EMPTY ou pas de stats_provider)
+            if not self._stats_provider or name_upper == "EMPTY":
+                btn = ctk.CTkButton(
+                    scroll,
+                    text=name_upper,
+                    fg_color="transparent",
+                    hover_color=DrakeConfig.ACCENT_PRIMARY,
+                    text_color=DrakeConfig.TEXT_MAIN,
+                    anchor="w",
+                    height=self._ITEM_HEIGHT_PLAIN,
+                    corner_radius=0,
+                    command=lambda v=value: self.select(v),
+                )
+                btn.pack(fill="x", pady=1)
+                continue
+
+            # Item riche : nom + stats
+            stat_pairs = self._stats_provider(str(value))
+            stats_text = "  ·  ".join(f"{lbl} {val}" for lbl, val in stat_pairs[:5])
+
+            item_frame = ctk.CTkFrame(
+                scroll,
+                fg_color="transparent",
+                corner_radius=0,
+                height=self._ITEM_HEIGHT_RICH,
+            )
+            item_frame.pack(fill="x", pady=2)
+            item_frame.pack_propagate(False)
+
+            # Ligne du nom (cliquable)
+            name_btn = ctk.CTkButton(
+                item_frame,
+                text=name_upper,
+                fg_color="transparent",
+                hover_color=DrakeConfig.ACCENT_PRIMARY,
+                text_color=DrakeConfig.TEXT_MAIN,
+                anchor="w",
+                height=26,
+                corner_radius=0,
+                font=("Consolas", 10, "bold"),
+                command=lambda v=value: self.select(v),
+            )
+            name_btn.pack(fill="x")
+
+            # Ligne des stats (cliquable aussi)
+            stats_lbl = ctk.CTkLabel(
+                item_frame,
+                text=stats_text if stats_text else "—",
+                font=("Consolas", 8),
+                text_color=DrakeConfig.ACCENT_PRIMARY,
+                anchor="w",
+            )
+            stats_lbl.pack(fill="x", padx=8)
+            stats_lbl.bind("<Button-1>", lambda _e, v=value: self.select(v))
+
+            # Séparateur fin
+            ctk.CTkFrame(scroll, fg_color=DrakeConfig.BORDER_COLOR, height=1).pack(
+                fill="x", padx=4, pady=(0, 1)
+            )
+
+        self.dropdown.after(10, self.dropdown.focus_set)
+        self.dropdown.bind("<FocusOut>", lambda _e: self.close_dropdown(reason="focusout"), add="+")
+
+
 class DrakeDualComboBox(ctk.CTkFrame):
     """Deux comboboxes côte à côte pour sélectionner jusqu'à 2 rôles.
 
