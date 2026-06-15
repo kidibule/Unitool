@@ -2722,6 +2722,11 @@ class ShipFrame(ctk.CTkFrame):
                 ).pack(pady=(10, 4), padx=10, anchor="w")
                 current_cat = cat
 
+            # Masquer les slots non-éditables par l'utilisateur
+            _HIDDEN = ("COUNTERMEASURE", "FUEL INTAKE")
+            if any(subtype.upper().startswith(h) for h in _HIDDEN):
+                continue
+
             subtype_label = subtype if subtype != "GENERIC" else "ALL TYPES"
             ctk.CTkLabel(
                 self.lo_slots_frame,
@@ -2732,11 +2737,6 @@ class ShipFrame(ctk.CTkFrame):
 
             # Sous-specs liés à ce type de slot parent (ex: armes dans la tourelle)
             child_specs = sub_specs_by_parent.get(subtype, [])
-
-            # Masquer les slots non-éditables par l'utilisateur
-            _HIDDEN = ("COUNTERMEASURE", "FUEL INTAKE")
-            if any(subtype.upper().startswith(h) for h in _HIDDEN):
-                continue
 
             for i in range(max_qty):
                 available, current = self.controller.ship.get_slot_data(
