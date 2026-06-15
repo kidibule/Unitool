@@ -1826,7 +1826,12 @@ class ShipFrame(ctk.CTkFrame):
                 pass
 
         # ── Filtrage ─────────────────────────────────────────────────────
+        _HIDDEN_SUBTYPES = ("COUNTERMEASURE", "FUEL INTAKE")
         all_rows = self.controller.ship.list_components_catalog()
+        all_rows = [
+            r for r in all_rows
+            if not any(str(r[2]).upper().startswith(h) for h in _HIDDEN_SUBTYPES)
+        ]
         if cat_filter:
             all_rows = [r for r in all_rows if str(r[3]).upper() == cat_filter.upper()]
         if type_filter:
@@ -2727,6 +2732,11 @@ class ShipFrame(ctk.CTkFrame):
 
             # Sous-specs liés à ce type de slot parent (ex: armes dans la tourelle)
             child_specs = sub_specs_by_parent.get(subtype, [])
+
+            # Masquer les slots non-éditables par l'utilisateur
+            _HIDDEN = ("COUNTERMEASURE", "FUEL INTAKE")
+            if any(subtype.upper().startswith(h) for h in _HIDDEN):
+                continue
 
             for i in range(max_qty):
                 available, current = self.controller.ship.get_slot_data(
