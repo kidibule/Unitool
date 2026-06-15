@@ -251,6 +251,26 @@ class ShipController:
         except Exception as e:
             messagebox.showerror("Export Error", str(e))
 
+    def import_ships_from_json_folder(self) -> None:
+        """Re-import rapide : demande directement un dossier (pas de popup de choix).
+
+        Utile pour ré-importer tous les fichiers d'un dossier déjà connu
+        après une mise à jour de l'algorithme d'import.
+        """
+        folder = filedialog.askdirectory(title="IMPORT SC SHIP DATA — Choisir un dossier")
+        if not folder:
+            return
+        file_paths = [
+            os.path.join(root, fname)
+            for root, _dirs, files in os.walk(folder)
+            for fname in files
+            if fname.lower().endswith(".json")
+        ]
+        if not file_paths:
+            messagebox.showinfo("UNITOOL — IMPORT JSON", "Aucun fichier .json trouvé dans ce dossier.")
+            return
+        self._import_ship_files(file_paths)
+
     def import_ships_from_json(self) -> None:
         """Importe un ou plusieurs fichiers JSON SC data miner dans la base.
 
@@ -285,6 +305,10 @@ class ShipController:
             if not file_paths:
                 return
 
+        self._import_ship_files(file_paths)
+
+    def _import_ship_files(self, file_paths) -> None:
+        """Traite une liste de chemins de fichiers JSON et les importe en base."""
         imported = 0
         errors = []
         for path in file_paths:
@@ -320,8 +344,8 @@ class ShipController:
                     self.app.commit(
                         """
                         INSERT OR REPLACE INTO ship_subtype_specs
-                            (ship_name, category, subtype_name, max_qty, max_size)
-                        VALUES (?, ?, ?, ?, ?)
+                            (ship_name, category, subtype_name, max_qty, max_size, parent_subtype)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
                             ship_key,
@@ -329,6 +353,7 @@ class ShipController:
                             slot["subtype_name"],
                             slot["max_qty"],
                             slot["max_size"],
+                            slot.get("parent_subtype"),
                         ),
                     )
                 self._sync_ship_specs_from_subtypes(ship_key)
@@ -1326,20 +1351,22 @@ class ShipController:
 
         subtype_rows = self.app.query(
             """
-            SELECT category, subtype_name, max_qty, max_size
+            SELECT category, subtype_name, max_qty, max_size,
+                   COALESCE(parent_subtype, '') as parent_subtype
             FROM ship_subtype_specs
             WHERE ship_name = ?
-            ORDER BY category, subtype_name
+            ORDER BY category, COALESCE(parent_subtype,''), subtype_name
             """,
             (ship,),
         )
         if subtype_rows:
             return [
                 {
-                    "category": row[0],
-                    "subtype_name": row[1],
-                    "max_qty": int(row[2] or 0),
-                    "max_size": int(row[3] or 0),
+                    "category":       row[0],
+                    "subtype_name":   row[1],
+                    "max_qty":        int(row[2] or 0),
+                    "max_size":       int(row[3] or 0),
+                    "parent_subtype": row[4] or None,
                 }
                 for row in subtype_rows
             ]

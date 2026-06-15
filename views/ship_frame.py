@@ -153,6 +153,11 @@ class ShipFrame(ctk.CTkFrame):
         self.controller.ship.import_ships_from_json()
         self.run_ship_scan()
 
+    def _import_json_ships_folder(self):
+        """Re-import rapide : sélection de dossier directe, sans popup de choix."""
+        self.controller.ship.import_ships_from_json_folder()
+        self.run_ship_scan()
+
     def _import_ships_scwiki(self, force_refresh: bool = False):
         """Importe tous les ships depuis ships.json (StarCitizenWiki)."""
         self.controller.ship.import_ships_from_scwiki(force_refresh=force_refresh)
@@ -254,9 +259,9 @@ class ShipFrame(ctk.CTkFrame):
             (
                 "SHIPS",
                 "SC DATA MINER — JSON (ships)",
-                "Importe un ou plusieurs fichiers .json exportés\npar SC Data Miner (un fichier par vaisseau).",
+                "Importe un ou plusieurs fichiers .json exportés\npar SC Data Miner (un fichier par vaisseau).\n↺ = re-import dossier complet (ignorer l'ancien bruit de données).",
                 lambda: (popup.destroy(), self._import_json_ships()),
-                None,
+                lambda: (popup.destroy(), self._import_json_ships_folder()),
             ),
             (
                 "SHIPS",
@@ -2686,9 +2691,17 @@ class ShipFrame(ctk.CTkFrame):
             self.lo_status_terminal.insert("end", "> NO SLOT SPECS FOUND FOR THIS SHIP.\n")
             return
 
-        # 3. Création des lignes par catégorie + sous-type
+        # 3. Organiser les specs : parents + sous-slots par parent
+        parent_specs = [s for s in slot_specs if not s.get("parent_subtype")]
+        sub_specs_by_parent: dict[str, list] = {}
+        for s in slot_specs:
+            pt = s.get("parent_subtype")
+            if pt:
+                sub_specs_by_parent.setdefault(pt, []).append(s)
+
+        # 4. Création des lignes par catégorie + sous-type
         current_cat = None
-        for spec in slot_specs:
+        for spec in parent_specs:
             cat = spec["category"]
             subtype = spec["subtype_name"]
             max_qty = int(spec["max_qty"])
@@ -2712,18 +2725,13 @@ class ShipFrame(ctk.CTkFrame):
                 text_color=DrakeConfig.TEXT_SECONDARY,
             ).pack(pady=(0, 3), padx=12, anchor="w")
 
+            # Sous-specs liés à ce type de slot parent (ex: armes dans la tourelle)
+            child_specs = sub_specs_by_parent.get(subtype, [])
+
             for i in range(max_qty):
-                # Récupère les composants compatibles et l'actuel
                 available, current = self.controller.ship.get_slot_data(
-                    ship.name,
-                    profile_name,
-                    cat,
-                    subtype,
-                    max_size,
-                    i,
+                    ship.name, profile_name, cat, subtype, max_size, i,
                 )
-                
-                # Carte de ligne (Slot)
                 card = ctk.CTkFrame(
                     self.lo_slots_frame,
                     fg_color=DrakeConfig.BG_PANEL,
@@ -2735,15 +2743,13 @@ class ShipFrame(ctk.CTkFrame):
 
                 left = ctk.CTkFrame(card, fg_color="transparent")
                 left.pack(side="left", fill="x", expand=True, padx=10, pady=5)
-
                 ctk.CTkLabel(
                     left,
                     text=f"S{max_size} SLOT {i+1}",
                     font=("Segoe UI", 11, "bold"),
                     anchor="w",
                 ).pack(anchor="w")
-                
-                # Menu de sélection
+
                 combo = DrakeStatsComboBox(
                     card,
                     values=["EMPTY"] + available,
@@ -2754,7 +2760,6 @@ class ShipFrame(ctk.CTkFrame):
                 combo.pack(side="left", padx=(0, 10), pady=5)
                 self.lo_slot_widgets.append((cat, subtype, i, combo))
 
-                # Bouton de sauvegarde INDIVIDUEL
                 save_btn = DrakeButton(
                     card,
                     text="SAVE",
@@ -2763,6 +2768,54 @@ class ShipFrame(ctk.CTkFrame):
                     command=lambda c=combo, ct=cat, st=subtype, idx=i: self.action_mount(ct, st, idx, c.get()),
                 )
                 save_btn.pack(side="right", padx=10, pady=5)
+
+                # ── Sous-slots d'armes dans cette tourelle ───────────────
+                for child_spec in child_specs:
+                    c_subtype  = child_spec["subtype_name"]
+                    c_size     = int(child_spec["max_size"])
+                    c_per_slot = int(child_spec["max_qty"])
+                    for j in range(c_per_slot):
+                        c_slot_idx = i * c_per_slot + j
+                        c_avail, c_current = self.controller.ship.get_slot_data(
+                            ship.name, profile_name, cat, c_subtype, c_size, c_slot_idx,
+                        )
+                        sub_card = ctk.CTkFrame(
+                            self.lo_slots_frame,
+                            fg_color=DrakeConfig.BG_SECONDARY if hasattr(DrakeConfig, "BG_SECONDARY") else "#1a1a1a",
+                            corner_radius=0,
+                            border_width=1,
+                            border_color=DrakeConfig.BORDER_COLOR,
+                        )
+                        sub_card.pack(fill="x", padx=(28, 8), pady=1)
+
+                        sub_left = ctk.CTkFrame(sub_card, fg_color="transparent")
+                        sub_left.pack(side="left", fill="x", expand=True, padx=10, pady=3)
+                        ctk.CTkLabel(
+                            sub_left,
+                            text=f"  └  {c_subtype}  port {j+1}",
+                            font=("Segoe UI", 10),
+                            text_color=DrakeConfig.TEXT_SECONDARY,
+                            anchor="w",
+                        ).pack(anchor="w")
+
+                        sub_combo = DrakeStatsComboBox(
+                            sub_card,
+                            values=["EMPTY"] + c_avail,
+                            width=200,
+                            stats_provider=self._loadout_stats_provider,
+                        )
+                        sub_combo.set(c_current)
+                        sub_combo.pack(side="left", padx=(0, 10), pady=3)
+                        self.lo_slot_widgets.append((cat, c_subtype, c_slot_idx, sub_combo))
+
+                        sub_save = DrakeButton(
+                            sub_card,
+                            text="SAVE",
+                            width=60,
+                            height=24,
+                            command=lambda c=sub_combo, ct=cat, st=c_subtype, idx=c_slot_idx: self.action_mount(ct, st, idx, c.get()),
+                        )
+                        sub_save.pack(side="right", padx=10, pady=3)
 
         self._refresh_loadout_status_terminal_from_widgets(ship_name)
         self._render_loadout_global_actions()

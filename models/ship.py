@@ -12,9 +12,12 @@ from .component import Component
 # Pour ajouter un nouveau type SC : ajouter une entrée ici.
 # ---------------------------------------------------------------------------
 SC_TYPE_TO_SLOT = {
-    # Armes pilote
+    # ── Clés full-type (priorité sur les clés base) ──────────────────────
+    "Turret.PDCTurret":     ("WEAPON",     "PDC"),
+    # ── Armes pilote ─────────────────────────────────────────────────────
     "WeaponGun":        ("WEAPON",     "GUN"),
     "Turret":           ("WEAPON",     "GUN"),
+    "TurretBase":       ("WEAPON",     "MANNED TURRET"),
     "MissileLauncher":  ("WEAPON",     "MISSILE RACK"),
     "BombLauncher":     ("WEAPON",     "BOMB RACK"),
     # Défense active
@@ -545,75 +548,50 @@ class Ship(BaseModel):
     def defaultload_from_sc_json(data: dict) -> list[dict]:
         """Déduit le loadout par défaut depuis un JSON SC data miner.
 
-        Pour chaque hardpoint de chassis (Editable, PortId==RootPortId) dont
-        le type est mappé dans SC_TYPE_TO_SLOT :
-          - Si c'est un Turret/Mount : le composant réel est le premier enfant
-            dans Loadout[] (la monture elle-même est remplaçable, mais l'arme
-            dedans est le composant à enregistrer).
-          - Sinon : l'item lui-même est le composant.
-
-        Returns:
-            Liste de dicts :
-            {
-              component_class : str  (ClassName SC, clé unique dans components)
-              component_name  : str  (nom affiché)
-              manufacturer    : str
-              sc_type         : str  (ex: "WeaponGun.Gun")
-              category        : str  (ex: "WEAPON")
-              subtype_name    : str  (ex: "GUN S4")
-              max_size        : int
-              grade_num       : int  (grade SC 1-4)
-              slot_number     : int  (0-based dans sa catégorie/sous-type)
-            }
+        Gère quatre cas :
+          1. Item chassis directement éditable, type connu → composant direct.
+          2. Item chassis Turret/TurretBase éditable sans enfants éditables →
+             la tourelle elle-même (ex: PDC).
+          3. Item chassis Turret/TurretBase éditable avec enfants éditables →
+             les enfants éditables sont des armes.
+          4. Item chassis NON éditable avec ClassName → composant fixe.
+             - Si c'est une tourelle : aussi importer les armes dans ses ports
+               (2 niveaux de profondeur : tourelle → gimbal → arme).
         """
-        # Conversion grade SC (int) → lettre DB
         _GRADE = {1: "C", 2: "B", 3: "A", 4: "A"}
 
         results = []
         slot_counters: dict[tuple, int] = defaultdict(int)
+        # Compteur séparé pour les sous-slots d'armes de tourelle
+        # Clé : (category, subtype_name, parent_subtype_name)
+        sub_slot_counters: dict[tuple, int] = defaultdict(int)
 
-        for item in data.get("Loadout", []):
-            # Hardpoints de chassis uniquement
-            if item.get("PortId") != item.get("RootPortId"):
-                continue
-            if not item.get("Editable", False):
-                continue
+        def _resolve_type(sc_type_raw: str):
+            """Cherche dans SC_TYPE_TO_SLOT : full-type d'abord, base ensuite."""
+            return (
+                SC_TYPE_TO_SLOT.get(sc_type_raw)
+                or SC_TYPE_TO_SLOT.get(sc_type_raw.split(".")[0])
+            )
 
-            max_size = item.get("MaxSize", 0)
-            if not max_size:
-                continue
-
-            sc_type_raw = item.get("Type", "")
-            sc_type_base = sc_type_raw.split(".")[0]
-
-            if sc_type_base not in SC_TYPE_TO_SLOT:
-                continue
-
-            category, base_subtype = SC_TYPE_TO_SLOT[sc_type_base]
-            subtype_name = f"{base_subtype} S{max_size}"
-
-            # Résolution du composant équipé
-            if sc_type_base == "Turret":
-                # La monture contient le composant réel dans son propre Loadout
-                children = item.get("Loadout", [])
-                if not children or not children[0].get("ClassName"):
-                    continue
-                comp_item = children[0]
-                # Reclasser selon le type réel de l'arme
-                child_type_base = comp_item.get("Type", "").split(".")[0]
-                if child_type_base in SC_TYPE_TO_SLOT:
-                    category, base_subtype = SC_TYPE_TO_SLOT[child_type_base]
-                    subtype_name = f"{base_subtype} S{max_size}"
-            else:
-                comp_item = item
-
+        def _append(comp_item: dict, size: int, sc_type_raw: str,
+                    parent_subtype: str | None = None) -> None:
             class_name = comp_item.get("ClassName", "")
             if not class_name:
-                continue
+                return
+            mapping = _resolve_type(sc_type_raw)
+            if not mapping:
+                return
+            category, base_subtype = mapping
+            subtype_name = f"{base_subtype} S{size}"
 
-            slot_key = (category, subtype_name)
-            slot_number = slot_counters[slot_key]
-            slot_counters[slot_key] += 1
+            if parent_subtype:
+                key = (category, subtype_name, parent_subtype)
+                slot_number = sub_slot_counters[key]
+                sub_slot_counters[key] += 1
+            else:
+                key2 = (category, subtype_name)
+                slot_number = slot_counters[key2]
+                slot_counters[key2] += 1
 
             results.append({
                 "component_class": class_name.upper(),
@@ -622,69 +600,219 @@ class Ship(BaseModel):
                 "sc_type":         comp_item.get("Type", sc_type_raw),
                 "category":        category,
                 "subtype_name":    subtype_name,
-                "max_size":        max_size,
+                "parent_subtype":  parent_subtype,
+                "max_size":        size,
                 "grade_num":       int(comp_item.get("Grade") or 1),
                 "grade":           _GRADE.get(int(comp_item.get("Grade") or 1), "C"),
                 "slot_number":     slot_number,
             })
 
+        def _process_children(parent: dict, parent_max_size: int,
+                               parent_subtype: str | None = None) -> None:
+            """Parcourt les enfants directs d'un item (armes éditables)."""
+            for child in parent.get("Loadout", []):
+                if not child.get("Editable", False):
+                    continue
+                child_type = child.get("Type", "")
+                if not _resolve_type(child_type):
+                    continue
+                child_size = child.get("MaxSize") or parent_max_size
+                _append(child, child_size, child_type, parent_subtype)
+
+        def _extract_turret_weapons(turret_item: dict, turret_subtype: str) -> None:
+            """Extrait les armes 2 niveaux profonds : tourelle → gimbal → arme."""
+            for gimbal in turret_item.get("Loadout", []):
+                g_type_base = gimbal.get("Type", "").split(".")[0]
+                if g_type_base not in ("Turret", "TurretBase", "WeaponGun"):
+                    continue
+                gimbal_size = gimbal.get("MaxSize", 0)
+                for weapon in gimbal.get("Loadout", []):
+                    w_type = weapon.get("Type", "")
+                    if not _resolve_type(w_type):
+                        continue
+                    w_size = weapon.get("MaxSize") or gimbal_size
+                    if not w_size:
+                        continue
+                    _append(weapon, w_size, w_type, parent_subtype=turret_subtype)
+
+        for item in data.get("Loadout", []):
+            if item.get("PortId") != item.get("RootPortId"):
+                continue
+            max_size = item.get("MaxSize", 0)
+            if not max_size:
+                continue
+            sc_type_raw = item.get("Type", "")
+            sc_type_base = sc_type_raw.split(".")[0]
+            editable = item.get("Editable", False)
+            mapping = _resolve_type(sc_type_raw)
+
+            if editable and mapping:
+                if sc_type_base in ("Turret", "TurretBase"):
+                    ed_children = [c for c in item.get("Loadout", []) if c.get("Editable", False)]
+                    if ed_children:
+                        _process_children(item, max_size)
+                    else:
+                        # PDC ou tourelle sans armes éditables → la tourelle est le composant
+                        _append(item, max_size, sc_type_raw)
+                        # PDC : son arme fixe interne
+                        category, base_subtype = mapping
+                        parent_sub = f"{base_subtype} S{max_size}"
+                        _extract_turret_weapons(item, parent_sub)
+                else:
+                    _append(item, max_size, sc_type_raw)
+            elif not editable:
+                has_editable_children = any(
+                    c.get("Editable", False) for c in item.get("Loadout", [])
+                )
+                if has_editable_children:
+                    _process_children(item, max_size)
+                elif mapping and item.get("ClassName"):
+                    _append(item, max_size, sc_type_raw)
+                    # Si c'est une tourelle fixe, extraire aussi les armes dans ses ports
+                    if sc_type_base in ("Turret", "TurretBase"):
+                        category, base_subtype = mapping
+                        parent_sub = f"{base_subtype} S{max_size}"
+                        _extract_turret_weapons(item, parent_sub)
+
         return results
 
     @staticmethod
     def slots_from_sc_json(data: dict) -> list[dict]:
-        """Déduit les slots éditables du chassis depuis un JSON SC data miner.
+        """Déduit les slots du chassis depuis un JSON SC data miner.
 
-        Seuls les hardpoints de premier niveau (chassis) avec Editable=True
-        sont retenus. Les sous-slots (composants dans une tourelle, missiles
-        dans un rack, etc.) sont ignorés — ils relèvent du loadout, pas des
-        specs du chassis.
-
-        Returns:
-            Liste de dicts {"category", "subtype_name", "max_qty", "max_size"}
-            prêts à insérer dans ship_subtype_specs. Les sous-types incluent la
-            taille pour séparer les slots de tailles différentes d'une même
-            catégorie (ex: "GUN S3" vs "GUN S4").
+        Retourne aussi les sous-slots d'armes pour les tourelles (2 niveaux :
+        tourelle → gimbal → arme). Pour les sous-slots, max_qty = nombre PAR
+        slot parent (ex: 2 armes par tourelle), et parent_subtype est défini.
         """
-        slot_counts: dict[tuple, int] = defaultdict(int)
+        slot_counts:     dict[tuple, int] = defaultdict(int)  # (cat, sub, size) → total
+        sub_slot_counts: dict[tuple, int] = defaultdict(int)  # (cat, sub, size, parent) → per_parent
+
+        def _resolve_type(sc_type_raw: str):
+            return (
+                SC_TYPE_TO_SLOT.get(sc_type_raw)
+                or SC_TYPE_TO_SLOT.get(sc_type_raw.split(".")[0])
+            )
+
+        def _count_slot(sc_type_raw: str, size: int,
+                        parent_subtype: str | None = None) -> None:
+            mapping = _resolve_type(sc_type_raw)
+            if not mapping:
+                return
+            category, base_subtype = mapping
+            subtype_name = f"{base_subtype} S{size}"
+            if parent_subtype:
+                sub_slot_counts[(category, subtype_name, size, parent_subtype)] += 1
+            else:
+                slot_counts[(category, subtype_name, size)] += 1
+
+        def _extract_turret_weapon_slots(item: dict, parent_subtype: str) -> None:
+            """Compte les armes 2 niveaux profonds : tourelle → gimbal → arme."""
+            seen: set[tuple] = set()
+            for gimbal in item.get("Loadout", []):
+                g_type_base = gimbal.get("Type", "").split(".")[0]
+                if g_type_base not in ("Turret", "TurretBase", "WeaponGun"):
+                    continue
+                gimbal_size = gimbal.get("MaxSize", 0)
+                for weapon in gimbal.get("Loadout", []):
+                    w_type = weapon.get("Type", "")
+                    mapping = _resolve_type(w_type)
+                    if not mapping:
+                        continue
+                    w_size = weapon.get("MaxSize") or gimbal_size
+                    if not w_size:
+                        continue
+                    key = (w_type, w_size)
+                    if key not in seen:
+                        seen.add(key)
+                    _count_slot(w_type, w_size, parent_subtype)
 
         for item in data.get("Loadout", []):
-            # Seuls les hardpoints du chassis (pas de parent)
             if item.get("PortId") != item.get("RootPortId"):
-                continue
-            # Uniquement les slots modifiables par le joueur
-            if not item.get("Editable", False):
                 continue
             max_size = item.get("MaxSize", 0)
             if not max_size:
                 continue
 
-            # Résolution du type SC : CompatibleTypes[0].Type en priorité,
-            # sinon le champ Type de l'item lui-même.
-            compat = item.get("CompatibleTypes", [])
-            if compat:
-                sc_type_raw = compat[0].get("Type", "")
+            editable = item.get("Editable", False)
+            sc_type_raw = item.get("Type", "")
+            sc_type_base = sc_type_raw.split(".")[0]
+
+            if editable:
+                # Priorité : type de l'item lui-même (plus spécifique, ex: Turret.PDCTurret)
+                # puis CompatibleTypes[0] comme fallback
+                mapping = _resolve_type(sc_type_raw)
+                if not mapping:
+                    compat = item.get("CompatibleTypes", [])
+                    compat_type = compat[0].get("Type", "") if compat else ""
+                    mapping = _resolve_type(compat_type)
+                if not mapping:
+                    continue
+                category, base_subtype = mapping
+                resolved_base = sc_type_raw.split(".")[0]
+
+                if resolved_base in ("Turret", "TurretBase"):
+                    ed_children = [c for c in item.get("Loadout", []) if c.get("Editable", False)]
+                    if ed_children:
+                        for child in ed_children:
+                            child_size = child.get("MaxSize") or max_size
+                            _count_slot(child.get("Type", ""), child_size)
+                    else:
+                        _count_slot(sc_type_raw, max_size)
+                        parent_sub = f"{base_subtype} S{max_size}"
+                        _extract_turret_weapon_slots(item, parent_sub)
+                else:
+                    _count_slot(sc_type_raw, max_size)
             else:
-                sc_type_raw = item.get("Type", "")
+                has_editable_children = any(
+                    c.get("Editable", False) for c in item.get("Loadout", [])
+                )
+                if has_editable_children:
+                    for child in item.get("Loadout", []):
+                        if not child.get("Editable", False):
+                            continue
+                        child_type = child.get("Type", "")
+                        if not _resolve_type(child_type):
+                            continue
+                        child_size = child.get("MaxSize") or max_size
+                        _count_slot(child_type, child_size)
+                elif _resolve_type(sc_type_raw) and item.get("ClassName"):
+                    _count_slot(sc_type_raw, max_size)
+                    if sc_type_base in ("Turret", "TurretBase"):
+                        mapping = _resolve_type(sc_type_raw)
+                        category, base_subtype = mapping
+                        parent_sub = f"{base_subtype} S{max_size}"
+                        _extract_turret_weapon_slots(item, parent_sub)
 
-            # Type SC = partie avant le "." (ex: "Turret.GunTurret" → "Turret")
-            sc_type = sc_type_raw.split(".")[0]
-
-            if sc_type not in SC_TYPE_TO_SLOT:
-                continue  # slot non-pertinent pour le joueur (door, room, light…)
-
-            category, base_subtype = SC_TYPE_TO_SLOT[sc_type]
-            subtype_name = f"{base_subtype} S{max_size}"
-            slot_counts[(category, subtype_name, max_size)] += 1
-
-        return [
+        results = [
             {
-                "category": category,
-                "subtype_name": subtype_name,
-                "max_qty": count,
-                "max_size": max_size,
+                "category":       category,
+                "subtype_name":   subtype_name,
+                "max_qty":        count,
+                "max_size":       max_size,
+                "parent_subtype": None,
             }
             for (category, subtype_name, max_size), count in sorted(slot_counts.items())
         ]
+        # Ajouter les sous-slots d'armes de tourelle (max_qty = per parent)
+        for (category, subtype_name, max_size, parent_subtype), per_parent in sorted(sub_slot_counts.items()):
+            # Dédupliquer : on stocke le maximum observé par parent (ex: 2 armes / tourelle)
+            # per_parent est en réalité le total accumulé — on divise par le nombre de parents
+            parent_count = slot_counts.get((category.replace("WEAPON", "WEAPON"), parent_subtype.rsplit(" S", 1)[0], int(parent_subtype.rsplit("S", 1)[-1])), 1)
+            # Chercher le parent_count depuis slot_counts
+            parent_key = next(
+                (k for k in slot_counts if k[1] == parent_subtype), None
+            )
+            if parent_key:
+                parent_count = slot_counts[parent_key]
+            qty_per_parent = per_parent // parent_count if parent_count else per_parent
+            results.append({
+                "category":       category,
+                "subtype_name":   subtype_name,
+                "max_qty":        qty_per_parent,
+                "max_size":       max_size,
+                "parent_subtype": parent_subtype,
+            })
+        return results
 
     @property
     def total_power_draw(self):

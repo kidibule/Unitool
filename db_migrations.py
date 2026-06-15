@@ -973,6 +973,19 @@ def _m027_ships_power_segments(cursor):
     logger.info("  ships: power_seg_* columns added.")
 
 
+def _m028_ship_subtype_specs_parent(cursor):
+    """Ajoute parent_subtype à ship_subtype_specs pour les sous-slots de tourelles.
+
+    Permet de lier les ports d'arme d'une tourelle (ex: GUN S5 × 2 par tourelle)
+    à leur tourelle parente (ex: MANNED TURRET S5). Dans ce cas max_qty représente
+    le nombre de sous-slots PAR slot parent.
+    """
+    _add_column_if_missing(
+        cursor, "ship_subtype_specs", "parent_subtype", "TEXT DEFAULT NULL"
+    )
+    logger.info("  ship_subtype_specs: parent_subtype column added.")
+
+
 MIGRATIONS = [
     (1, _m001_schema_initial),
     (2, _m002_targets_colonnes_legacy),
@@ -1001,6 +1014,7 @@ MIGRATIONS = [
     (25, _m025_components_specialization),
     (26, _m026_shields_category_fix),
     (27, _m027_ships_power_segments),
+    (28, _m028_ship_subtype_specs_parent),
 ]
 
 
