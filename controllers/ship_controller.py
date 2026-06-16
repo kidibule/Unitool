@@ -86,6 +86,28 @@ class ShipController:
         except (ValueError, TypeError):
             return default
 
+    # Mapping slot subtype → liste des type_name compatibles dans la table components.
+    # Nécessaire quand les composants ont des type_name spécifiques (ex: "LASER CANNON")
+    # mais le slot est générique ("GUN").
+    _GUN_TYPE_NAMES = (
+        "GUN", "LASER CANNON", "BALLISTIC CANNON", "LASER REPEATER",
+        "BALLISTIC REPEATER", "LASER GATLING", "BALLISTIC GATLING",
+        "NEUTRON CANNON", "NEUTRON REPEATER", "PLASMA CANNON",
+        "TACHYON CANNON", "TACHYON BEAM", "DISTORTION CANNON",
+        "DISTORTION REPEATER", "DISTORTION SCATTERGUN", "LASER SCATTERGUN",
+        "BALLISTIC SCATTERGUN", "SCATTERGUN", "MASS DRIVER", "LASER BEAM",
+        "ROCKET", "UNMANNED",
+    )
+    _SUBTYPE_TO_TYPES: dict[str, tuple] = {
+        "GUN":           _GUN_TYPE_NAMES,
+        "MANNED TURRET": ("MANNED TURRET", "MANNEDTURRET"),
+        "PDC":           ("PDC TURRET", "PDC"),
+        # MODULE — les composants ont des type_name non-standards
+        "MINING LASER":  ("GUN", "MINING LASER"),
+        "TRACTOR BEAM":  ("TRACTOR BEAM", "UNDEFINED"),
+        "SALVAGE HEAD":  ("SALVAGE HEAD", "UNDEFINED"),
+    }
+
     @staticmethod
     def _strip_size_suffix(subtype_name: str) -> str:
         """Strip trailing size label: 'GUN S3' → 'GUN', 'SHIELD S1' → 'SHIELD'."""
@@ -1330,20 +1352,33 @@ class ShipController:
         return Component.from_db_row(rows[0])
 
     def get_compatible_components(self, category, max_size):
-        query = "SELECT name FROM components WHERE UPPER(category) = UPPER(?) AND size <= ? ORDER BY name"
-        rows = self.app.query(query, (category, max_size))
+        min_size = max(1, max_size - 1)
+        query = "SELECT name FROM components WHERE UPPER(category) = UPPER(?) AND size >= ? AND size <= ? ORDER BY name"
+        rows = self.app.query(query, (category, min_size, max_size))
         return [r[0] for r in rows]
 
     def get_compatible_components_by_subtype(self, category, subtype_name, max_size):
-        query = """
-            SELECT name
-            FROM components
-            WHERE UPPER(category) = UPPER(?)
-              AND UPPER(type_name) = UPPER(?)
-              AND size <= ?
-            ORDER BY name
-        """
-        rows = self.app.query(query, (category, subtype_name, max_size))
+        min_size = max(1, max_size - 1)
+        type_names = self._SUBTYPE_TO_TYPES.get(subtype_name.upper())
+        if type_names:
+            ph = ", ".join(["?"] * len(type_names))
+            query = f"""
+                SELECT name FROM components
+                WHERE UPPER(category) = UPPER(?)
+                  AND UPPER(type_name) IN ({ph})
+                  AND size >= ? AND size <= ?
+                ORDER BY name
+            """
+            rows = self.app.query(query, (category, *type_names, min_size, max_size))
+        else:
+            query = """
+                SELECT name FROM components
+                WHERE UPPER(category) = UPPER(?)
+                  AND UPPER(type_name) = UPPER(?)
+                  AND size >= ? AND size <= ?
+                ORDER BY name
+            """
+            rows = self.app.query(query, (category, subtype_name, min_size, max_size))
         return [r[0] for r in rows]
 
     def get_ship_slot_specs(self, ship_name: str) -> list[dict]:
@@ -1460,7 +1495,8 @@ class ShipController:
                 )
                 if spec_rows:
                     max_size = int(spec_rows[0][0] or 0)
-                    if int(comp_size or 0) > max_size:
+                    comp_sz = int(comp_size or 0)
+                    if comp_sz > max_size or comp_sz < max(1, max_size - 1):
                         return False
 
                 self.app.commit(
