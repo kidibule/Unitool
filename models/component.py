@@ -298,7 +298,12 @@ class Component(BaseModel):
             dmg_phys     = float(alpha_detail.get("Physical") or 0)
             dmg_energy   = float(alpha_detail.get("Energy") or 0)
             dmg_dist     = float(alpha_detail.get("Distortion") or 0)
-            capacity     = wep.get("Capacity") or 0
+            capacity     = (
+                (wep.get("Capacitor") or {}).get("MaxAmmoLoad")
+                or wep.get("MaxAmmoLoad")
+                or wep.get("Capacity")
+                or 0
+            )
             ammo_count   = float(capacity) if capacity else 0.0
             # vitesse projectile depuis Ammunition
             ammo_data    = std.get("Ammunition") or {}

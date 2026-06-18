@@ -997,13 +997,25 @@ class ShipFrame(ctk.CTkFrame):
             return
 
         from models.component import Component as _Comp
-        comp_names = list({r[0] for r in rows if r[0]})
+        from collections import Counter as _Counter
+        _sim_counts = _Counter(r[0].upper() for r in rows if r[0])
+        comp_names = list(_sim_counts.keys())
         ph = ", ".join(["?"] * len(comp_names))
         comp_rows = self.controller.ship.app.query(
             f"SELECT {', '.join(_Comp.COLUMNS)} FROM components WHERE UPPER(name) IN ({ph})",
-            [n.upper() for n in comp_names],
+            comp_names,
         )
-        comps = [_Comp.from_db_row(r) for r in comp_rows if r]
+        _comp_by_name = {}
+        for r in comp_rows:
+            if r:
+                c = _Comp.from_db_row(r)
+                _comp_by_name[c.name.upper()] = c
+        # Répète chaque composant autant de fois qu'il est monté
+        comps = []
+        for uname, cnt in _sim_counts.items():
+            c = _comp_by_name.get(uname)
+            if c:
+                comps.extend([c] * cnt)
 
         # Séparer power plants (générateurs) des consommateurs
         power_plants = [c for c in comps if (c.type_name or "").upper() == "POWER PLANT"]
@@ -1076,10 +1088,20 @@ class ShipFrame(ctk.CTkFrame):
         # ── Ordre des cards : WEAPONS → PROPULSION → SHIELD → QT DRIVE →
         #    COMPOSANTS SPÉCIAUX → RADAR → LIFE SUPPORT → COOLER ──────────
 
-        # 1. WEAPONS (fixe, segments du vaisseau)
+        # 1. WEAPONS — chaque type d'arme occupe ses propres segments (pas de partage)
+        #    Segments = sum(ceil(draw_total par type_name))
+        import math
+        from collections import defaultdict as _dd
+        _weapon_segs_actual = 0
         if weapon_comps:
+            draw_by_type = _dd(float)
+            for c in weapon_comps:
+                draw_by_type[(c.type_name or "UNKNOWN").upper()] += c.stat_power_draw
+            _weapon_segs_actual = sum(math.ceil(d) for d in draw_by_type.values() if d > 0)
+            if _weapon_segs_actual == 0:
+                _weapon_segs_actual = seg_weapon or 4
             self._sim_create_type_card(cards_frame, "WEAPONS",
-                                       float(seg_weapon), fixed_sq=seg_weapon or 4)
+                                       float(_weapon_segs_actual), fixed_sq=_weapon_segs_actual)
 
         # 2. PROPULSION (FlightController — fixe)
         self._sim_create_type_card(cards_frame, "PROPULSION",
@@ -1120,8 +1142,15 @@ class ShipFrame(ctk.CTkFrame):
                                        total_draw, fixed_sq=seg_cooler or None)
 
         # Distribuer les segments de gauche à droite sans dépasser la capacité
+        self._sim_weapon_comps = [c for c in weapon_comps if c.stat_ammo_count > 0]
+        self._sim_weapon_seg_total = _weapon_segs_actual if _weapon_segs_actual > 0 else seg_weapon
+        self._sim_weapon_counts = {
+            uname: cnt for uname, cnt in _sim_counts.items()
+            if _comp_by_name.get(uname) and (_comp_by_name[uname].category or "").upper() == "WEAPON"
+        }
         self._sim_distribute_initial()
         self._sim_update_bar()
+        self._sim_append_weapon_ammo_to_terminal()
 
     def _sim_distribute_initial(self):
         """Remplit les segments de gauche à droite sans dépasser _sim_power_total."""
@@ -1247,6 +1276,106 @@ class ShipFrame(ctk.CTkFrame):
 
         bar_text = f"[{bar}]  {pct:.0f}%  {status}"
         self.sim_power_bar_label.configure(text=bar_text, text_color=color)
+        self._sim_update_weapon_ammo_in_terminal()
+
+    # ── AMMO STATS LIÉS AU SIMULATEUR ────────────────────────────────────────
+
+    def _sim_get_weapon_active_segs(self) -> int:
+        """Retourne les segments weapon actifs dans le simulateur."""
+        for label, _, active_var, _, _, _, _ in self._sim_sliders:
+            if label == "WEAPONS":
+                return active_var.get()
+        return 0
+
+    def _sim_append_weapon_ammo_to_terminal(self):
+        """Pose le marqueur ammo_start et insère la section ammo au bas du terminal."""
+        if not self._widget_exists("lo_status_terminal"):
+            return
+        seg_total = getattr(self, "_sim_weapon_seg_total", 0)
+        ammo_weapons = [c for c in getattr(self, "_sim_weapon_comps", []) if c.stat_ammo_count > 0]
+        if not ammo_weapons or seg_total <= 0:
+            return
+        tb = self.lo_status_terminal._textbox
+        tb.configure(state="normal")
+        tb.mark_set("ammo_start", "end-1c")
+        tb.mark_gravity("ammo_start", "left")
+        tb.configure(state="disabled")
+        self._sim_write_weapon_ammo_section(self._sim_get_weapon_active_segs())
+
+    def _sim_update_weapon_ammo_in_terminal(self):
+        """Rafraîchit uniquement la section ammo en bas du terminal (depuis le simulateur)."""
+        if not self._widget_exists("lo_status_terminal"):
+            return
+        seg_total = getattr(self, "_sim_weapon_seg_total", 0)
+        ammo_weapons = [c for c in getattr(self, "_sim_weapon_comps", []) if c.stat_ammo_count > 0]
+        if not ammo_weapons or seg_total <= 0:
+            return
+        tb = self.lo_status_terminal._textbox
+        try:
+            tb.configure(state="normal")
+            tb.delete("ammo_start", "end")
+            tb.configure(state="disabled")
+        except Exception:
+            return
+        self._sim_write_weapon_ammo_section(self._sim_get_weapon_active_segs())
+
+    def _sim_write_weapon_ammo_section(self, active_segs: int):
+        """Écrit la section AMMO dans le terminal de stats.
+
+        - Toutes les armes sont actives dès qu'au moins 1 segment est alloué.
+        - Balistique : ammo max fixe, toujours affichée.
+        - Énergie : ammo proportionnelle aux segments actifs (round(max × active/total)).
+        """
+        seg_total = getattr(self, "_sim_weapon_seg_total", 0)
+        counts = getattr(self, "_sim_weapon_counts", {})
+        seen = set()
+        ammo_weapons = []
+        for c in getattr(self, "_sim_weapon_comps", []):
+            if c.stat_ammo_count > 0 and c.name.upper() not in seen:
+                seen.add(c.name.upper())
+                ammo_weapons.append(c)
+        if not ammo_weapons or seg_total <= 0:
+            return
+        t = self.lo_status_terminal
+        if not getattr(self, "_lo_terminal_tags_ready", False):
+            t.tag_config("HDR",   foreground=DrakeConfig.ACCENT_PRIMARY)
+            t.tag_config("VAL",   foreground=DrakeConfig.TEXT_MAIN)
+            t.tag_config("DIM",   foreground=DrakeConfig.TEXT_SECONDARY)
+            t.tag_config("WARN",  foreground="#ff6600")
+            t.tag_config("OK",    foreground="#44cc44")
+            t.tag_config("MUTED", foreground="#505050")
+            self._lo_terminal_tags_ready = True
+        t.insert("end", f"\n [AMMO — {active_segs}/{seg_total} power segs]\n", "HDR")
+
+        powered = active_segs > 0
+        ratio = active_segs / seg_total if seg_total > 0 else 0
+
+        for w in ammo_weapons:
+            count = counts.get(w.name.upper(), 1)
+            is_ballistic = "BALLISTIC" in (w.type_name or "").upper()
+
+            if is_ballistic:
+                display_ammo = w.stat_ammo_count
+                bar = "■" * 10
+                seg_note = "  FIXED"
+                w_tag = "VAL"
+            elif not powered:
+                display_ammo = 0
+                bar = "□" * 10
+                seg_note = "  NO POWER"
+                w_tag = "MUTED"
+            else:
+                display_ammo = min(w.stat_ammo_count, round(w.stat_ammo_count * ratio))
+                bar_filled = round(ratio * 10)
+                bar = "■" * bar_filled + "□" * (10 - bar_filled)
+                seg_note = ""
+                w_tag = "OK" if display_ammo >= w.stat_ammo_count else "WARN"
+
+            for i in range(count):
+                idx_str = f" [{i + 1}]" if count > 1 else "    "
+                t.insert("end",
+                         f"  {w.name:<28}{idx_str}  {bar}  {display_ammo:>4}/{w.stat_ammo_count:<4}{seg_note}\n",
+                         w_tag)
 
     def setup_config_tab(self):
         """Onglet dédié à la création de sous-types et de slots par sous-type."""
@@ -2917,7 +3046,8 @@ class ShipFrame(ctk.CTkFrame):
                 modes = f"  {w.stat_fire_mode}" if w.stat_fire_mode else ""
                 sz = int(w.size or 0)
                 sq = "■" * sz + "□" * max(0, 6 - sz)
-                t.insert("end", f"  + {w.name:<35} {sq}  {w.stat_dps:>6.0f} dps{modes}\n", "DIM")
+                ammo_str = f"  {w.stat_ammo_count} ammo" if w.stat_ammo_count > 0 else ""
+                t.insert("end", f"  + {w.name:<35} {sq}  {w.stat_dps:>6.0f} dps{ammo_str}{modes}\n", "DIM")
 
         # ── BOUCLIERS ────────────────────────────────────────────────────
         shields = [c for c in comps if (c.type_name or "").upper() == "SHIELD" and c.stat_shield_hp > 0]

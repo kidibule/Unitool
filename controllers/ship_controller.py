@@ -735,7 +735,12 @@ class ShipController:
                     stat_alpha=float(first_mode.get("Alpha") or first_mode.get("DamagePerShot") or 0),
                     stat_range=float(ammo_block.get("Range") or weapon_block.get("EffectiveRange") or 0),
                     stat_fire_rate=float(weapon_block.get("RateOfFire") or first_mode.get("RoundsPerMinute") or 0),
-                    stat_ammo_count=int(weapon_block.get("Capacity") or 0),
+                    stat_ammo_count=int(
+                        (weapon_block.get("Capacitor") or {}).get("MaxAmmoLoad")
+                        or weapon_block.get("MaxAmmoLoad")
+                        or weapon_block.get("Capacity")
+                        or 0
+                    ),
                     stat_power_draw=float(usage.get("Maximum") or 0),
                     stat_em_gen=float((emit_block.get("Em") or {}).get("Maximum") or 0),
                 )

@@ -447,6 +447,12 @@ class Ship(BaseModel):
         width = data.get("Width", 0.0)
         height = data.get("Height", 0.0)
 
+        _weapon_seg_keys = ("WeaponGun", "MissileLauncher", "BombLauncher", "WeaponDefensive")
+        _weapon_seg_max = max(
+            (math.ceil(power_data.get("MaxSegments", {}).get(k, 0)) for k in _weapon_seg_keys),
+            default=0,
+        )
+
         return cls(
             name=name,
             brand=manufacturer.get("Name", ""),
@@ -520,8 +526,9 @@ class Ship(BaseModel):
             power_used=power_data.get("UsedSegmentsShields", 0.0),
             # Segments d'énergie par groupe — source : Power.MaxSegments
             # WeaponGun est arrondi au supérieur car la valeur peut être décimale (ex: 3.1 → 4)
+            # power_seg_weapon = max de tous les groupes armes (Gun + Missile + Bomb)
             power_seg_flight=int(power_data.get("MaxSegments", {}).get("FlightController", 0)),
-            power_seg_weapon=math.ceil(power_data.get("MaxSegments", {}).get("WeaponGun", 0)),
+            power_seg_weapon=_weapon_seg_max,
             power_seg_radar=int(power_data.get("MaxSegments", {}).get("Radar", 0)),
             power_seg_cooler=int(power_data.get("MaxSegments", {}).get("Cooler", 0)),
             power_seg_shield=int(power_data.get("MaxSegments", {}).get("Shield", 0)),
