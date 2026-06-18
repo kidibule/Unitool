@@ -1312,12 +1312,17 @@ class ShipFrame(ctk.CTkFrame):
             return
         tb = self.lo_status_terminal._textbox
         try:
+            _scroll_pos = tb.yview()[0]
             tb.configure(state="normal")
             tb.delete("ammo_start", "end")
             tb.configure(state="disabled")
         except Exception:
             return
         self._sim_write_weapon_ammo_section(self._sim_get_weapon_active_segs())
+        try:
+            tb.yview_moveto(_scroll_pos)
+        except Exception:
+            pass
 
     def _sim_write_weapon_ammo_section(self, active_segs: int):
         """Écrit la section AMMO dans le terminal de stats.
@@ -1355,10 +1360,16 @@ class ShipFrame(ctk.CTkFrame):
             is_ballistic = "BALLISTIC" in (w.type_name or "").upper()
 
             if is_ballistic:
-                display_ammo = w.stat_ammo_count
-                bar = "■" * 10
-                seg_note = "  FIXED"
-                w_tag = "VAL"
+                if not powered:
+                    display_ammo = 0
+                    bar = "□" * 10
+                    seg_note = "  NO POWER"
+                    w_tag = "MUTED"
+                else:
+                    display_ammo = w.stat_ammo_count
+                    bar = "■" * 10
+                    seg_note = "  FIXED"
+                    w_tag = "VAL"
             elif not powered:
                 display_ammo = 0
                 bar = "□" * 10
@@ -2980,6 +2991,12 @@ class ShipFrame(ctk.CTkFrame):
             t.tag_config("MUTED",foreground="#505050")
             self._lo_terminal_tags_ready = True
 
+        # Mémorise la position de scroll avant le rafraîchissement
+        try:
+            _scroll_pos = t._textbox.yview()[0]
+        except Exception:
+            _scroll_pos = None
+
         t.delete("0.0", "end")
 
         # ── Collecte les noms montés ─────────────────────────────────────
@@ -3140,6 +3157,13 @@ class ShipFrame(ctk.CTkFrame):
                 bar_filled = round((dc.stat_power_draw / max_draw) * 10) if max_draw else 0
                 bar = "■" * bar_filled + "□" * (10 - bar_filled)
                 t.insert("end", f"  {dc.name:<35} {bar}  {dc.stat_power_draw:.2f}\n", "DIM")
+
+        # Restaure la position de scroll après le rafraîchissement
+        if _scroll_pos is not None:
+            try:
+                t._textbox.yview_moveto(_scroll_pos)
+            except Exception:
+                pass
 
     def _render_loadout_global_actions(self):
         """Affiche les actions globales à la fin de la liste des slots (zone droite)."""
