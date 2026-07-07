@@ -2998,6 +2998,12 @@ class ShipFrame(ctk.CTkFrame):
             _scroll_pos = None
 
         t.delete("0.0", "end")
+        # Supprime la marque ammo_start pour éviter que _sim_update_weapon_ammo_in_terminal
+        # efface tout le terminal si elle pointe en début de texte après le delete.
+        try:
+            t._textbox.mark_unset("ammo_start")
+        except Exception:
+            pass
 
         # ── Collecte les noms montés ─────────────────────────────────────
         mounted_names = []
@@ -3279,6 +3285,7 @@ class ShipFrame(ctk.CTkFrame):
         if self.controller.ship.mount_component(ship_name, category, subtype_name, slot_index, component_name, profile_name):
             # On garde les autres modifications locales non sauvegardées intactes.
             self._refresh_loadout_status_terminal_from_widgets(ship_name)
+            self._sim_refresh_from_loadout(ship_name, profile_name)
             self.controller.log(
                 f"Component mounted: {ship_name} [{profile_name}] {category}/{subtype_name} -> {component_name}",
                 source="FLEET",
